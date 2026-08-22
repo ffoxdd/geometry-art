@@ -1,6 +1,7 @@
 #ifndef GLOBEART_SRC_GLOBE_GEOMETRY_SPHERICAL_ARC_HPP_
 #define GLOBEART_SRC_GLOBE_GEOMETRY_SPHERICAL_ARC_HPP_
 
+#include "../../math/binomials.hpp"
 #include "helpers.hpp"
 #include "../../types.hpp"
 #include "../../math/polynomial/moments.hpp"
@@ -51,7 +52,6 @@ class Arc {
     [[nodiscard]] static VectorS2 perpendicular_to(const VectorS2& u);
     [[nodiscard]] static std::vector<std::vector<double>> trigonometric_integrals(double theta, int max_degree);
     [[nodiscard]] static std::vector<double> powers(double base, int max_degree);
-    [[nodiscard]] static std::vector<std::vector<double>> binomials(int max_degree);
 };
 
 inline Arc::Arc(
@@ -128,7 +128,7 @@ inline Moments Arc::moments(int max_degree) const {
     VectorS2 u = _source;
     VectorS2 n = tangent_at_source();
     auto integrals = trigonometric_integrals(length(), max_degree);
-    auto binomial = binomials(max_degree);
+    auto binomial = globe::math::binomials(max_degree);
     std::vector<std::vector<double>> u_powers{powers(u.x(), max_degree), powers(u.y(), max_degree), powers(u.z(), max_degree)};
     std::vector<std::vector<double>> n_powers{powers(n.x(), max_degree), powers(n.y(), max_degree), powers(n.z(), max_degree)};
 
@@ -239,19 +239,6 @@ inline std::vector<double> Arc::powers(double base, int max_degree) {
     return result;
 }
 
-inline std::vector<std::vector<double>> Arc::binomials(int max_degree) {
-    std::vector<std::vector<double>> result(max_degree + 1, std::vector<double>(max_degree + 1, 0.0));
-
-    for (int n = 0; n <= max_degree; ++n) {
-        result[n][0] = 1.0;
-
-        for (int k = 1; k <= n; ++k) {
-            result[n][k] = result[n - 1][k - 1] + (k <= n - 1 ? result[n - 1][k] : 0.0);
-        }
-    }
-
-    return result;
-}
 
 } // namespace globe::geometry::spherical
 

@@ -10,6 +10,7 @@ template<typename T>
 concept VectorXYZ = requires(const T &value) { value.x(); value.y(); value.z(); };
 
 // Canonical type for 3D Cartesian points.
+using Vector2 = Eigen::Vector2d;
 using Vector3 = Eigen::Vector3d;
 using Matrix3 = Eigen::Matrix3d;
 

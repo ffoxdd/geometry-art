@@ -45,6 +45,35 @@ Five seams carry all the domain knowledge:
    `integral of rho x (x - s_k)^T`; the two differ by a rank-one term
    that the sphere's tangent projection removes.
 
+## The flat family is one implementation
+
+A cylinder and a flat torus are intrinsically flat: both are the plane
+under a translation quotient, and their geodesics unroll to straight
+lines. So a Voronoi diagram on a cylinder is a planar one periodic in
+one direction, and on a torus a planar one periodic in both. Cones and
+the other developables join them.
+
+That collapses the target list. There are three classes, not five:
+
+- **Flat** -- plane, cylinder, torus, developables. One implementation
+  with a periodicity parameter. Straight edges, moments by the
+  divergence theorem, an unconstrained site manifold.
+- **Constant curvature** -- the sphere. The implementation that exists.
+- **Variable curvature** -- an arbitrary mesh, where curvature
+  concentrates at vertices and geodesic bisectors bend as they cross
+  them. A different problem rather than a port.
+
+Two consequences worth carrying:
+
+- The flat family needs a **bounded domain**, which the sphere never
+  did because it is compact. The plane needs bounds in both directions,
+  a cylinder in one, a torus in neither -- so the torus is structurally
+  the closest of the three to the sphere.
+- On a cylinder embedded in space, chord distance and geodesic distance
+  disagree, unlike the sphere where both order the same way. The
+  intrinsic one is both the tessellation people want and the one that
+  unrolls, so the flat family means intrinsic throughout.
+
 ## Using it as a tiebreak
 
 Prefer work that lands in the general part, or in a seam whose other
@@ -76,4 +105,6 @@ abstraction come from two instances rather than one. Against that, it
 delays the piecewise and image work on the sphere, and C¹ elements are
 what that work is waiting on.
 
-Both orders are defensible. The choice has not been made.
+Both orders are defensible. The planar region types now exist, which
+settles nothing about the order but makes the second instance cheaper
+to reach.

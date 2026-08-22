@@ -47,13 +47,21 @@ while refining a uniform mesh toward it does not.
 *Verified by:* cells aligning along a synthetic step edge, with no
 ringing in the fitted density.
 
-### 4. Planar geometry
-The cheapest second instance, and the one that would let a `Geometry`
-abstraction be extracted from two cases rather than one: moments by
-Green's theorem, a mature triangulation, and an identity site manifold
-that exposes wherever the spherical one is silently load-bearing. The
-torus follows nearly free. Sequencing against C¹ elements is open --
-see `docs/geometry_portability.md`.
+### 4. The flat family
+Plane, cylinder and torus are one implementation: all three are
+intrinsically flat, differing only in which directions wrap. The
+cheapest second instance, and the one that would let a `Geometry`
+abstraction be extracted from two cases rather than one.
+
+`geometry/planar` now has the region types, with moments by the
+divergence theorem reported in the same table the spherical ones use,
+so the polynomial layer is already shared. What remains: a bounded
+domain, which the sphere never needed; a diagram from
+`Delaunay_triangulation_2`; an identity site manifold, which will
+expose wherever the spherical one is silently load-bearing; and
+`Field::integrals` taking the region by concept rather than by the
+spherical type. Sequencing against C¹ elements is open -- see
+`docs/geometry_portability.md`.
 
 *Verified by:* the optimizer stack driving it unchanged.
 
