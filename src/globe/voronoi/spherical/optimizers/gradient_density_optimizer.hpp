@@ -6,7 +6,7 @@
 #include "../../../geometry/spherical/arc.hpp"
 #include "../../../geometry/spherical/polygon/polygon.hpp"
 #include "../../../fields/spherical/field.hpp"
-#include "../../../fields/spherical/constant_field.hpp"
+#include "../../../fields/spherical/polynomial_field.hpp"
 #include "../../../generators/spherical/point_generator.hpp"
 #include "../../../generators/spherical/random_point_generator.hpp"
 #include "../core/sphere.hpp"
@@ -23,7 +23,7 @@
 namespace globe::voronoi::spherical {
 
 template<
-    fields::spherical::Field FieldType = fields::spherical::ConstantField,
+    fields::spherical::Field FieldType = fields::spherical::PolynomialField,
     generators::spherical::PointGenerator GeneratorType = generators::spherical::RandomPointGenerator<>
 >
 class GradientDensityOptimizer {
@@ -335,8 +335,7 @@ std::vector<double> GradientDensityOptimizer<FieldType, GeneratorType>::compute_
 
     size_t i = 0;
     for (const auto& cell : _sphere->cells()) {
-        double mass = _field.mass(cell);
-        errors[i] = mass - _target_mass;
+        errors[i] = _field.integrals(cell).mass - _target_mass;
         ++i;
     }
 
@@ -359,9 +358,9 @@ std::vector<Eigen::Vector3d> GradientDensityOptimizer<FieldType, GeneratorType>:
             size_t j = edge_info.neighbor_index;
             cgal::Point3 site_j = _sphere->site(j);
 
-            const Arc& arc = edge_info.arc;
-            Eigen::Vector3d rho_weighted_moment = _field.edge_gradient_integral(arc);
-            double edge_integral = _field.edge_integral(arc);
+            auto edge = _field.integrals(edge_info.arc);
+            Eigen::Vector3d rho_weighted_moment = edge.first_moment;
+            double edge_integral = edge.mass;
 
             Eigen::Vector3d n_vec = to_eigen(site_j) - s_k;
             double n_norm = n_vec.norm();

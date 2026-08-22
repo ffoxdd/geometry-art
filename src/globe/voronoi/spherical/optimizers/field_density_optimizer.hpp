@@ -378,7 +378,7 @@ void FieldDensityOptimizer<FieldType, GeneratorType>::print_final_results(double
 
 template<fields::spherical::Field FieldType, generators::spherical::PointGenerator GeneratorType>
 double FieldDensityOptimizer<FieldType, GeneratorType>::mass(const Polygon& polygon) const {
-    return _field.mass(polygon);
+    return _field.integrals(polygon).mass;
 } // namespace globe::voronoi::spherical
 
 template<fields::spherical::Field FieldType, generators::spherical::PointGenerator GeneratorType>

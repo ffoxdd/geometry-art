@@ -1,6 +1,5 @@
 #include "gradient_density_optimizer.hpp"
-#include "../../../fields/spherical/constant_field.hpp"
-#include "../../../fields/spherical/linear_field.hpp"
+#include "../../../fields/spherical/polynomial_field.hpp"
 #include "../../../geometry/spherical/arc.hpp"
 #include "../../../geometry/spherical/helpers.hpp"
 #include "../../../testing/assertions/geometric.hpp"
@@ -11,8 +10,7 @@
 using namespace globe;
 using namespace globe::voronoi::spherical;
 using geometry::spherical::Arc;
-using fields::spherical::ConstantField;
-using fields::spherical::LinearField;
+using fields::spherical::PolynomialField;
 
 namespace {
 
@@ -38,7 +36,7 @@ std::unique_ptr<Sphere> create_test_voronoi(size_t num_points) {
 
 TEST(GradientDensityOptimizerTest, ConvergesForConstantField) {
     auto voronoi = create_test_voronoi(10);
-    ConstantField field(1.0);
+    PolynomialField field = PolynomialField::constant(1.0);
 
     GradientDensityOptimizer optimizer(
         std::move(voronoi),
@@ -55,9 +53,9 @@ TEST(GradientDensityOptimizerTest, EXPENSIVE_ConvergesForLinearField) {
     REQUIRE_EXPENSIVE();
 
     auto voronoi = create_test_voronoi(10);
-    LinearField field(1.0, 2.0);
+    PolynomialField field = PolynomialField::linear(2.0, Vector3(0, 0, 1.0));
 
-    GradientDensityOptimizer<LinearField> optimizer(
+    GradientDensityOptimizer<PolynomialField> optimizer(
         std::move(voronoi),
         field,
         50
@@ -72,14 +70,14 @@ TEST(GradientDensityOptimizerTest, EXPENSIVE_GradientMatchesNumericalForLinearFi
     REQUIRE_EXPENSIVE();
 
     auto voronoi = create_test_voronoi(6);
-    LinearField field(1.0, 2.0);
+    PolynomialField field = PolynomialField::linear(2.0, Vector3(0, 0, 1.0));
     double target_mass = field.total_mass() / voronoi->size();
 
     auto compute_mass_errors = [&]() {
         std::vector<double> errors(voronoi->size());
         size_t i = 0;
         for (const auto& cell : voronoi->cells()) {
-            errors[i] = field.mass(cell) - target_mass;
+            errors[i] = field.integrals(cell).mass - target_mass;
             ++i;
         }
         return errors;
@@ -101,7 +99,7 @@ TEST(GradientDensityOptimizerTest, EXPENSIVE_GradientMatchesNumericalForLinearFi
     auto compute_error_for = [&](Sphere& v) {
         double total = 0.0;
         for (const auto& cell : v.cells()) {
-            double mass_error = field.mass(cell) - target_mass;
+            double mass_error = field.integrals(cell).mass - target_mass;
             total += mass_error * mass_error;
         }
         return total / 2.0;
@@ -119,9 +117,9 @@ TEST(GradientDensityOptimizerTest, EXPENSIVE_GradientMatchesNumericalForLinearFi
             size_t j = edge_info.neighbor_index;
             cgal::Point3 site_j = voronoi->site(j);
 
-            const Arc& arc = edge_info.arc;
-            Eigen::Vector3d rho_weighted_moment = field.edge_gradient_integral(arc);
-            double edge_integral = field.edge_integral(arc);
+            auto edge = field.integrals(edge_info.arc);
+            Eigen::Vector3d rho_weighted_moment = edge.first_moment;
+            double edge_integral = edge.mass;
 
             Eigen::Vector3d n_vec = to_eigen(site_j) - s_k;
             double n_norm = n_vec.norm();

@@ -1,4 +1,4 @@
-#include "globe/fields/spherical/harmonic_field.hpp"
+#include "globe/fields/spherical/polynomial_field.hpp"
 #include "globe/generators/spherical/fibonacci_point_generator.hpp"
 #include "globe/math/interval.hpp"
 #include "globe/cgal/types.hpp"
@@ -12,7 +12,7 @@
 #include <random>
 
 using namespace globe;
-using fields::spherical::HarmonicField;
+using fields::spherical::PolynomialField;
 using generators::spherical::FibonacciPointGenerator;
 using io::qt::Application;
 using io::qt::Viewer;
@@ -20,9 +20,9 @@ using io::qt::Color;
 
 using SurfaceMesh = CGAL::Surface_mesh<cgal::Point3>;
 
-void add_sphere_mesh(Viewer& viewer, const HarmonicField& field, size_t point_count);
+void add_sphere_mesh(Viewer& viewer, const PolynomialField& field, size_t point_count);
 Color value_to_color(double value, const Interval& range);
-HarmonicField create_random_harmonic_field(int seed, double contrast);
+PolynomialField create_random_quadratic_field(int seed, double contrast);
 
 int main(int argc, char* argv[]) {
     int seed = 42;
@@ -35,13 +35,13 @@ int main(int argc, char* argv[]) {
         point_count = static_cast<size_t>(std::atoi(argv[2]));
     }
 
-    std::cout << "Visualizing HarmonicField with seed=" << seed <<
+    std::cout << "Visualizing quadratic field with seed=" << seed <<
         ", points=" << point_count << std::endl;
 
-    HarmonicField field = create_random_harmonic_field(seed, 0.5);
+    PolynomialField field = create_random_quadratic_field(seed, 0.5);
 
     Application app(argc, argv);
-    Viewer viewer(nullptr, "Harmonic Field Visualization");
+    Viewer viewer(nullptr, "Quadratic Field Visualization");
 
     add_sphere_mesh(viewer, field, point_count);
 
@@ -51,7 +51,7 @@ int main(int argc, char* argv[]) {
     return app.run();
 }
 
-void add_sphere_mesh(Viewer& viewer, const HarmonicField& field, size_t point_count) {
+void add_sphere_mesh(Viewer& viewer, const PolynomialField& field, size_t point_count) {
     FibonacciPointGenerator generator;
     auto sphere_points = generator.generate(point_count);
 
@@ -106,7 +106,7 @@ Color value_to_color(double value, const Interval& range) {
     return Color(intensity, intensity, intensity);
 }
 
-HarmonicField create_random_harmonic_field(int seed, double contrast) {
+PolynomialField create_random_quadratic_field(int seed, double contrast) {
     std::mt19937 rng(seed);
     std::normal_distribution<double> dist(0.0, 1.0);
 
@@ -126,5 +126,5 @@ HarmonicField create_random_harmonic_field(int seed, double contrast) {
     quadratic(1, 2) = quadratic(2, 1) = yz;
     quadratic *= contrast;
 
-    return HarmonicField(1.0, linear, quadratic);
+    return PolynomialField::quadratic(1.0, linear, quadratic);
 }

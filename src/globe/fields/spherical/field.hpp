@@ -1,11 +1,11 @@
 #ifndef GLOBEART_SRC_GLOBE_FIELDS_SPHERICAL_FIELD_HPP_
 #define GLOBEART_SRC_GLOBE_FIELDS_SPHERICAL_FIELD_HPP_
 
-#include <cstdint>
+#include "region_integrals.hpp"
 #include "../../types.hpp"
 #include "../../geometry/spherical/arc.hpp"
 #include "../../geometry/spherical/polygon/polygon.hpp"
-#include <Eigen/Core>
+#include <concepts>
 
 namespace globe::fields::spherical {
 
@@ -17,10 +17,9 @@ concept Field = requires(
     const Arc& arc
 ) {
     { field.value(point) } -> std::convertible_to<double>;
-    { field.mass(polygon) } -> std::convertible_to<double>;
+    { field.integrals(polygon) } -> std::convertible_to<RegionIntegrals>;
+    { field.integrals(arc) } -> std::convertible_to<RegionIntegrals>;
     { field.total_mass() } -> std::convertible_to<double>;
-    { field.edge_integral(arc) } -> std::convertible_to<double>;
-    { field.edge_gradient_integral(arc) } -> std::convertible_to<Eigen::Vector3d>;
 };
 
 } // namespace globe::fields::spherical
