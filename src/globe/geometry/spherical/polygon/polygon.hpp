@@ -40,6 +40,7 @@ class Polygon {
 
     [[nodiscard]] double area() const;
     [[nodiscard]] Moments moments(int max_degree) const;
+    [[nodiscard]] Moments moments(int max_degree, const std::vector<Moments>& arc_moments) const;
     [[nodiscard]] VectorS2 first_moment() const;
     [[nodiscard]] Eigen::Matrix3d second_moment() const;
 
@@ -146,18 +147,21 @@ inline double Polygon::turning_angle(const Arc& incoming, const Arc& outgoing) {
 }
 
 inline Moments Polygon::moments(int max_degree) const {
-    Moments result(max_degree);
-    result.set(MultiIndex{0, 0, 0}, area());
-
-    if (max_degree == 0) {
-        return result;
-    }
-
     std::vector<Moments> arc_moments;
     arc_moments.reserve(_arcs.size());
+
     for (const Arc& arc : _arcs) {
-        arc_moments.push_back(arc.moments(max_degree - 1));
+        arc_moments.push_back(arc.moments(std::max(max_degree - 1, 0)));
     }
+
+    return moments(max_degree, arc_moments);
+}
+
+inline Moments Polygon::moments(int max_degree, const std::vector<Moments>& arc_moments) const {
+    assert(arc_moments.size() == _arcs.size());
+
+    Moments result(max_degree);
+    result.set(MultiIndex{0, 0, 0}, area());
 
     for (int degree = 1; degree <= max_degree; ++degree) {
         for (const MultiIndex& beta : MultiIndex::all_of_degree(degree)) {

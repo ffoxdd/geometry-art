@@ -26,6 +26,7 @@ class PolynomialField {
     [[nodiscard]] double value(const VectorS2& point) const;
     [[nodiscard]] RegionIntegrals integrals(const Polygon& polygon) const;
     [[nodiscard]] RegionIntegrals integrals(const Arc& arc) const;
+    [[nodiscard]] RegionIntegrals integrals(const Moments& moments) const;
     [[nodiscard]] double total_mass() const { return _total_mass; }
 
     [[nodiscard]] static PolynomialField constant(double value);
@@ -40,8 +41,6 @@ class PolynomialField {
     Polynomial _density;
     std::array<Polynomial, 3> _density_times_coordinate;
     double _total_mass;
-
-    [[nodiscard]] RegionIntegrals integrate(const Moments& moments) const;
 };
 
 inline PolynomialField::PolynomialField(Polynomial density) :
@@ -59,14 +58,14 @@ inline double PolynomialField::value(const VectorS2& point) const {
 }
 
 inline RegionIntegrals PolynomialField::integrals(const Polygon& polygon) const {
-    return integrate(polygon.moments(degree() + 1));
+    return integrals(polygon.moments(degree() + 1));
 }
 
 inline RegionIntegrals PolynomialField::integrals(const Arc& arc) const {
-    return integrate(arc.moments(degree() + 1));
+    return integrals(arc.moments(degree() + 1));
 }
 
-inline RegionIntegrals PolynomialField::integrate(const Moments& moments) const {
+inline RegionIntegrals PolynomialField::integrals(const Moments& moments) const {
     return RegionIntegrals{
         _density.integrate(moments),
         Vector3(

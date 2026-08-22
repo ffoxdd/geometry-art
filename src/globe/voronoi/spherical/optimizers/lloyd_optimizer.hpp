@@ -2,121 +2,103 @@
 #define GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_LLOYD_OPTIMIZER_HPP_
 
 #include "../../../types.hpp"
+#include "../../../fields/spherical/field.hpp"
+#include "../../../fields/spherical/polynomial_field.hpp"
 #include "../../../geometry/spherical/helpers.hpp"
 #include "../core/sphere.hpp"
 #include "../core/callback.hpp"
-#include "../../../geometry/spherical/polygon/polygon.hpp"
-#include <memory>
-#include <cstddef>
-#include <iostream>
-#include <iomanip>
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <memory>
+#include <utility>
 
 namespace globe::voronoi::spherical {
 
 using geometry::spherical::distance;
 
+template<fields::spherical::Field FieldType = fields::spherical::PolynomialField>
 class LloydOptimizer {
  public:
-    static constexpr size_t DEFAULT_PASSES = 4;
-    static constexpr double CONVERGENCE_THRESHOLD = 1e-20;
-    static constexpr size_t MAX_PASSES_WITHOUT_IMPROVEMENT = 5;
-
     LloydOptimizer(
         std::unique_ptr<Sphere> sphere,
-        size_t max_passes = DEFAULT_PASSES,
-        Callback callback = noop_callback()
+        FieldType field,
+        size_t passes,
+        Callback callback
     );
 
     std::unique_ptr<Sphere> optimize();
-    double final_deviation() const;
+    [[nodiscard]] double final_deviation() const { return _final_deviation; }
 
  private:
     std::unique_ptr<Sphere> _sphere;
-    size_t _max_passes;
+    FieldType _field;
+    size_t _passes;
     Callback _callback;
     double _final_deviation = 0.0;
 
-    double run_single_pass();
-    double compute_total_deviation() const;
+    void run_single_pass();
+    [[nodiscard]] double root_mean_square_deviation() const;
+    [[nodiscard]] VectorS2 weighted_centroid(const Polygon& cell) const;
 };
 
-inline LloydOptimizer::LloydOptimizer(
+template<fields::spherical::Field FieldType>
+LloydOptimizer<FieldType>::LloydOptimizer(
     std::unique_ptr<Sphere> sphere,
-    size_t max_passes,
+    FieldType field,
+    size_t passes,
     Callback callback
 ) :
     _sphere(std::move(sphere)),
-    _max_passes(max_passes),
+    _field(std::move(field)),
+    _passes(passes),
     _callback(std::move(callback)) {
 }
 
-inline std::unique_ptr<Sphere> LloydOptimizer::optimize() {
-    _final_deviation = compute_total_deviation();
-    double best_deviation = _final_deviation;
-    size_t passes_without_improvement = 0;
-
-    for (size_t pass = 0; pass < _max_passes; pass++) {
-        double max_movement = run_single_pass();
-        _final_deviation = compute_total_deviation();
-
+template<fields::spherical::Field FieldType>
+std::unique_ptr<Sphere> LloydOptimizer<FieldType>::optimize() {
+    for (size_t pass = 0; pass < _passes; ++pass) {
+        run_single_pass();
         _callback(*_sphere);
-
-        if (max_movement < CONVERGENCE_THRESHOLD) {
-            break;
-        }
-
-        if (_final_deviation < best_deviation) {
-            best_deviation = _final_deviation;
-            passes_without_improvement = 0;
-        } else {
-            passes_without_improvement++;
-            if (passes_without_improvement >= MAX_PASSES_WITHOUT_IMPROVEMENT) {
-                break;
-            }
-        }
     }
 
+    _final_deviation = root_mean_square_deviation();
     return std::move(_sphere);
 }
 
-inline double LloydOptimizer::final_deviation() const {
-    return _final_deviation;
-}
+template<fields::spherical::Field FieldType>
+void LloydOptimizer<FieldType>::run_single_pass() {
+    std::vector<VectorS2> centroids;
+    centroids.reserve(_sphere->size());
 
-inline double LloydOptimizer::run_single_pass() {
-    double max_movement = 0.0;
-
-    size_t index = 0;
-    for (const auto &cell : _sphere->cells()) {
-        VectorS2 site = to_vector_s2(_sphere->site(index));
-        VectorS2 centroid = cell.centroid();
-
-        double movement = distance(site, centroid);
-        max_movement = std::max(max_movement, movement);
-
-        _sphere->update_site(index, cgal::to_point(centroid));
-        index++;
-        _callback(*_sphere);
+    for (const auto& cell : _sphere->cells()) {
+        centroids.push_back(weighted_centroid(cell));
     }
 
-    return max_movement;
+    for (size_t index = 0; index < centroids.size(); ++index) {
+        _sphere->update_site(index, cgal::to_point(centroids[index]));
+    }
 }
 
-inline double LloydOptimizer::compute_total_deviation() const {
+template<fields::spherical::Field FieldType>
+double LloydOptimizer<FieldType>::root_mean_square_deviation() const {
     double total = 0.0;
-
     size_t index = 0;
-    for (const auto &cell : _sphere->cells()) {
-        VectorS2 site = to_vector_s2(_sphere->site(index));
-        VectorS2 centroid = cell.centroid();
 
-        double deviation = distance(site, centroid);
+    for (const auto& cell : _sphere->cells()) {
+        double deviation = distance(to_vector_s2(_sphere->site(index)), weighted_centroid(cell));
         total += deviation * deviation;
-        index++;
+        ++index;
     }
 
-    return std::sqrt(total / _sphere->size());
+    return std::sqrt(total / static_cast<double>(_sphere->size()));
+}
+
+template<fields::spherical::Field FieldType>
+VectorS2 LloydOptimizer<FieldType>::weighted_centroid(const Polygon& cell) const {
+    Vector3 moment = _field.integrals(cell).first_moment;
+    double norm = moment.norm();
+    return norm < GEOMETRIC_EPSILON ? cell.centroid() : VectorS2(moment / norm);
 }
 
 } // namespace globe::voronoi::spherical

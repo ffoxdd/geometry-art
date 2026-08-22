@@ -1,36 +1,58 @@
-#include <gtest/gtest.h>
 #include "factory.hpp"
-#include "../../../testing/assertions/geometric.hpp"
+#include "../../../fields/spherical/polynomial_field.hpp"
 #include "../../../testing/macros.hpp"
+#include <gtest/gtest.h>
 
+using namespace globe;
 using namespace globe::voronoi::spherical;
 
-TEST(FactoryTest, EXPENSIVE_BuildWithConstantDensity) {
-    REQUIRE_EXPENSIVE();
+namespace {
 
-    Factory factory(5, "constant", "ccvd", 1, 0);
+CapacityConstrainedParameters quick_parameters() {
+    CapacityConstrainedParameters parameters;
+    parameters.max_outer_iterations = 2;
+    parameters.max_inner_iterations = 10;
+    return parameters;
+}
+
+}
+
+TEST(FactoryTest, BuildWithConstantDensityPreservesPointCount) {
+    Factory factory(6, "constant", 1, quick_parameters(), noop_callback());
 
     auto sphere = factory.build();
 
-    EXPECT_EQ(sphere->size(), 5);
+    EXPECT_EQ(sphere->size(), 6u);
+}
+
+TEST(FactoryTest, EXPENSIVE_BuildWithQuadraticDensityEqualizesCapacities) {
+    REQUIRE_EXPENSIVE();
+
+    CapacityConstrainedParameters parameters;
+    parameters.relative_capacity_tolerance = 1e-6;
+    Factory factory(40, "quadratic", 5, parameters, noop_callback());
+
+    auto sphere = factory.build();
+
+    Eigen::Matrix3d quadratic = Eigen::Matrix3d::Zero();
+    quadratic(2, 2) = -0.9;
+    auto field = fields::spherical::PolynomialField::quadratic(1.0, Vector3::Zero(), quadratic);
+    double target = field.total_mass() / sphere->size();
+    double sum = 0.0;
+    for (const auto& cell : sphere->cells()) {
+        double error = field.integrals(cell).mass - target;
+        sum += error * error;
+    }
+
+    EXPECT_LT(std::sqrt(sum / sphere->size()) / target, 1e-6);
 }
 
 TEST(FactoryTest, EXPENSIVE_BuildWithNoiseDensity) {
     REQUIRE_EXPENSIVE();
 
-    Factory factory(5, "noise", "ccvd", 1, 0);
+    Factory factory(20, "noise", 2, quick_parameters(), noop_callback());
 
     auto sphere = factory.build();
 
-    EXPECT_EQ(sphere->size(), 5);
-}
-
-TEST(FactoryTest, EXPENSIVE_BuildWithGradientOptimization) {
-    REQUIRE_EXPENSIVE();
-
-    Factory factory(5, "constant", "gradient", 10, 0);
-
-    auto sphere = factory.build();
-
-    EXPECT_EQ(sphere->size(), 5);
+    EXPECT_EQ(sphere->size(), 20u);
 }

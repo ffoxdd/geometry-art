@@ -4,19 +4,18 @@
 #include "../core/sphere.hpp"
 #include "../core/random_builder.hpp"
 #include "../core/callback.hpp"
-#include "../optimizers/field_density_optimizer.hpp"
-#include "../optimizers/gradient_density_optimizer.hpp"
+#include "../optimizers/capacity_constrained_optimizer.hpp"
 #include "../optimizers/lloyd_optimizer.hpp"
 #include "../../../fields/scalar/noise_field.hpp"
 #include "../../../fields/spherical/polynomial_field.hpp"
 #include "../../../fields/spherical/polynomial_field_fitter.hpp"
 #include "../../../generators/spherical/fibonacci_point_generator.hpp"
-#include "../../../generators/spherical/random_point_generator.hpp"
-#include <string>
-#include <memory>
-#include <algorithm>
-#include <iostream>
+#include <cstddef>
 #include <iomanip>
+#include <iostream>
+#include <memory>
+#include <string>
+#include <utility>
 
 namespace globe::voronoi::spherical {
 
@@ -28,12 +27,10 @@ class Factory {
  public:
     Factory(
         int points_count,
-        std::string density_function,
-        std::string optimization_strategy,
-        int optimization_passes,
-        int lloyd_passes,
-        int max_perturbations = 50,
-        Callback callback = noop_callback()
+        std::string density_field,
+        size_t lloyd_passes,
+        CapacityConstrainedParameters optimizer_parameters,
+        Callback callback
     );
 
     std::unique_ptr<Sphere> build();
@@ -43,84 +40,61 @@ class Factory {
     static constexpr size_t NOISE_FIT_SAMPLES = 20000;
 
     int _points_count;
-    std::string _density_function;
-    std::string _optimization_strategy;
-    size_t _optimization_passes;
+    std::string _density_field;
     size_t _lloyd_passes;
-    size_t _max_perturbations;
+    CapacityConstrainedParameters _optimizer_parameters;
     Callback _callback;
 
-    std::unique_ptr<Sphere> build_initial();
-    std::unique_ptr<Sphere> optimize_density(std::unique_ptr<Sphere> sphere);
+    [[nodiscard]] PolynomialField create_field() const;
+    [[nodiscard]] std::unique_ptr<Sphere> build_initial() const;
+    [[nodiscard]] std::unique_ptr<Sphere> warm_start(std::unique_ptr<Sphere> sphere, const PolynomialField& field) const;
+    [[nodiscard]] std::unique_ptr<Sphere> optimize(std::unique_ptr<Sphere> sphere, const PolynomialField& field) const;
 
-    PolynomialField create_field() const;
-    std::unique_ptr<Sphere> optimize_ccvd(std::unique_ptr<Sphere> sphere, const PolynomialField& field);
-    std::unique_ptr<Sphere> optimize_gradient(std::unique_ptr<Sphere> sphere, const PolynomialField& field);
-
-    static PolynomialField fit_noise_field();
+    [[nodiscard]] static PolynomialField fit_noise_field();
 };
 
 inline Factory::Factory(
     int points_count,
-    std::string density_function,
-    std::string optimization_strategy,
-    int optimization_passes,
-    int lloyd_passes,
-    int max_perturbations,
+    std::string density_field,
+    size_t lloyd_passes,
+    CapacityConstrainedParameters optimizer_parameters,
     Callback callback
 ) :
     _points_count(points_count),
-    _density_function(std::move(density_function)),
-    _optimization_strategy(std::move(optimization_strategy)),
-    _optimization_passes(static_cast<size_t>(optimization_passes)),
-    _lloyd_passes(static_cast<size_t>(lloyd_passes)),
-    _max_perturbations(static_cast<size_t>(max_perturbations)),
+    _density_field(std::move(density_field)),
+    _lloyd_passes(lloyd_passes),
+    _optimizer_parameters(optimizer_parameters),
     _callback(std::move(callback)) {
 }
 
 inline std::unique_ptr<Sphere> Factory::build() {
+    PolynomialField field = create_field();
+
     std::cout << "Generating " << _points_count << " random points..." << std::flush;
     auto sphere = build_initial();
     std::cout << " done" << std::endl;
-
     _callback(*sphere);
 
-    std::cout << "Initial density optimization..." << std::endl;
-    sphere = optimize_density(std::move(sphere));
-
-    for (size_t i = 0; i < _lloyd_passes; i++) {
-        LloydOptimizer lloyd_optimizer(std::move(sphere), 1, _callback);
-        sphere = lloyd_optimizer.optimize();
-        double deviation = lloyd_optimizer.final_deviation();
-
-        std::cout << "  " << std::setw(8) << std::left << "Lloyd" << std::right <<
-            std::setw(4) << (i + 1) << "/" <<
-            std::setw(4) << std::left << _lloyd_passes << std::right <<
-            ": dev " << std::fixed << std::setprecision(8) << deviation <<
-            std::defaultfloat << std::endl;
-
-        sphere = optimize_density(std::move(sphere));
-    }
-
-    return sphere;
+    sphere = warm_start(std::move(sphere), field);
+    return optimize(std::move(sphere), field);
 }
 
 inline PolynomialField Factory::create_field() const {
-    if (_density_function == "constant") {
+    if (_density_field == "constant") {
         return PolynomialField::constant(1.0);
     }
 
-    if (_density_function == "linear") {
-        return PolynomialField::linear(2.0, Eigen::Vector3d(0.0, 0.0, 2.0));
+    if (_density_field == "linear") {
+        return PolynomialField::linear(2.0, Vector3(0.0, 0.0, 2.0));
     }
 
-    if (_density_function == "noise") {
+    if (_density_field == "noise") {
         return fit_noise_field();
     }
 
     Eigen::Matrix3d quadratic = Eigen::Matrix3d::Zero();
     quadratic(2, 2) = -0.9;
-    return PolynomialField::quadratic(1.0, Eigen::Vector3d::Zero(), quadratic);
+    return PolynomialField::quadratic(1.0, Vector3::Zero(), quadratic);
 }
 
 inline PolynomialField Factory::fit_noise_field() {
@@ -134,52 +108,38 @@ inline PolynomialField Factory::fit_noise_field() {
     return fit.field;
 }
 
-inline std::unique_ptr<Sphere> Factory::optimize_density(
-    std::unique_ptr<Sphere> sphere
-) {
-    PolynomialField field = create_field();
+inline std::unique_ptr<Sphere> Factory::build_initial() const {
+    return RandomBuilder<>().build(_points_count);
+}
 
-    if (_optimization_strategy == "gradient") {
-        return optimize_gradient(std::move(sphere), field);
+inline std::unique_ptr<Sphere> Factory::warm_start(std::unique_ptr<Sphere> sphere, const PolynomialField& field) const {
+    if (_lloyd_passes == 0) {
+        return sphere;
     }
 
-    return optimize_ccvd(std::move(sphere), field);
+    LloydOptimizer<PolynomialField> lloyd(std::move(sphere), field, _lloyd_passes, _callback);
+    sphere = lloyd.optimize();
+
+    std::cout << "  " << std::setw(8) << std::left << "Lloyd" << std::right <<
+        std::setw(3) << _lloyd_passes << " passes: centroid deviation " <<
+        std::scientific << std::setprecision(3) << lloyd.final_deviation() <<
+        std::defaultfloat << std::endl;
+
+    return sphere;
 }
 
-inline std::unique_ptr<Sphere> Factory::build_initial() {
-    RandomBuilder<> builder;
-    return builder.build(_points_count);
-}
+inline std::unique_ptr<Sphere> Factory::optimize(std::unique_ptr<Sphere> sphere, const PolynomialField& field) const {
+    CapacityConstrainedOptimizer<PolynomialField> optimizer(std::move(sphere), field, _optimizer_parameters, _callback);
+    sphere = optimizer.optimize();
 
-inline std::unique_ptr<Sphere> Factory::optimize_ccvd(
-    std::unique_ptr<Sphere> sphere,
-    const PolynomialField& field
-) {
-    FieldDensityOptimizer optimizer(
-        std::move(sphere),
-        field,
-        _optimization_passes,
-        generators::spherical::RandomPointGenerator<>(),
-        _callback
-    );
+    const auto& report = optimizer.report();
+    std::cout << "  " << std::setw(8) << std::left << "Final" << std::right <<
+        (report.converged ? " converged" : (report.stalled ? " stalled" : " stopped")) <<
+        " after " << report.outer_iterations << " outer / " << report.inner_iterations << " inner iterations" <<
+        ", capacity RMS " << std::scientific << std::setprecision(3) << report.relative_rms_capacity_error <<
+        std::defaultfloat << std::endl;
 
-    return optimizer.optimize();
-}
-
-inline std::unique_ptr<Sphere> Factory::optimize_gradient(
-    std::unique_ptr<Sphere> sphere,
-    const PolynomialField& field
-) {
-    GradientDensityOptimizer<PolynomialField> optimizer(
-        std::move(sphere),
-        field,
-        _optimization_passes,
-        _max_perturbations,
-        generators::spherical::RandomPointGenerator<>(),
-        _callback
-    );
-
-    return optimizer.optimize();
+    return sphere;
 }
 
 } // namespace globe::voronoi::spherical

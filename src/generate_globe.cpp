@@ -17,6 +17,7 @@ using namespace globe;
 using io::qt::Application;
 using io::qt::SphereDrawer;
 using io::text::SphereRepository;
+using voronoi::spherical::CapacityConstrainedParameters;
 using voronoi::spherical::Factory;
 using voronoi::spherical::Sphere;
 using voronoi::spherical::Callback;
@@ -25,12 +26,12 @@ using voronoi::spherical::noop_callback;
 struct Config {
     int points_count;
     std::string density_field;
-    std::string optimization_strategy;
     bool perform_render;
     std::string render_mode;
-    int optimization_passes;
     int lloyd_passes;
-    int max_perturbations;
+    int max_outer_iterations;
+    int max_inner_iterations;
+    double capacity_tolerance = 1e-7;
     std::string output_dir;
 };
 
@@ -43,12 +44,12 @@ int main(int argc, char *argv[]) {
         "Configuration:" << std::endl <<
         "  Points: " << config.points_count << std::endl <<
         "  Density: " << config.density_field << std::endl <<
-        "  Optimization strategy: " << config.optimization_strategy << std::endl <<
         "  Render: " << (config.perform_render ? "yes" : "no") << std::endl <<
         "  Render mode: " << config.render_mode << std::endl <<
-        "  Optimization passes: " << config.optimization_passes << std::endl <<
         "  Lloyd passes: " << config.lloyd_passes << std::endl <<
-        "  Max perturbations: " << config.max_perturbations << std::endl <<
+        "  Max outer iterations: " << config.max_outer_iterations << std::endl <<
+        "  Max inner iterations: " << config.max_inner_iterations << std::endl <<
+        "  Capacity tolerance: " << config.capacity_tolerance << std::endl <<
         std::endl;
 
     std::unique_ptr<Application> application;
@@ -84,13 +85,16 @@ int main(int argc, char *argv[]) {
         };
     }
 
+    CapacityConstrainedParameters optimizer_parameters;
+    optimizer_parameters.max_outer_iterations = static_cast<size_t>(config.max_outer_iterations);
+    optimizer_parameters.max_inner_iterations = static_cast<size_t>(config.max_inner_iterations);
+    optimizer_parameters.relative_capacity_tolerance = config.capacity_tolerance;
+
     Factory factory(
         config.points_count,
         config.density_field,
-        config.optimization_strategy,
-        config.optimization_passes,
-        config.lloyd_passes,
-        config.max_perturbations,
+        static_cast<size_t>(config.lloyd_passes),
+        optimizer_parameters,
         callback
     );
 
@@ -131,11 +135,6 @@ Config parse_arguments(int argc, char *argv[]) {
         ->check(CLI::IsMember({"constant", "linear", "quadratic", "noise"}))
         ->default_val("quadratic");
 
-    app.add_option("--optimization-strategy,-s", config.optimization_strategy)
-        ->description("Optimization strategy: ccvd (per-site) or gradient (global)")
-        ->check(CLI::IsMember({"ccvd", "gradient"}))
-        ->default_val("ccvd");
-
     app.add_option("--render", config.perform_render)
         ->description("Enable Qt rendering")
         ->default_val(true);
@@ -145,20 +144,25 @@ Config parse_arguments(int argc, char *argv[]) {
         ->check(CLI::IsMember({"wireframe", "solid", "minimal"}))
         ->default_val("wireframe");
 
-    app.add_option("--optimization-passes", config.optimization_passes)
-        ->description("Number of optimization passes")
-        ->default_val(100)
+    app.add_option("--lloyd-passes", config.lloyd_passes)
+        ->description("Number of density-weighted Lloyd warm-start passes")
+        ->default_val(5)
+        ->check(CLI::NonNegativeNumber);
+
+    app.add_option("--max-outer-iterations", config.max_outer_iterations)
+        ->description("Maximum augmented Lagrangian outer iterations")
+        ->default_val(30)
         ->check(CLI::PositiveNumber);
 
-    app.add_option("--lloyd-passes", config.lloyd_passes)
-        ->description("Number of Lloyd relaxation passes")
-        ->default_val(1)
-        ->check(CLI::NonNegativeNumber);
+    app.add_option("--max-inner-iterations", config.max_inner_iterations)
+        ->description("Maximum L-BFGS iterations per outer iteration")
+        ->default_val(200)
+        ->check(CLI::PositiveNumber);
 
-    app.add_option("--max-perturbations", config.max_perturbations)
-        ->description("Maximum perturbation attempts for gradient optimizer")
-        ->default_val(50)
-        ->check(CLI::NonNegativeNumber);
+    app.add_option("--capacity-tolerance", config.capacity_tolerance)
+        ->description("Relative RMS capacity error at which optimization stops")
+        ->default_str("1e-7")
+        ->check(CLI::PositiveNumber);
 
     app.add_option("--output-dir,-o", config.output_dir)
         ->description("Output directory for saved spheres")

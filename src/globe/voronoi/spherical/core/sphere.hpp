@@ -59,8 +59,6 @@ class Sphere {
     using Triangulation = ::CGAL::Delaunay_triangulation_on_sphere_2<
         ::CGAL::Delaunay_triangulation_on_sphere_traits_2<Kernel, SphericalKernel>
     >;
-    using CGALArc = Triangulation::Arc_on_sphere_2;
-
     using VertexHandle = Triangulation::Vertex_handle;
     using FaceHandle = Triangulation::Face_handle;
     using EdgeCirculator = Triangulation::Edge_circulator;
@@ -76,10 +74,8 @@ class Sphere {
     std::vector<Arc> cell_arcs(size_t index) const;
     size_t vertex_index(VertexHandle handle) const;
 
-    static Arc to_spherical_arc(const CGALArc& cgal_arc);
-
-    template<typename P>
-    static cgal::Point3 to_point(const P& p);
+    [[nodiscard]] VectorS2 dual_vertex(FaceHandle face) const;
+    [[nodiscard]] Arc dual_arc(const Edge& edge) const;
 };
 
 inline Sphere::Sphere() :
@@ -120,16 +116,10 @@ inline void Sphere::update_site(size_t index, cgal::Point3 new_position) {
 }
 
 inline std::vector<Arc> Sphere::cell_arcs(size_t index) const {
-    if (_triangulation->dimension() < 2) {
-        return {};
-    }
-
-    VertexHandle vertex_handle = _handles[index];
     std::vector<Arc> arcs;
 
-    for (const auto& edge : incident_edges_range(vertex_handle)) {
-        CGALArc cgal_arc = _triangulation->dual_on_sphere(edge);
-        arcs.push_back(to_spherical_arc(cgal_arc));
+    for (const CellEdgeInfo& edge : cell_edges(index)) {
+        arcs.push_back(edge.arc);
     }
 
     if (arcs.size() < 2) {
@@ -183,28 +173,19 @@ inline std::vector<VoronoiVertex> Sphere::vertices() const {
          fit != _triangulation->solid_faces_end(); ++fit) {
 
         FaceHandle face = fit;
+        VectorS2 position = dual_vertex(face);
 
-        // Get the Voronoi vertex position (circumcenter of Delaunay face)
-        auto dual_point = _triangulation->dual_on_sphere(face);
-        VectorS2 position = to_vector_s2(to_point(dual_point));
-
-        // Get the 3 arcs meeting at this vertex (one per edge of the face)
         std::vector<Arc> vertex_arcs;
         for (int i = 0; i < 3; ++i) {
-            Edge edge(face, i);
-            CGALArc cgal_arc = _triangulation->dual_on_sphere(edge);
-            Arc arc = to_spherical_arc(cgal_arc);
+            Arc arc = dual_arc(Edge(face, i));
 
-            // Ensure the arc starts from this vertex
-            if ((arc.target() - position).squaredNorm() <
-                (arc.source() - position).squaredNorm()) {
-                // Reverse the arc so it starts from this vertex
+            if ((arc.target() - position).squaredNorm() < (arc.source() - position).squaredNorm()) {
                 arc = Arc(arc.target(), arc.source());
             }
+
             vertex_arcs.push_back(arc);
         }
 
-        // Sort arcs by angle around the vertex (counterclockwise)
         VectorS2 radial = position.normalized();
         VectorS2 ref = (std::abs(radial.z()) < 0.9)
             ? VectorS2(0, 0, 1).cross(radial).normalized()
@@ -235,13 +216,11 @@ inline std::vector<Arc> Sphere::unique_arcs() const {
     std::vector<Arc> result;
     std::set<std::pair<size_t, size_t>> seen_edges;
 
-    // Collect unique edges by iterating over cells
-    for (size_t cell_idx = 0; cell_idx < size(); ++cell_idx) {
-        for (const auto& edge_info : cell_edges(cell_idx)) {
-            size_t a = cell_idx;
+    for (size_t cell_index = 0; cell_index < size(); ++cell_index) {
+        for (const auto& edge_info : cell_edges(cell_index)) {
+            size_t a = cell_index;
             size_t b = edge_info.neighbor_index;
 
-            // Only add each edge once (use ordered pair)
             auto edge_key = (a < b) ? std::make_pair(a, b) : std::make_pair(b, a);
             if (seen_edges.insert(edge_key).second) {
                 result.push_back(edge_info.arc);
@@ -261,6 +240,10 @@ inline size_t Sphere::vertex_index(VertexHandle handle) const {
 }
 
 inline std::vector<CellEdgeInfo> Sphere::cell_edges(size_t index) const {
+    if (_triangulation->dimension() < 2) {
+        return {};
+    }
+
     std::vector<CellEdgeInfo> result;
     VertexHandle vertex_handle = _handles[index];
 
@@ -272,30 +255,25 @@ inline std::vector<CellEdgeInfo> Sphere::cell_edges(size_t index) const {
         VertexHandle v2 = face->vertex((edge_index + 2) % 3);
 
         VertexHandle neighbor_handle = (v1 == vertex_handle) ? v2 : v1;
-        size_t neighbor_idx = vertex_index(neighbor_handle);
+        size_t neighbor_index = vertex_index(neighbor_handle);
 
-        if (neighbor_idx < size()) {
-            CGALArc cgal_arc = _triangulation->dual_on_sphere(edge);
-            result.push_back({neighbor_idx, to_spherical_arc(cgal_arc)});
+        if (neighbor_index < size()) {
+            result.push_back({neighbor_index, dual_arc(edge)});
         }
     }
 
     return result;
 }
 
-inline Arc Sphere::to_spherical_arc(const CGALArc& cgal_arc) {
-    VectorS2 source = to_vector_s2(to_point(cgal_arc.source()));
-    VectorS2 target = to_vector_s2(to_point(cgal_arc.target()));
-    return Arc(source, target);
+inline VectorS2 Sphere::dual_vertex(FaceHandle face) const {
+    Vector3 p = to_vector3(_triangulation->point(face->vertex(0)));
+    Vector3 q = to_vector3(_triangulation->point(face->vertex(1)));
+    Vector3 r = to_vector3(_triangulation->point(face->vertex(2)));
+    return (q - p).cross(r - p).normalized();
 }
 
-template<typename P>
-inline cgal::Point3 Sphere::to_point(const P& p) {
-    return cgal::Point3(
-        ::CGAL::to_double(p.x()),
-        ::CGAL::to_double(p.y()),
-        ::CGAL::to_double(p.z())
-    );
+inline Arc Sphere::dual_arc(const Edge& edge) const {
+    return Arc(dual_vertex(edge.first), dual_vertex(edge.first->neighbor(edge.second)));
 }
 
 }
