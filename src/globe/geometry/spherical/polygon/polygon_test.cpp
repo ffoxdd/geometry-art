@@ -611,3 +611,59 @@ TEST(PolygonTest, EXPENSIVE_MomentsMatchGridQuadrature) {
         EXPECT_NEAR(moments.at(index), quadrature.at(index) * weight, 2e-3);
     }
 }
+
+TEST(PolygonTest, ClippedByReturnsWholePolygonWhenInside) {
+    Polygon polygon = octant();
+
+    auto clipped = polygon.clipped_by(VectorS2(1, 1, 1).normalized());
+
+    ASSERT_TRUE(clipped.has_value());
+    EXPECT_NEAR(clipped->area(), polygon.area(), 1e-12);
+}
+
+TEST(PolygonTest, ClippedByReturnsNothingWhenOutside) {
+    Polygon polygon = octant();
+
+    EXPECT_FALSE(polygon.clipped_by(VectorS2(-1, -1, -1).normalized()).has_value());
+}
+
+TEST(PolygonTest, ClippedByHalvesTheOctantAlongSymmetryPlane) {
+    Polygon polygon = octant();
+
+    auto clipped = polygon.clipped_by(VectorS2(1, -1, 0).normalized());
+
+    ASSERT_TRUE(clipped.has_value());
+    EXPECT_NEAR(clipped->area(), polygon.area() / 2.0, 1e-12);
+    EXPECT_GT(clipped->first_moment().x(), clipped->first_moment().y());
+}
+
+TEST(PolygonTest, ClippedPiecesPartitionMomentsOfTheOriginal) {
+    Polygon polygon = irregular_quadrilateral();
+    VectorS2 normal = VectorS2(0.2, -0.7, 0.4).normalized();
+
+    auto kept = polygon.clipped_by(normal);
+    auto dropped = polygon.clipped_by(-normal);
+
+    ASSERT_TRUE(kept.has_value());
+    ASSERT_TRUE(dropped.has_value());
+
+    auto kept_moments = kept->moments(3);
+    auto dropped_moments = dropped->moments(3);
+    auto moments = polygon.moments(3);
+
+    for (const auto& index : MultiIndex::all_up_to(3)) {
+        EXPECT_NEAR(kept_moments.at(index) + dropped_moments.at(index), moments.at(index), 1e-12);
+    }
+}
+
+TEST(PolygonTest, ClippingIsIdempotent) {
+    Polygon polygon = irregular_quadrilateral();
+    VectorS2 normal = VectorS2(0.2, -0.7, 0.4).normalized();
+
+    auto once = polygon.clipped_by(normal);
+    ASSERT_TRUE(once.has_value());
+    auto twice = once->clipped_by(normal);
+    ASSERT_TRUE(twice.has_value());
+
+    EXPECT_NEAR(twice->area(), once->area(), 1e-12);
+}

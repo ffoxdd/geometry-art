@@ -213,7 +213,7 @@ While isolated tests show CGAL's triangulation is deterministic, the rebuild app
 ### Terminal Testing Flags
 The `generate_globe` executable supports command-line flags for terminal/AI-assisted testing:
 - `--points <N>` / `-p`: Number of sites (default: 10)
-- `--density-field <type>` / `-f`: 'constant', 'linear', 'quadratic' or 'noise' (default: quadratic)
+- `--density-field <type>` / `-f`: 'constant', 'linear', 'quadratic', 'noise' (piecewise polynomial mesh) or 'noise-fit' (global polynomial fit) (default: quadratic)
 - `--render <bool>`: Set to `false` to run without Qt rendering
 - `--lloyd-passes <N>`: Density-weighted Lloyd warm-start passes (default: 5)
 - `--max-outer-iterations <N>` / `--max-inner-iterations <N>`: Augmented Lagrangian budget

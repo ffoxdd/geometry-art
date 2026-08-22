@@ -1,7 +1,7 @@
 #ifndef GLOBEART_SRC_GLOBE_GENERATORS_SPHERICAL_POISSON_ELIMINATION_POINT_GENERATOR_HPP_
 #define GLOBEART_SRC_GLOBE_GENERATORS_SPHERICAL_POISSON_ELIMINATION_POINT_GENERATOR_HPP_
 
-#include "indexed_kd_tree.hpp"
+#include "../../../geometry/spherical/indexed_kd_tree.hpp"
 #include "../../../geometry/spherical/bounding_box.hpp"
 #include "../../../geometry/spherical/helpers.hpp"
 #include "../point_generator.hpp"
@@ -13,6 +13,11 @@
 #include <algorithm>
 
 namespace globe::generators::spherical::poisson {
+
+using globe::geometry::spherical::IndexedPointMap;
+using globe::geometry::spherical::IndexedSearchTraits;
+using globe::geometry::spherical::IndexedKDTree;
+using globe::geometry::spherical::IndexedFuzzySphere;
 
 template<spherical::PointGenerator PointGeneratorType = RandomPointGenerator<>>
 class EliminationPointGenerator {

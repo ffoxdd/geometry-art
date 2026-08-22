@@ -135,10 +135,10 @@ SphereState CapacityConstrainedLagrangian<FieldType>::sphere_state(const Sphere&
 
             arcs.push_back(edge.arc);
             arc_moments.push_back(iterator->second);
-            state.edges[k].push_back(EdgeState{edge.neighbor_index, _field.integrals(iterator->second)});
+            state.edges[k].push_back(EdgeState{edge.neighbor_index, _field.integrals(edge.arc, iterator->second)});
         }
 
-        auto integrals = _field.integrals(Polygon(arcs).moments(moment_degree, arc_moments));
+        auto integrals = _field.integrals(Polygon(arcs), arc_moments);
         state.cells.push_back(CellState{integrals.mass, integrals.first_moment});
     }
 

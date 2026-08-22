@@ -7,6 +7,7 @@
 #include "../../geometry/spherical/polygon/polygon.hpp"
 #include "../../math/polynomial/moments.hpp"
 #include <concepts>
+#include <vector>
 
 namespace globe::fields::spherical {
 
@@ -18,13 +19,15 @@ concept Field = requires(
     const VectorS2& point,
     const Polygon& polygon,
     const Arc& arc,
-    const Moments& moments
+    const Moments& arc_moments,
+    const std::vector<Moments>& polygon_arc_moments
 ) {
     { field.value(point) } -> std::convertible_to<double>;
     { field.degree() } -> std::convertible_to<int>;
     { field.integrals(polygon) } -> std::convertible_to<RegionIntegrals>;
     { field.integrals(arc) } -> std::convertible_to<RegionIntegrals>;
-    { field.integrals(moments) } -> std::convertible_to<RegionIntegrals>;
+    { field.integrals(polygon, polygon_arc_moments) } -> std::convertible_to<RegionIntegrals>;
+    { field.integrals(arc, arc_moments) } -> std::convertible_to<RegionIntegrals>;
     { field.total_mass() } -> std::convertible_to<double>;
 };
 

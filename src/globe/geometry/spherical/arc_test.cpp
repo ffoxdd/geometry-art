@@ -239,3 +239,42 @@ TEST(ArcTest, EXPENSIVE_MomentsMatchMidpointQuadrature) {
         EXPECT_NEAR(moments.at(index), sum * length / SAMPLES, 1e-8);
     }
 }
+
+TEST(ArcTest, ClippedByKeepsArcEntirelyInsideHalfSpace) {
+    Arc arc(VectorS2(1, 0, 0), VectorS2(0, 1, 0));
+
+    auto clipped = arc.clipped_by(VectorS2(1, 1, 0).normalized());
+
+    ASSERT_TRUE(clipped.has_value());
+    EXPECT_NEAR(clipped->length(), arc.length(), 1e-12);
+}
+
+TEST(ArcTest, ClippedByDropsArcEntirelyOutsideHalfSpace) {
+    Arc arc(VectorS2(1, 0, 0), VectorS2(0, 1, 0));
+
+    EXPECT_FALSE(arc.clipped_by(VectorS2(-1, -1, 0).normalized()).has_value());
+}
+
+TEST(ArcTest, ClippedByCutsAtGreatCircleCrossing) {
+    Arc arc(VectorS2(1, 0, 0), VectorS2(0, 1, 0));
+
+    auto clipped = arc.clipped_by(VectorS2(-1, 1, 0).normalized());
+
+    ASSERT_TRUE(clipped.has_value());
+    EXPECT_NEAR(clipped->length(), M_PI / 4.0, 1e-12);
+    EXPECT_NEAR((clipped->source() - VectorS2(1, 1, 0).normalized()).norm(), 0.0, 1e-12);
+    EXPECT_NEAR((clipped->target() - VectorS2(0, 1, 0)).norm(), 0.0, 1e-12);
+}
+
+TEST(ArcTest, ClippedPiecesPartitionTheArc) {
+    Arc arc(VectorS2(0.6, 0.0, 0.8), VectorS2(0.0, -0.6, 0.8).normalized());
+    VectorS2 normal = VectorS2(0.3, 0.4, -0.2).normalized();
+
+    auto kept = arc.clipped_by(normal);
+    auto dropped = arc.clipped_by(-normal);
+
+    ASSERT_TRUE(kept.has_value());
+    ASSERT_TRUE(dropped.has_value());
+    EXPECT_NEAR(kept->length() + dropped->length(), arc.length(), 1e-12);
+    EXPECT_NEAR((kept->first_moment() + dropped->first_moment() - arc.first_moment()).norm(), 0.0, 1e-12);
+}

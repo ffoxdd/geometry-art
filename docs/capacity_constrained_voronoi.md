@@ -80,7 +80,19 @@ fields are projected onto the `(degree, degree − 1)` homogeneous monomial
 basis — the span of spherical harmonics up to that degree — by least
 squares on Fibonacci sample points (`PolynomialFieldFitter`). High
 frequency content beyond the chosen degree is not representable this
-way; that is the domain of a piecewise density representation.
+way; that is what the piecewise representation is for.
+
+`PiecewisePolynomialField` carries a homogeneous degree-`d` polynomial
+on every triangle of a spherical `TriangleMesh` (an icosphere), fitted
+to the degree-`d` Lagrange nodes of the triangle — corners, edge points,
+interior points projected to the sphere. A homogeneous degree-`d`
+polynomial has exactly as many monomials as that lattice has nodes, its
+trace along an edge is determined by the edge's nodes so the field is
+continuous, and for even `d` it reproduces constants exactly. Cell and
+arc integrals clip the region against each overlapping triangle
+(Sutherland–Hodgman against great-circle half-spaces, candidates from a
+kd-tree over triangle centres) and sum the per-triangle polynomial
+integrals, so the integration stays exact for the interpolant.
 
 ## Geometry conventions
 

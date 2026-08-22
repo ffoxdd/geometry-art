@@ -1,5 +1,7 @@
 #include "capacity_constrained_lagrangian.hpp"
 #include "../../../fields/spherical/polynomial_field.hpp"
+#include "../../../fields/spherical/piecewise_polynomial_field.hpp"
+#include "../../../geometry/spherical/triangle_mesh.hpp"
 #include "../../../testing/macros.hpp"
 #include <gtest/gtest.h>
 #include <cmath>
@@ -9,6 +11,8 @@
 using namespace globe;
 using namespace globe::voronoi::spherical;
 using fields::spherical::PolynomialField;
+using fields::spherical::PiecewisePolynomialField;
+using geometry::spherical::TriangleMesh;
 
 namespace {
 
@@ -54,8 +58,9 @@ std::vector<double> test_multipliers(size_t count) {
     return multipliers;
 }
 
+template<typename LagrangianType>
 Vector3 finite_difference_gradient(
-    const CapacityConstrainedLagrangian<>& lagrangian,
+    const LagrangianType& lagrangian,
     std::vector<VectorS2> sites,
     size_t index,
     const std::vector<double>& multipliers,
@@ -161,5 +166,26 @@ TEST(CapacityConstrainedLagrangianTest, CvtGradientIsMinusTwiceTheWeightedFirstM
 
     for (size_t i = 0; i < sites.size(); ++i) {
         EXPECT_NEAR((evaluation.site_gradients[i] + 2.0 * states[i].first_moment).norm(), 0.0, 1e-12);
+    }
+}
+
+TEST(CapacityConstrainedLagrangianTest, GradientMatchesFiniteDifferencesForPiecewisePolynomialField) {
+    struct Bump {
+        double value(const VectorS2& point) const { return 1.0 + 0.5 * std::sin(3.0 * point.x()) * point.z(); }
+    } bump;
+
+    auto sites = fibonacci_sites(10);
+    PiecewisePolynomialField field = PiecewisePolynomialField::sample(TriangleMesh::icosphere(3), 2, bump);
+    CapacityConstrainedLagrangian<PiecewisePolynomialField> lagrangian(field, field.total_mass() / sites.size());
+    auto multipliers = test_multipliers(10);
+    double penalty = 2.5;
+
+    auto evaluation = lagrangian.evaluate(*build_sphere(sites), multipliers, penalty);
+
+    for (size_t index : {size_t(1), size_t(6)}) {
+        Vector3 analytic = tangential(evaluation.site_gradients[index], sites[index]);
+        Vector3 numeric = finite_difference_gradient(lagrangian, sites, index, multipliers, penalty);
+
+        EXPECT_NEAR((analytic - numeric).norm(), 0.0, 1e-5 * std::max(1.0, numeric.norm()));
     }
 }

@@ -56,3 +56,13 @@ TEST(FactoryTest, EXPENSIVE_BuildWithNoiseDensity) {
 
     EXPECT_EQ(sphere->size(), 20u);
 }
+
+TEST(FactoryTest, EXPENSIVE_BuildWithFittedNoiseDensity) {
+    REQUIRE_EXPENSIVE();
+
+    Factory factory(20, "noise-fit", 2, quick_parameters(), noop_callback());
+
+    auto sphere = factory.build();
+
+    EXPECT_EQ(sphere->size(), 20u);
+}

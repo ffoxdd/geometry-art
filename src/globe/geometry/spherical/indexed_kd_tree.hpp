@@ -1,12 +1,12 @@
-#ifndef GLOBEART_SRC_GLOBE_GENERATORS_SPHERICAL_POISSON_INDEXED_KD_TREE_HPP_
-#define GLOBEART_SRC_GLOBE_GENERATORS_SPHERICAL_POISSON_INDEXED_KD_TREE_HPP_
+#ifndef GLOBEART_SRC_GLOBE_GEOMETRY_SPHERICAL_INDEXED_KD_TREE_HPP_
+#define GLOBEART_SRC_GLOBE_GEOMETRY_SPHERICAL_INDEXED_KD_TREE_HPP_
 
-#include "../../../cgal/types.hpp"
+#include "../../cgal/types.hpp"
 #include <CGAL/Search_traits_adapter.h>
 #include <boost/property_map/property_map.hpp>
 #include <vector>
 
-namespace globe::generators::spherical::poisson {
+namespace globe::geometry::spherical {
 
 template<typename Container>
 concept IndexablePointContainer = requires(const Container &container, std::size_t index) {
@@ -44,6 +44,6 @@ using IndexedSearchTraits = ::CGAL::Search_traits_adapter<
 using IndexedKDTree = ::CGAL::Kd_tree<IndexedSearchTraits>;
 using IndexedFuzzySphere = ::CGAL::Fuzzy_sphere<IndexedSearchTraits>;
 
-} // namespace globe::generators::spherical::poisson
+} // namespace globe::geometry::spherical
 
-#endif //GLOBEART_SRC_GLOBE_GENERATORS_SPHERICAL_POISSON_INDEXED_KD_TREE_HPP_
+#endif //GLOBEART_SRC_GLOBE_GEOMETRY_SPHERICAL_INDEXED_KD_TREE_HPP_

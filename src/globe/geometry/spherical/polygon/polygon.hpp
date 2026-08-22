@@ -17,6 +17,7 @@
 #include <ranges>
 #include <algorithm>
 #include <cassert>
+#include <optional>
 
 namespace globe::geometry::spherical::polygon {
 
@@ -45,6 +46,9 @@ class Polygon {
     [[nodiscard]] Eigen::Matrix3d second_moment() const;
 
     [[nodiscard]] bool contains(const VectorS2& point) const;
+    [[nodiscard]] std::optional<Polygon> clipped_by(const VectorS2& half_space_normal) const;
+
+    [[nodiscard]] static std::optional<Polygon> from_points(const std::vector<VectorS2>& points);
 
  private:
     std::vector<Arc> _arcs;
@@ -212,6 +216,58 @@ inline bool Polygon::contains(const VectorS2& point) const {
     }
 
     return true;
+}
+
+inline std::optional<Polygon> Polygon::clipped_by(const VectorS2& half_space_normal) const {
+    std::vector<VectorS2> kept;
+    bool all_inside = true;
+
+    for (const Arc& arc : _arcs) {
+        bool source_inside = half_space_normal.dot(arc.source()) >= -GEOMETRIC_EPSILON;
+        bool target_inside = half_space_normal.dot(arc.target()) >= -GEOMETRIC_EPSILON;
+        all_inside = all_inside && source_inside && target_inside;
+
+        if (target_inside) {
+            if (!source_inside) {
+                kept.push_back(arc.crossing_with(half_space_normal));
+            }
+            kept.push_back(arc.target());
+        } else if (source_inside) {
+            kept.push_back(arc.crossing_with(half_space_normal));
+        }
+    }
+
+    if (all_inside) {
+        return *this;
+    }
+
+    return from_points(kept);
+}
+
+inline std::optional<Polygon> Polygon::from_points(const std::vector<VectorS2>& points) {
+    std::vector<VectorS2> distinct;
+
+    for (const VectorS2& point : points) {
+        if (distinct.empty() || (point - distinct.back()).squaredNorm() > GEOMETRIC_EPSILON) {
+            distinct.push_back(point);
+        }
+    }
+
+    while (distinct.size() > 1 && (distinct.front() - distinct.back()).squaredNorm() <= GEOMETRIC_EPSILON) {
+        distinct.pop_back();
+    }
+
+    if (distinct.size() < 3) {
+        return std::nullopt;
+    }
+
+    std::vector<Arc> arcs;
+    arcs.reserve(distinct.size());
+    for (size_t i = 0; i < distinct.size(); ++i) {
+        arcs.emplace_back(distinct[i], distinct[(i + 1) % distinct.size()]);
+    }
+
+    return Polygon(std::move(arcs));
 }
 
 } // namespace globe::geometry::spherical::polygon

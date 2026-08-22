@@ -9,6 +9,7 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <cmath>
+#include <optional>
 #include <vector>
 
 namespace globe::geometry::spherical {
@@ -32,6 +33,8 @@ class Arc {
     [[nodiscard]] VectorS2 interpolate(double t) const;
     [[nodiscard]] Arc subarc(const VectorS2& point) const;
     [[nodiscard]] bool contains(const VectorS2& point) const;
+    [[nodiscard]] std::optional<Arc> clipped_by(const VectorS2& half_space_normal) const;
+    [[nodiscard]] VectorS2 crossing_with(const VectorS2& great_circle_normal) const;
 
     [[nodiscard]] Moments moments(int max_degree) const;
     [[nodiscard]] VectorS2 first_moment() const;
@@ -86,6 +89,34 @@ inline bool Arc::contains(const VectorS2& point) const {
 
     double angle = angle_to(point);
     return angle <= length() + GEOMETRIC_EPSILON || angle >= TWO_PI - GEOMETRIC_EPSILON;
+}
+
+inline std::optional<Arc> Arc::clipped_by(const VectorS2& half_space_normal) const {
+    bool source_inside = half_space_normal.dot(_source) >= -GEOMETRIC_EPSILON;
+    bool target_inside = half_space_normal.dot(_target) >= -GEOMETRIC_EPSILON;
+
+    if (source_inside && target_inside) {
+        return *this;
+    }
+
+    if (!source_inside && !target_inside) {
+        return std::nullopt;
+    }
+
+    VectorS2 crossing = crossing_with(half_space_normal);
+    return source_inside ? Arc(_source, crossing, _normal) : Arc(crossing, _target, _normal);
+}
+
+inline VectorS2 Arc::crossing_with(const VectorS2& great_circle_normal) const {
+    VectorS2 candidate = _normal.cross(great_circle_normal).normalized();
+    double theta = length();
+
+    auto excess = [&](const VectorS2& point) {
+        double angle = angle_to(point);
+        return std::min(std::max(0.0, angle - theta), TWO_PI - angle);
+    };
+
+    return excess(candidate) <= excess(-candidate) ? candidate : VectorS2(-candidate);
 }
 
 inline double Arc::angle_to(const VectorS2& point) const {
