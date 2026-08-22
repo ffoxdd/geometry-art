@@ -7,6 +7,8 @@
 #include "../core/sphere.hpp"
 #include "../../../fields/spherical/region_integrals.hpp"
 #include "../../../geometry/spherical/polygon/polygon.hpp"
+#include "capacity_jacobian.hpp"
+#include "sphere_state.hpp"
 #include "../../../math/polynomial/moments.hpp"
 #include "../../../std_ext/parallel_for.hpp"
 #include <CGAL/assertions.h>
@@ -20,21 +22,6 @@
 namespace globe::voronoi::spherical {
 
 using globe::math::polynomial::Moments;
-
-struct CellState {
-    double mass;
-    Vector3 first_moment;
-};
-
-struct EdgeState {
-    size_t neighbor_index;
-    fields::spherical::RegionIntegrals integrals;
-};
-
-struct SphereState {
-    std::vector<CellState> cells;
-    std::vector<std::vector<EdgeState>> edges;
-};
 
 struct LagrangianEvaluation {
     double value;
@@ -89,11 +76,6 @@ class CapacityConstrainedLagrangian {
         const SphereState& state,
         const std::vector<double>& weights
     ) const;
-    [[nodiscard]] static Vector3 edge_mass_gradient(
-        const Vector3& site,
-        const Vector3& neighbor,
-        const fields::spherical::RegionIntegrals& edge_integrals
-    );
     [[nodiscard]] static EdgeKey edge_key(size_t a, size_t b);
 };
 
@@ -255,39 +237,18 @@ std::vector<Vector3> CapacityConstrainedLagrangian<FieldType>::site_gradients(
 ) const {
     size_t count = sphere.size();
     std::vector<Vector3> sites(count);
+
     for (size_t k = 0; k < count; ++k) {
         sites[k] = to_vector3(sphere.site(k));
     }
 
-    std::vector<Vector3> gradients(count);
+    std::vector<Vector3> gradients = CapacityJacobian(state, std::move(sites)).transpose_apply(weights);
 
     for (size_t k = 0; k < count; ++k) {
-        Vector3 gradient = -2.0 * state.cells[k].first_moment;
-
-        for (const EdgeState& edge : state.edges[k]) {
-            gradient += (weights[k] - weights[edge.neighbor_index]) *
-                edge_mass_gradient(sites[k], sites[edge.neighbor_index], edge.integrals);
-        }
-
-        gradients[k] = gradient;
+        gradients[k] -= 2.0 * state.cells[k].first_moment;
     }
 
     return gradients;
-}
-
-template<fields::spherical::Field FieldType>
-Vector3 CapacityConstrainedLagrangian<FieldType>::edge_mass_gradient(
-    const Vector3& site,
-    const Vector3& neighbor,
-    const fields::spherical::RegionIntegrals& edge_integrals
-) {
-    double separation = (neighbor - site).norm();
-
-    if (separation < GEOMETRIC_EPSILON) {
-        return Vector3::Zero();
-    }
-
-    return (edge_integrals.first_moment - site * edge_integrals.mass) / separation;
 }
 
 template<fields::spherical::Field FieldType>
