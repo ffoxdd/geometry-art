@@ -112,3 +112,8 @@ integrals, so the integration stays exact for the interpolant.
 The constraint terms compete with `E_cvt` inside one double-precision
 objective, so the relative RMS capacity error bottoms out around 1e-9;
 the optimizer reports `stalled` there. The default tolerance is 1e-7.
+
+A piecewise field stalls earlier, around 1e-6. Its elements share
+nodes, so the density is C⁰ and the energy is C¹ but not C²: the
+gradient stays continuous, and it is L-BFGS's curvature model that
+degrades where a cell boundary crosses a mesh edge.
