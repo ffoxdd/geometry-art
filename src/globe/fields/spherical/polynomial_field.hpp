@@ -101,8 +101,10 @@ inline Matrix3 PolynomialField::second_moment_from(const Moments& moments) const
     Matrix3 result;
 
     for (int row = 0; row < 3; ++row) {
-        for (int column = 0; column < 3; ++column) {
-            result(row, column) = _density_times_coordinate_pair[row * 3 + column].integrate(moments);
+        for (int column = row; column < 3; ++column) {
+            double value = _density_times_coordinate_pair[row * 3 + column].integrate(moments);
+            result(row, column) = value;
+            result(column, row) = value;
         }
     }
 

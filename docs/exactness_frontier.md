@@ -92,9 +92,10 @@ Ordered by leverage per unit of effort. See `TODO.md` for status.
 
 1. C¹ elements, so the piecewise path reaches the same floor as the
    polynomial one. This moved to the front once the second-order solve
-   landed: it is four to seven times cheaper in iterations on
-   polynomial fields and stalls on piecewise ones, which is the C¹
-   limit above showing up as a measurement.
+   landed: on a piecewise field both inner solvers stall on some seeds
+   and the second-order one stalls on more, while neither does on the
+   polynomial ones. That is the C¹ limit above showing up as a
+   measurement, and it caps the solver work until it is lifted.
 2. Move the global path to a spherical-harmonic basis.
 3. Make accuracy the input and the discretisation the output: request a
    tolerance, raise degree and refine the mesh until the representation

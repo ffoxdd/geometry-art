@@ -129,12 +129,18 @@ and near a solution the violations vanish while the penalty is what
 grows, so the term kept is the one that governs the conditioning.
 
 `--inner-solver newton` minimises each augmented Lagrangian subproblem
-by trust-region Newton instead of L-BFGS. On polynomial fields it takes
-four to seven times fewer inner iterations, and the penalty stops
-having to climb to compensate for unsolved subproblems. On a piecewise
-field it does not pay: that energy is C¹ but not C², so the curvature
-model is unreliable and the solve stalls. L-BFGS stays the default
-until C¹ elements land.
+by trust-region Newton instead of L-BFGS. It takes two to seven times
+fewer inner iterations across every field, and the penalty stops having
+to climb to compensate for unsolved subproblems.
+
+On a piecewise field neither solver reliably reaches the tolerance,
+and Newton is the more affected of the two: over nine seeds at 200
+sites it stalled on five against L-BFGS's two, though several of those
+stalls land just above the tolerance and it still needs about two and a
+half times fewer iterations where it converges. That energy is C¹ but
+not C², so there is no second derivative for the curvature model to
+trust, which is exactly where a history-based method is the safer
+choice. L-BFGS stays the default for that reason.
 
 `NewtonOptimizer` minimises the CVT energy by trust-region Newton,
 solving each step with Steihaug's truncated conjugate gradient so only

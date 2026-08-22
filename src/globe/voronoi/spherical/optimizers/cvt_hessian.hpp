@@ -8,6 +8,7 @@
 #include "../../../std_ext/parallel_for.hpp"
 #include "../core/sphere.hpp"
 #include <cstddef>
+#include <map>
 #include <utility>
 #include <vector>
 
@@ -45,7 +46,13 @@ class CvtHessian {
  private:
     FieldType _field;
 
-    [[nodiscard]] Matrix3 bisector_block(const Vector3& site, const Vector3& neighbor, const Arc& arc) const;
+    using EdgeKey = std::pair<size_t, size_t>;
+
+    [[nodiscard]] std::vector<Matrix3> shared_second_moments(
+        const std::vector<std::vector<CellEdgeInfo>>& cell_edges,
+        std::vector<std::vector<size_t>>& slots_by_cell
+    ) const;
+    [[nodiscard]] static EdgeKey edge_key(size_t a, size_t b);
 };
 
 inline std::vector<Vector3> CvtHessianBlocks::multiply(const std::vector<Vector3>& directions) const {
@@ -110,6 +117,9 @@ CvtHessianBlocks CvtHessian<FieldType>::assemble(const Sphere& sphere) const {
         cell_edges[k] = sphere.cell_edges(k);
     }
 
+    std::vector<std::vector<size_t>> slots_by_cell;
+    std::vector<Matrix3> second_moments = shared_second_moments(cell_edges, slots_by_cell);
+
     CvtHessianBlocks blocks;
     blocks.diagonal.assign(count, Matrix3::Zero());
     blocks.neighbors.resize(count);
@@ -117,8 +127,16 @@ CvtHessianBlocks CvtHessian<FieldType>::assemble(const Sphere& sphere) const {
     std_ext::parallel_for(count, [&](size_t k) {
         blocks.neighbors[k].reserve(cell_edges[k].size());
 
-        for (const CellEdgeInfo& edge : cell_edges[k]) {
-            Matrix3 block = 2.0 * bisector_block(sites[k], sites[edge.neighbor_index], edge.arc);
+        for (size_t position = 0; position < cell_edges[k].size(); ++position) {
+            const CellEdgeInfo& edge = cell_edges[k][position];
+            double separation = (sites[edge.neighbor_index] - sites[k]).norm();
+
+            if (separation < GEOMETRIC_EPSILON) {
+                blocks.neighbors[k].push_back(NeighborBlock{edge.neighbor_index, Matrix3::Zero()});
+                continue;
+            }
+
+            Matrix3 block = 2.0 * second_moments[slots_by_cell[k][position]] / separation;
             blocks.diagonal[k] -= block;
             blocks.neighbors[k].push_back(NeighborBlock{edge.neighbor_index, block});
         }
@@ -128,21 +146,43 @@ CvtHessianBlocks CvtHessian<FieldType>::assemble(const Sphere& sphere) const {
 }
 
 // Moving a site sweeps the shared bisector at a rate proportional to the
-// point's projection on the displacement, so the block is the density's
-// second moment along the arc scaled by the site separation.
+// point's projection on the displacement, so every block needs the density's
+// second moment along one bisector -- the same integral from either side.
 template<fields::spherical::Field FieldType>
-Matrix3 CvtHessian<FieldType>::bisector_block(
-    const Vector3& site,
-    const Vector3& neighbor,
-    const Arc& arc
+std::vector<Matrix3> CvtHessian<FieldType>::shared_second_moments(
+    const std::vector<std::vector<CellEdgeInfo>>& cell_edges,
+    std::vector<std::vector<size_t>>& slots_by_cell
 ) const {
-    double separation = (neighbor - site).norm();
+    std::map<EdgeKey, size_t> slot_by_key;
+    std::vector<Arc> arcs;
+    slots_by_cell.resize(cell_edges.size());
 
-    if (separation < GEOMETRIC_EPSILON) {
-        return Matrix3::Zero();
+    for (size_t k = 0; k < cell_edges.size(); ++k) {
+        slots_by_cell[k].reserve(cell_edges[k].size());
+
+        for (const CellEdgeInfo& edge : cell_edges[k]) {
+            auto [iterator, inserted] = slot_by_key.try_emplace(edge_key(k, edge.neighbor_index), arcs.size());
+
+            if (inserted) {
+                arcs.push_back(edge.arc);
+            }
+
+            slots_by_cell[k].push_back(iterator->second);
+        }
     }
 
-    return _field.second_moment(arc) / separation;
+    std::vector<Matrix3> second_moments(arcs.size(), Matrix3::Zero());
+
+    std_ext::parallel_for(arcs.size(), [&](size_t slot) {
+        second_moments[slot] = _field.second_moment(arcs[slot]);
+    });
+
+    return second_moments;
+}
+
+template<fields::spherical::Field FieldType>
+typename CvtHessian<FieldType>::EdgeKey CvtHessian<FieldType>::edge_key(size_t a, size_t b) {
+    return a < b ? EdgeKey{a, b} : EdgeKey{b, a};
 }
 
 } // namespace globe::voronoi::spherical

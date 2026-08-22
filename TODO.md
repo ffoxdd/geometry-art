@@ -15,13 +15,13 @@ fields we care about, and handles them slowly.
 ### 1. C¹ elements
 Spherical Clough–Tocher or Powell–Sabin elements, or a smooth
 partition-of-unity blend. Now the first thing to do rather than a
-refinement: the second-order inner solve is four to seven times cheaper
-in iterations on polynomial fields and stalls on the piecewise ones,
-because that energy is C¹ but not C². Every later stage that matters
-for images runs on a piecewise field.
+refinement: on a piecewise field both inner solvers stall on some
+seeds and the second-order one stalls on more, because that energy is
+C¹ but not C². Until it is C², the faster solver cannot be trusted on
+exactly the fields that matter for images.
 
 *Verified by:* a piecewise field reaching the polynomial path's
-precision floor, and `--inner-solver newton` converging on it.
+precision floor across seeds that stall today.
 
 ### 2. Spherical-harmonic basis
 Replace the least-squares fit onto the homogeneous `(d, d−1)` monomial
