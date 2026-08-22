@@ -90,15 +90,18 @@ KKT solve, and attacks the iteration count directly.
 
 Ordered by leverage per unit of effort. See `TODO.md` for status.
 
-1. Second-order steps on the constraint manifold, replacing the growing
-   penalty whose inner problems stiffen by construction.
-2. C¹ elements, so the piecewise path reaches the same floor as the
-   polynomial one and the second-order work pays its full return there.
-3. Move the global path to a spherical-harmonic basis.
-4. Make accuracy the input and the discretisation the output: request a
+1. C¹ elements, so the piecewise path reaches the same floor as the
+   polynomial one. This moved to the front once the second-order solve
+   landed: it is four to seven times cheaper in iterations on
+   polynomial fields and stalls on piecewise ones, which is the C¹
+   limit above showing up as a measurement.
+2. Move the global path to a spherical-harmonic basis.
+3. Make accuracy the input and the discretisation the output: request a
    tolerance, raise degree and refine the mesh until the representation
    error is below what the capacity tolerance needs.
-5. Image densities on a mesh aligned to their discontinuities.
+4. Image densities on a mesh aligned to their discontinuities.
 
-Done: per-cell integration runs in parallel, and the exact CVT Hessian
-is assembled and used by a trust-region Newton relaxation.
+Done: per-cell integration runs in parallel; the exact CVT Hessian and
+the constraint Jacobian are assembled and drive both an unconstrained
+trust-region relaxation and a second-order inner solve for the
+constrained problem.

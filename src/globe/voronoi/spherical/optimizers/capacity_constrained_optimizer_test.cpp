@@ -56,6 +56,37 @@ TEST(CapacityConstrainedOptimizerTest, EqualizesCapacitiesForConstantField) {
     EXPECT_LT(relative_rms_capacity_error(*sphere, field), 1e-8);
 }
 
+TEST(CapacityConstrainedOptimizerTest, EqualizesCapacitiesWithTheNewtonInnerSolver) {
+    PolynomialField field = PolynomialField::constant(1.0);
+    CapacityConstrainedParameters parameters;
+    parameters.relative_capacity_tolerance = 1e-8;
+    parameters.inner_solver = "newton";
+
+    CapacityConstrainedOptimizer optimizer(fibonacci_sphere(8), field, parameters, noop_callback());
+    auto sphere = optimizer.optimize();
+
+    EXPECT_TRUE(optimizer.report().converged);
+    EXPECT_LT(relative_rms_capacity_error(*sphere, field), 1e-8);
+}
+
+TEST(CapacityConstrainedOptimizerTest, EXPENSIVE_NewtonInnerSolverNeedsFewerIterationsThanLbfgs) {
+    REQUIRE_EXPENSIVE();
+
+    PolynomialField field = equator_dense_field();
+
+    CapacityConstrainedParameters lbfgs_parameters;
+    CapacityConstrainedOptimizer lbfgs(fibonacci_sphere(60), field, lbfgs_parameters, noop_callback());
+    lbfgs.optimize();
+
+    CapacityConstrainedParameters newton_parameters;
+    newton_parameters.inner_solver = "newton";
+    CapacityConstrainedOptimizer newton(fibonacci_sphere(60), field, newton_parameters, noop_callback());
+    newton.optimize();
+
+    EXPECT_TRUE(newton.report().converged);
+    EXPECT_LT(newton.report().inner_iterations, lbfgs.report().inner_iterations);
+}
+
 TEST(CapacityConstrainedOptimizerTest, EqualizesCapacitiesForLinearField) {
     PolynomialField field = PolynomialField::linear(2.0, Vector3(0.0, 0.0, 1.0));
     CapacityConstrainedParameters parameters;

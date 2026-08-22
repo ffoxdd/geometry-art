@@ -118,6 +118,24 @@ nothing, so radial directions carry exactly zero curvature and a
 conjugate-gradient solver would read them as directions worth
 exploring.
 
+The same curvature drives the constrained solve.
+`CapacityConstrainedHessian` adds the penalty's Gauss-Newton term,
+`penalty * J^T J`, built from `CapacityJacobian`, whose forward
+direction reports how fast each mass changes along a displacement of
+all sites and whose transpose accumulates the weighted mass gradient
+the Lagrangian already needed. The constraints' own second derivatives
+are dropped: they would need the velocities of the Voronoi vertices,
+and near a solution the violations vanish while the penalty is what
+grows, so the term kept is the one that governs the conditioning.
+
+`--inner-solver newton` minimises each augmented Lagrangian subproblem
+by trust-region Newton instead of L-BFGS. On polynomial fields it takes
+four to seven times fewer inner iterations, and the penalty stops
+having to climb to compensate for unsolved subproblems. On a piecewise
+field it does not pay: that energy is C¹ but not C², so the curvature
+model is unreliable and the solve stalls. L-BFGS stays the default
+until C¹ elements land.
+
 `NewtonOptimizer` minimises the CVT energy by trust-region Newton,
 solving each step with Steihaug's truncated conjugate gradient so only
 Hessian-vector products are needed. It is available as a warm start

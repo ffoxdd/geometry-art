@@ -35,6 +35,7 @@ struct Config {
     int max_outer_iterations;
     int max_inner_iterations;
     double capacity_tolerance = 1e-7;
+    std::string inner_solver;
     std::optional<unsigned int> seed;
     std::string output_dir;
 };
@@ -56,6 +57,7 @@ int main(int argc, char *argv[]) {
         "  Max outer iterations: " << config.max_outer_iterations << std::endl <<
         "  Max inner iterations: " << config.max_inner_iterations << std::endl <<
         "  Capacity tolerance: " << config.capacity_tolerance << std::endl <<
+        "  Inner solver: " << config.inner_solver << std::endl <<
         "  Seed: " << (config.seed.has_value() ? std::to_string(*config.seed) : "random") << std::endl <<
         std::endl;
 
@@ -96,6 +98,7 @@ int main(int argc, char *argv[]) {
     optimizer_parameters.max_outer_iterations = static_cast<size_t>(config.max_outer_iterations);
     optimizer_parameters.max_inner_iterations = static_cast<size_t>(config.max_inner_iterations);
     optimizer_parameters.relative_capacity_tolerance = config.capacity_tolerance;
+    optimizer_parameters.inner_solver = config.inner_solver;
 
     Factory factory(
         config.points_count,
@@ -183,6 +186,11 @@ Config parse_arguments(int argc, char *argv[]) {
         ->description("Relative RMS capacity error at which optimization stops")
         ->default_str("1e-7")
         ->check(CLI::PositiveNumber);
+
+    app.add_option("--inner-solver", config.inner_solver)
+        ->description("Inner minimiser for each augmented Lagrangian subproblem")
+        ->check(CLI::IsMember({"lbfgs", "newton"}))
+        ->default_val("lbfgs");
 
     app.add_option("--seed", config.seed)
         ->description("Seed for the initial random points; omit for a random seed");

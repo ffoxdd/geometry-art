@@ -47,6 +47,12 @@ class CapacityConstrainedLagrangian {
         const std::vector<double>& multipliers,
         double penalty
     ) const;
+    [[nodiscard]] LagrangianEvaluation evaluate(
+        const Sphere& sphere,
+        const SphereState& state,
+        const std::vector<double>& multipliers,
+        double penalty
+    ) const;
 
  private:
     using EdgeKey = std::pair<size_t, size_t>;
@@ -201,10 +207,19 @@ LagrangianEvaluation CapacityConstrainedLagrangian<FieldType>::evaluate(
     const std::vector<double>& multipliers,
     double penalty
 ) const {
+    return evaluate(sphere, sphere_state(sphere), multipliers, penalty);
+}
+
+template<fields::spherical::Field FieldType>
+LagrangianEvaluation CapacityConstrainedLagrangian<FieldType>::evaluate(
+    const Sphere& sphere,
+    const SphereState& state,
+    const std::vector<double>& multipliers,
+    double penalty
+) const {
     size_t count = sphere.size();
     CGAL_precondition(multipliers.size() == count);
 
-    SphereState state = sphere_state(sphere);
     const std::vector<CellState>& states = state.cells;
     std::vector<double> capacity_errors(count);
     std::vector<double> weights(count);

@@ -44,6 +44,8 @@ def run(arguments, field, sites):
         "--density-field", field,
         "--points", str(sites),
         "--seed", str(SEED),
+        "--inner-solver", arguments.inner_solver,
+        "--warm-start", arguments.warm_start,
         "--output-dir", arguments.output_dir,
     ]
 
@@ -72,6 +74,8 @@ def run(arguments, field, sites):
 def parse_arguments():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", default="./build-release/generate_globe")
+    parser.add_argument("--inner-solver", default="lbfgs")
+    parser.add_argument("--warm-start", default="lloyd")
     parser.add_argument("--output-dir", default="/tmp/globe-benchmark")
     return parser.parse_args()
 

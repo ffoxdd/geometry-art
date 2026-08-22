@@ -12,27 +12,18 @@ next. The limits motivating the work are in
 Speed comes before representation: the system already handles the
 fields we care about, and handles them slowly.
 
-### 1. SQP on the constraint manifold
-Sparse KKT solves in place of a growing penalty, whose inner problems
-stiffen by construction. The CVT Hessian is exact and the constraint
-Jacobian already is; the constraints' own second derivatives need the
-Voronoi vertices' velocities, so start from the Gauss-Newton form,
-where the penalty contributes `penalty * J^T J` and needs no new
-derivation.
-
-*Verified by:* the capacity floor reached in an order of magnitude
-fewer inner iterations.
-
-### 2. C¹ elements
+### 1. C¹ elements
 Spherical Clough–Tocher or Powell–Sabin elements, or a smooth
-partition-of-unity blend. The second-order work only pays its full return
-where the energy is C², so until this lands the piecewise and image
-paths gain a constant factor rather than a rate.
+partition-of-unity blend. Now the first thing to do rather than a
+refinement: the second-order inner solve is four to seven times cheaper
+in iterations on polynomial fields and stalls on the piecewise ones,
+because that energy is C¹ but not C². Every later stage that matters
+for images runs on a piecewise field.
 
 *Verified by:* a piecewise field reaching the polynomial path's
-precision floor.
+precision floor, and `--inner-solver newton` converging on it.
 
-### 3. Spherical-harmonic basis
+### 2. Spherical-harmonic basis
 Replace the least-squares fit onto the homogeneous `(d, d−1)` monomial
 basis with projection onto an orthonormal basis. The monomial basis has
 the right dimension but is not orthogonal on the sphere, so
@@ -43,7 +34,7 @@ multiplication by a coordinate to keep the first moments closed.
 *Verified by:* fitting at degrees the monomial path cannot condition,
 with residual falling monotonically in degree.
 
-### 4. Accuracy as the input
+### 3. Accuracy as the input
 Take a requested accuracy and choose the representation to meet it,
 rather than taking a mesh level and a degree and reporting what
 accuracy came out. Sits on the two stages above, which are what make raising
@@ -52,7 +43,7 @@ degree and refining reliable.
 *Verified by:* a requested tolerance being met without the caller
 naming a degree or a subdivision level.
 
-### 5. Image densities
+### 4. Image densities
 Load an image, map it onto the sphere and sample it onto a piecewise
 field. Choose mesh resolution from the cell scale rather than the image
 resolution, and align mesh edges to the image's discontinuities: an
