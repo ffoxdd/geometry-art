@@ -7,6 +7,7 @@
 #include "../optimizers/capacity_constrained_optimizer.hpp"
 #include "../optimizers/lloyd_optimizer.hpp"
 #include "../../../fields/scalar/noise_field.hpp"
+#include "../../../math/interval.hpp"
 #include "../../../fields/spherical/field.hpp"
 #include "../../../fields/spherical/piecewise_polynomial_field.hpp"
 #include "../../../fields/spherical/polynomial_field.hpp"
@@ -23,6 +24,7 @@
 namespace globe::voronoi::spherical {
 
 using fields::scalar::NoiseField;
+using globe::Interval;
 using fields::spherical::PiecewisePolynomialField;
 using fields::spherical::PolynomialField;
 using fields::spherical::PolynomialFieldFitter;
@@ -43,7 +45,8 @@ class Factory {
  private:
     static constexpr int NOISE_FIT_DEGREE = 8;
     static constexpr size_t NOISE_FIT_SAMPLES = 20000;
-    static constexpr int NOISE_MESH_SUBDIVISIONS = 5;
+    static constexpr int NOISE_MESH_SUBDIVISIONS = 4;
+    static constexpr double NOISE_DENSITY_FLOOR = 0.2;
     static constexpr int NOISE_MESH_DEGREE = 2;
 
     int _points_count;
@@ -120,7 +123,7 @@ inline PolynomialField Factory::create_polynomial_field() const {
 }
 
 inline PiecewisePolynomialField Factory::sample_noise_field() {
-    NoiseField noise_field;
+    NoiseField noise_field(Interval(NOISE_DENSITY_FLOOR, 1.0));
     PiecewisePolynomialField field = PiecewisePolynomialField::sample(TriangleMesh::icosphere(NOISE_MESH_SUBDIVISIONS), NOISE_MESH_DEGREE, noise_field);
 
     std::cout << "Sampled noise onto piecewise degree-" << NOISE_MESH_DEGREE << " mesh with " <<
@@ -130,7 +133,7 @@ inline PiecewisePolynomialField Factory::sample_noise_field() {
 }
 
 inline PolynomialField Factory::fit_noise_field() {
-    NoiseField noise_field;
+    NoiseField noise_field(Interval(NOISE_DENSITY_FLOOR, 1.0));
     PolynomialFieldFitter<> fitter(NOISE_FIT_DEGREE, NOISE_FIT_SAMPLES, generators::spherical::FibonacciPointGenerator());
     auto fit = fitter.fit(noise_field);
 

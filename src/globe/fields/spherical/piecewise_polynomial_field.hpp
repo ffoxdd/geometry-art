@@ -60,8 +60,10 @@ class PiecewisePolynomialField {
 
  private:
     struct Triangle {
+        std::array<VectorS2, 3> corners;
         std::array<VectorS2, 3> inward_normals;
         PolynomialField field;
+        RegionIntegrals whole;
         VectorS2 center;
         double angular_radius;
     };
@@ -83,6 +85,7 @@ class PiecewisePolynomialField {
     double _total_mass;
 
     [[nodiscard]] std::vector<size_t> candidates(const VectorS2& center, double angular_radius) const;
+    [[nodiscard]] static std::optional<RegionIntegrals> integrals_without_clipping(const Triangle& triangle, const Polygon& polygon);
     [[nodiscard]] static std::array<VectorS2, 3> corners_of(const TriangleMesh& mesh, const std::array<size_t, 3>& indices);
     [[nodiscard]] static Triangle build_triangle(const std::array<VectorS2, 3>& corners, Polynomial polynomial);
     [[nodiscard]] static Polygon triangle_polygon(const std::array<VectorS2, 3>& corners);
@@ -118,7 +121,7 @@ inline PiecewisePolynomialField::PiecewisePolynomialField(TriangleMesh mesh, std
         _triangles.push_back(build_triangle(corners, std::move(triangle_polynomials[i])));
         centers.push_back(cgal::to_point(_triangles.back().center));
         _max_angular_radius = std::max(_max_angular_radius, _triangles.back().angular_radius);
-        _total_mass += _triangles.back().field.integrals(triangle_polygon(corners)).mass;
+        _total_mass += _triangles.back().whole.mass;
     }
 
     _index = std::make_shared<SpatialIndex>(std::move(centers));
@@ -210,23 +213,53 @@ inline RegionIntegrals PiecewisePolynomialField::integrals(const Polygon& polygo
 
     for (size_t index : candidates(center, angular_radius)) {
         const Triangle& triangle = _triangles[index];
-        std::optional<Polygon> piece = polygon;
+        std::optional<RegionIntegrals> contribution = integrals_without_clipping(triangle, polygon);
 
-        for (const VectorS2& normal : triangle.inward_normals) {
-            if (!piece) {
-                break;
+        if (!contribution) {
+            std::optional<Polygon> piece = polygon;
+
+            for (const VectorS2& normal : triangle.inward_normals) {
+                if (!piece) {
+                    break;
+                }
+                piece = piece->clipped_by(normal);
             }
-            piece = piece->clipped_by(normal);
+
+            contribution = piece ? triangle.field.integrals(*piece) : RegionIntegrals{0.0, Vector3::Zero()};
         }
 
-        if (piece) {
-            RegionIntegrals contribution = triangle.field.integrals(*piece);
-            total.mass += contribution.mass;
-            total.first_moment += contribution.first_moment;
-        }
+        total.mass += contribution->mass;
+        total.first_moment += contribution->first_moment;
     }
 
     return total;
+}
+
+inline std::optional<RegionIntegrals> PiecewisePolynomialField::integrals_without_clipping(
+    const Triangle& triangle,
+    const Polygon& polygon
+) {
+    bool all_corners_inside = true;
+
+    for (const Arc& arc : polygon.arcs()) {
+        bool all_corners_outside = true;
+
+        for (const VectorS2& corner : triangle.corners) {
+            double side = arc.normal().dot(corner);
+            all_corners_inside = all_corners_inside && side >= -GEOMETRIC_EPSILON;
+            all_corners_outside = all_corners_outside && side <= GEOMETRIC_EPSILON;
+        }
+
+        if (all_corners_outside) {
+            return RegionIntegrals{0.0, Vector3::Zero()};
+        }
+    }
+
+    if (all_corners_inside) {
+        return triangle.whole;
+    }
+
+    return std::nullopt;
 }
 
 inline RegionIntegrals PiecewisePolynomialField::integrals(const Arc& arc) const {
@@ -294,13 +327,18 @@ inline PiecewisePolynomialField::Triangle PiecewisePolynomialField::build_triang
         angular_radius = std::max(angular_radius, distance(center, corner));
     }
 
+    PolynomialField field(std::move(polynomial));
+    RegionIntegrals whole = field.integrals(triangle_polygon(corners));
+
     return Triangle{
+        corners,
         {
             corners[0].cross(corners[1]).normalized(),
             corners[1].cross(corners[2]).normalized(),
             corners[2].cross(corners[0]).normalized()
         },
-        PolynomialField(std::move(polynomial)),
+        std::move(field),
+        whole,
         center,
         angular_radius
     };
