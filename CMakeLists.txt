@@ -47,15 +47,20 @@ target_link_libraries(sphere_to_mesh PRIVATE globe CLI11::CLI11)
 pkg_search_module(GTEST REQUIRED gtest_main)
 pkg_search_module(GMOCK REQUIRED gmock)
 
-file(GLOB_RECURSE TEST_SOURCES src/globe/*_test.cpp)
+file(GLOB_RECURSE TEST_SOURCES src/globe/*_test.cpp test/*_test.cpp)
 
 foreach (TEST_SRC ${TEST_SOURCES})
-    file(RELATIVE_PATH TEST_REL_PATH ${CMAKE_SOURCE_DIR}/src/globe ${TEST_SRC})
+    file(RELATIVE_PATH TEST_REL_PATH ${CMAKE_SOURCE_DIR} ${TEST_SRC})
+    string(REPLACE "src/globe/" "" TEST_REL_PATH ${TEST_REL_PATH})
+    string(REPLACE "test/" "" TEST_REL_PATH ${TEST_REL_PATH})
     string(REPLACE "/" "_" TEST_NAME ${TEST_REL_PATH})
     string(REPLACE ".cpp" "" TEST_NAME ${TEST_NAME})
     add_executable(${TEST_NAME} ${TEST_SRC})
     target_link_libraries(${TEST_NAME} PRIVATE globe globe_noise ${GTEST_LDFLAGS} ${GMOCK_LDFLAGS})
     target_compile_options(${TEST_NAME} PRIVATE ${GTEST_CFLAGS} ${GMOCK_CFLAGS})
+    target_compile_definitions(${TEST_NAME} PRIVATE
+        GLOBE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+        GLOBE_BINARY_DIR="${CMAKE_BINARY_DIR}")
     add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
 endforeach ()
 

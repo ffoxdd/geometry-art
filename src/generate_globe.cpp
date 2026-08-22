@@ -2,11 +2,14 @@
 #include "globe/voronoi/spherical/core/callback.hpp"
 #include "globe/io/qt/application.hpp"
 #include "globe/io/qt/voronoi_sphere_drawer.hpp"
+#include "globe/io/snapshot/json_writer.hpp"
+#include "globe/io/snapshot/svg_writer.hpp"
 #include "globe/io/text/sphere_repository.hpp"
 #include <CLI/CLI.hpp>
 #include <chrono>
 #include <ctime>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <memory>
@@ -38,9 +41,11 @@ struct Config {
     std::string inner_solver;
     std::optional<unsigned int> seed;
     std::string output_dir;
+    std::string snapshot_path;
 };
 
 Config parse_arguments(int argc, char *argv[]);
+void write_snapshot(const globe::io::snapshot::Snapshot& snapshot, const std::string& path);
 
 int main(int argc, char *argv[]) {
     Config config = parse_arguments(argc, argv);
@@ -113,6 +118,10 @@ int main(int argc, char *argv[]) {
 
     auto sphere = factory.build();
 
+    if (!config.snapshot_path.empty()) {
+        write_snapshot(factory.snapshot(), config.snapshot_path);
+    }
+
     std::filesystem::create_directories(config.output_dir);
 
     auto time = std::time(nullptr);
@@ -132,6 +141,18 @@ int main(int argc, char *argv[]) {
     }
 
     return 0;
+}
+
+void write_snapshot(const globe::io::snapshot::Snapshot& snapshot, const std::string& path) {
+    std::filesystem::create_directories(std::filesystem::path(path).parent_path());
+
+    std::ofstream json(path + ".json");
+    globe::io::snapshot::JsonWriter().write(snapshot, json);
+
+    std::ofstream drawing(path + ".svg");
+    globe::io::snapshot::SvgWriter().write(snapshot, drawing);
+
+    std::cout << "Snapshot: " << path << ".json and " << path << ".svg" << std::endl;
 }
 
 Config parse_arguments(int argc, char *argv[]) {
@@ -194,6 +215,9 @@ Config parse_arguments(int argc, char *argv[]) {
 
     app.add_option("--seed", config.seed)
         ->description("Seed for the initial random points; omit for a random seed");
+
+    app.add_option("--snapshot", config.snapshot_path)
+        ->description("Write the tessellation as JSON and SVG to this path without an extension");
 
     app.add_option("--output-dir,-o", config.output_dir)
         ->description("Output directory for saved spheres")

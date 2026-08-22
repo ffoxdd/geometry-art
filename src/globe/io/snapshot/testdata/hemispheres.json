@@ -1,0 +1,10 @@
+{
+  "geometry": "sphere",
+  "totalMass": 12.5663706,
+  "targetMass": 6.28318531,
+  "relativeRmsCapacityError": 0,
+  "cells": [
+    {"site": 0, "position": [0, 0, 1], "mass": 6.28318531, "area": 6.28318531, "neighbors": [1, 1, 1, 1], "boundary": [[1, 0, 0], [0, 1, 0], [-1, 0, 0], [0, -1, 0]]},
+    {"site": 1, "position": [0, 0, -1], "mass": 6.28318531, "area": 6.28318531, "neighbors": [0, 0, 0, 0], "boundary": [[1, 0, 0], [0, -1, 0], [-1, 0, 0], [0, 1, 0]]}
+  ]
+}

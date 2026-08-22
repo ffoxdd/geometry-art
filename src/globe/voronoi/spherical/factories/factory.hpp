@@ -4,6 +4,7 @@
 #include "../core/sphere.hpp"
 #include "../core/random_builder.hpp"
 #include "../core/callback.hpp"
+#include "../../../io/snapshot/snapshot.hpp"
 #include "../optimizers/capacity_constrained_optimizer.hpp"
 #include "../optimizers/lloyd_optimizer.hpp"
 #include "../optimizers/newton_optimizer/newton_optimizer.hpp"
@@ -51,6 +52,10 @@ class Factory {
 
     std::unique_ptr<Sphere> build();
 
+    // The tessellation as plain data, captured against the field the
+    // build actually used, which the caller no longer has a handle on.
+    [[nodiscard]] const io::snapshot::Snapshot& snapshot() const { return _snapshot; }
+
  private:
     static constexpr int NOISE_FIT_DEGREE = 8;
     static constexpr size_t NOISE_FIT_SAMPLES = 20000;
@@ -70,9 +75,10 @@ class Factory {
     CapacityConstrainedParameters _optimizer_parameters;
     std::optional<unsigned int> _seed;
     Callback _callback;
+    io::snapshot::Snapshot _snapshot;
 
     template<fields::spherical::Field FieldType>
-    [[nodiscard]] std::unique_ptr<Sphere> build_with(const FieldType& field) const;
+    [[nodiscard]] std::unique_ptr<Sphere> build_with(const FieldType& field);
 
     [[nodiscard]] PolynomialField create_polynomial_field() const;
     [[nodiscard]] std::unique_ptr<Sphere> build_initial() const;
@@ -123,14 +129,17 @@ inline std::unique_ptr<Sphere> Factory::build() {
 }
 
 template<fields::spherical::Field FieldType>
-std::unique_ptr<Sphere> Factory::build_with(const FieldType& field) const {
+std::unique_ptr<Sphere> Factory::build_with(const FieldType& field) {
     std::cout << "Generating " << _points_count << " random points..." << std::flush;
     auto sphere = build_initial();
     std::cout << " done" << std::endl;
     _callback(*sphere);
 
     sphere = warm_start(std::move(sphere), field);
-    return optimize(std::move(sphere), field);
+    sphere = optimize(std::move(sphere), field);
+    _snapshot = io::snapshot::capture(*sphere, field);
+
+    return sphere;
 }
 
 inline PolynomialField Factory::create_polynomial_field() const {
