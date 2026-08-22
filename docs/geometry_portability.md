@@ -80,11 +80,13 @@ Prefer work that lands in the general part, or in a seam whose other
 implementations are well understood.
 
 - A **global spectral basis** is the least transferable choice
-  available. Spherical harmonics have an analytic polygon integral; the
-  plane and torus would want Fourier instead, and a mesh would want
-  Laplace-Beltrami eigenfunctions, which have no analytic polygon
-  integral at all. The piecewise representation is what every geometry
-  shares.
+  available, and this retired the spherical-harmonic plan. Spherical
+  harmonics have an analytic polygon integral; the plane and torus
+  would want Fourier instead, and a mesh would want Laplace-Beltrami
+  eigenfunctions, which have no analytic polygon integral at all. The
+  piecewise representation is what every geometry shares, so the
+  conditioning limit on high-degree global fits is a limit on a path
+  not being taken.
 - **C¹ macro-elements** are worth deriving where the classical
   constructions apply. Powell-Sabin and Clough-Tocher are textbook on
   the plane, and per-face polynomials on a mesh are the planar case, so

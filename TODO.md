@@ -14,8 +14,9 @@ fields we care about, and handles them slowly.
 
 Where two items look equally valuable, prefer the one that carries over
 to the plane, the torus and meshes; `docs/geometry_portability.md`
-records what already does. That consideration is why the
-spherical-harmonic item sits last rather than in the middle.
+records what already does. That consideration retired the
+spherical-harmonic basis: it addressed conditioning in high-degree
+global fits, and the global path is the one that does not generalise.
 
 ### 1. C¹ elements
 Spherical Clough–Tocher or Powell–Sabin elements, or a smooth
@@ -64,19 +65,3 @@ spherical type. Sequencing against C¹ elements is open -- see
 `docs/geometry_portability.md`.
 
 *Verified by:* the optimizer stack driving it unchanged.
-
-### 5. Spherical-harmonic basis
-Projection onto an orthonormal basis in place of the least-squares fit
-onto the homogeneous `(d, d-1)` monomial basis, which has the right
-dimension but is not orthogonal on the sphere, so conditioning is what
-caps degree today. Needs analytic `∫_P Y_lm dA` over a spherical
-polygon.
-
-Last rather than middle: it is the least transferable item on the list.
-The plane and torus would want Fourier, a mesh would want
-Laplace-Beltrami eigenfunctions with no analytic polygon integral, and
-its motivation is the global path, which is the one that does not
-generalise.
-
-*Verified by:* fitting at degrees the monomial path cannot condition,
-with residual falling monotonically in degree.
