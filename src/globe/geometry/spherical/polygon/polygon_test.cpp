@@ -1,9 +1,13 @@
 #include "gtest/gtest.h"
 #include "polygon.hpp"
+#include "../../../testing/macros.hpp"
+#include <Eigen/Geometry>
 #include "../arc.hpp"
 #include <cmath>
 
 using namespace globe;
+using globe::math::polynomial::Moments;
+using globe::math::polynomial::MultiIndex;
 
 TEST(PolygonTest, SimplePolygon) {
     Polygon spherical_polygon = Polygon(
@@ -216,7 +220,7 @@ TEST(PolygonTest, CentroidForSymmetricPolygon) {
     VectorS2 centroid = polygon.centroid();
 
     EXPECT_NEAR(centroid.norm(), 1.0, 1e-9);
-    EXPECT_NEAR(centroid.z(), 0.5, 1e-9);
+    EXPECT_NEAR(centroid.z(), 1.0, 1e-9);
 }
 
 TEST(PolygonTest, ArcThetaExtrema_FullCircle) {
@@ -398,4 +402,212 @@ TEST(PolygonTest, MomentsSecondMomentTrace) {
     });
 
     EXPECT_NEAR(polygon.second_moment().trace(), polygon.area(), 1e-6);
+}
+
+namespace {
+
+Polygon octant() {
+    return Polygon(std::vector<Arc>{
+        Arc(VectorS2(1, 0, 0), VectorS2(0, 1, 0)),
+        Arc(VectorS2(0, 1, 0), VectorS2(0, 0, 1)),
+        Arc(VectorS2(0, 0, 1), VectorS2(1, 0, 0)),
+    });
+}
+
+Polygon inside_out_octant() {
+    return Polygon(std::vector<Arc>{
+        Arc(VectorS2(1, 0, 0), VectorS2(0, 0, 1)),
+        Arc(VectorS2(0, 0, 1), VectorS2(0, 1, 0)),
+        Arc(VectorS2(0, 1, 0), VectorS2(1, 0, 0)),
+    });
+}
+
+Polygon northern_hemisphere() {
+    return Polygon(std::vector<Arc>{
+        Arc(VectorS2(1, 0, 0), VectorS2(0, 1, 0)),
+        Arc(VectorS2(0, 1, 0), VectorS2(-1, 0, 0)),
+        Arc(VectorS2(-1, 0, 0), VectorS2(0, -1, 0)),
+        Arc(VectorS2(0, -1, 0), VectorS2(1, 0, 0)),
+    });
+}
+
+Polygon irregular_quadrilateral() {
+    VectorS2 a = VectorS2(0.9, 0.1, 0.3).normalized();
+    VectorS2 b = VectorS2(0.5, 0.7, 0.2).normalized();
+    VectorS2 c = VectorS2(0.2, 0.5, 0.8).normalized();
+    VectorS2 d = VectorS2(0.6, -0.2, 0.7).normalized();
+
+    return Polygon(std::vector<Arc>{Arc(a, b), Arc(b, c), Arc(c, d), Arc(d, a)});
+}
+
+Polygon rotated(const Polygon& polygon, const Eigen::Matrix3d& rotation) {
+    std::vector<Arc> arcs;
+
+    for (const Arc& arc : polygon.arcs()) {
+        arcs.emplace_back(rotation * arc.source(), rotation * arc.target());
+    }
+
+    return Polygon(arcs);
+}
+
+}
+
+TEST(PolygonTest, AreaOfInsideOutOctantIsComplement) {
+    EXPECT_NEAR(inside_out_octant().area(), 4.0 * M_PI - M_PI / 2.0, 1e-12);
+}
+
+TEST(PolygonTest, FirstMomentOfOctantIsClosedForm) {
+    VectorS2 moment = octant().first_moment();
+
+    EXPECT_NEAR(moment.x(), M_PI / 4.0, 1e-12);
+    EXPECT_NEAR(moment.y(), M_PI / 4.0, 1e-12);
+    EXPECT_NEAR(moment.z(), M_PI / 4.0, 1e-12);
+}
+
+TEST(PolygonTest, FirstMomentOfInsideOutOctantIsNegated) {
+    VectorS2 moment = inside_out_octant().first_moment();
+
+    EXPECT_NEAR(moment.x(), -M_PI / 4.0, 1e-12);
+    EXPECT_NEAR(moment.y(), -M_PI / 4.0, 1e-12);
+    EXPECT_NEAR(moment.z(), -M_PI / 4.0, 1e-12);
+}
+
+TEST(PolygonTest, FirstMomentOfHemisphereIsPiAlongAxis) {
+    VectorS2 moment = northern_hemisphere().first_moment();
+
+    EXPECT_NEAR(moment.x(), 0.0, 1e-12);
+    EXPECT_NEAR(moment.y(), 0.0, 1e-12);
+    EXPECT_NEAR(moment.z(), M_PI, 1e-12);
+}
+
+TEST(PolygonTest, SecondMomentOfOctantIsClosedForm) {
+    Eigen::Matrix3d moment = octant().second_moment();
+
+    EXPECT_NEAR(moment(0, 0), M_PI / 6.0, 1e-12);
+    EXPECT_NEAR(moment(1, 1), M_PI / 6.0, 1e-12);
+    EXPECT_NEAR(moment(2, 2), M_PI / 6.0, 1e-12);
+    EXPECT_NEAR(moment(0, 1), 1.0 / 3.0, 1e-12);
+    EXPECT_NEAR(moment(1, 2), 1.0 / 3.0, 1e-12);
+    EXPECT_NEAR(moment(0, 2), 1.0 / 3.0, 1e-12);
+}
+
+TEST(PolygonTest, SecondMomentOfHemisphereIsClosedForm) {
+    Eigen::Matrix3d moment = northern_hemisphere().second_moment();
+
+    EXPECT_NEAR(moment(0, 0), 2.0 * M_PI / 3.0, 1e-12);
+    EXPECT_NEAR(moment(2, 2), 2.0 * M_PI / 3.0, 1e-12);
+    EXPECT_NEAR(moment(0, 1), 0.0, 1e-12);
+}
+
+TEST(PolygonTest, ThirdMomentsOfOctantAreClosedForm) {
+    auto moments = octant().moments(3);
+
+    EXPECT_NEAR(moments.at(3, 0, 0), M_PI / 8.0, 1e-12);
+    EXPECT_NEAR(moments.at(1, 1, 1), 1.0 / 8.0, 1e-12);
+    EXPECT_NEAR(moments.at(2, 1, 0), M_PI / 16.0, 1e-12);
+}
+
+TEST(PolygonTest, OctantsPartitionTheUnitSphereMoments) {
+    constexpr int MAX_DEGREE = 5;
+    Moments total(MAX_DEGREE);
+
+    for (int sx : {1, -1}) {
+        for (int sy : {1, -1}) {
+            for (int sz : {1, -1}) {
+                Eigen::Matrix3d reflection = Eigen::Vector3d(sx, sy, sz).asDiagonal();
+                bool orientation_preserving = sx * sy * sz > 0;
+                Polygon piece = rotated(orientation_preserving ? octant() : inside_out_octant(), reflection);
+
+                if (!orientation_preserving) {
+                    piece = Polygon(std::vector<Arc>{
+                        Arc(reflection * VectorS2(1, 0, 0), reflection * VectorS2(0, 0, 1)),
+                        Arc(reflection * VectorS2(0, 0, 1), reflection * VectorS2(0, 1, 0)),
+                        Arc(reflection * VectorS2(0, 1, 0), reflection * VectorS2(1, 0, 0)),
+                    });
+                }
+
+                auto moments = piece.moments(MAX_DEGREE);
+                for (const auto& index : MultiIndex::all_up_to(MAX_DEGREE)) {
+                    total.add(index, moments.at(index));
+                }
+            }
+        }
+    }
+
+    Moments expected = Moments::unit_sphere(MAX_DEGREE);
+    for (const auto& index : MultiIndex::all_up_to(MAX_DEGREE)) {
+        EXPECT_NEAR(total.at(index), expected.at(index), 1e-11);
+    }
+}
+
+TEST(PolygonTest, MomentsSatisfySphereConstraintIdentity) {
+    auto moments = irregular_quadrilateral().moments(6);
+
+    for (const auto& index : MultiIndex::all_up_to(4)) {
+        double sum = 0.0;
+
+        for (int axis = 0; axis < 3; ++axis) {
+            sum += moments.at(index.raised(axis).raised(axis));
+        }
+
+        EXPECT_NEAR(sum, moments.at(index), 1e-12);
+    }
+}
+
+TEST(PolygonTest, MomentsAreRotationCovariant) {
+    Eigen::Matrix3d rotation = Eigen::AngleAxisd(0.7, Eigen::Vector3d(0.2, -0.5, 0.8).normalized()).toRotationMatrix();
+    Polygon original = irregular_quadrilateral();
+    Polygon moved = rotated(original, rotation);
+
+    EXPECT_NEAR(moved.area(), original.area(), 1e-12);
+
+    VectorS2 expected_first = rotation * original.first_moment();
+    VectorS2 actual_first = moved.first_moment();
+    EXPECT_NEAR((expected_first - actual_first).norm(), 0.0, 1e-12);
+
+    Eigen::Matrix3d expected_second = rotation * original.second_moment() * rotation.transpose();
+    Eigen::Matrix3d actual_second = moved.second_moment();
+    EXPECT_NEAR((expected_second - actual_second).norm(), 0.0, 1e-12);
+}
+
+TEST(PolygonTest, CentroidIsNormalizedFirstMoment) {
+    Polygon polygon = irregular_quadrilateral();
+
+    VectorS2 centroid = polygon.centroid();
+
+    EXPECT_NEAR((centroid - polygon.first_moment().normalized()).norm(), 0.0, 1e-12);
+}
+
+TEST(PolygonTest, EXPENSIVE_MomentsMatchGridQuadrature) {
+    REQUIRE_EXPENSIVE();
+
+    Polygon polygon = irregular_quadrilateral();
+    auto moments = polygon.moments(4);
+
+    constexpr size_t LATITUDE_STEPS = 2000;
+    constexpr size_t LONGITUDE_STEPS = 4000;
+    Moments quadrature(4);
+
+    for (size_t i = 0; i < LATITUDE_STEPS; ++i) {
+        double z = -1.0 + 2.0 * (i + 0.5) / LATITUDE_STEPS;
+        double ring = std::sqrt(1.0 - z * z);
+
+        for (size_t j = 0; j < LONGITUDE_STEPS; ++j) {
+            double phi = TWO_PI * (j + 0.5) / LONGITUDE_STEPS;
+            VectorS2 point(ring * std::cos(phi), ring * std::sin(phi), z);
+
+            if (!polygon.contains(point)) {
+                continue;
+            }
+
+            for (const auto& index : MultiIndex::all_up_to(4)) {
+                quadrature.add(index, std::pow(point.x(), index.x) * std::pow(point.y(), index.y) * std::pow(point.z(), index.z));
+            }
+        }
+    }
+
+    double weight = 4.0 * M_PI / (LATITUDE_STEPS * LONGITUDE_STEPS);
+    for (const auto& index : MultiIndex::all_up_to(4)) {
+        EXPECT_NEAR(moments.at(index), quadrature.at(index) * weight, 2e-3);
+    }
 }

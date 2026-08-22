@@ -163,7 +163,7 @@ TEST(GradientDensityOptimizerTest, EXPENSIVE_GradientMatchesNumericalForLinearFi
         numerical[dim] = (error_plus - error_minus) / (2 * epsilon);
     }
 
-    EXPECT_NEAR(analytical_tangent.x(), numerical.x(), 0.5);
-    EXPECT_NEAR(analytical_tangent.y(), numerical.y(), 0.5);
-    EXPECT_NEAR(analytical_tangent.z(), numerical.z(), 0.5);
+    EXPECT_NEAR(analytical_tangent.x(), numerical.x(), 1e-6);
+    EXPECT_NEAR(analytical_tangent.y(), numerical.y(), 1e-6);
+    EXPECT_NEAR(analytical_tangent.z(), numerical.z(), 1e-6);
 }

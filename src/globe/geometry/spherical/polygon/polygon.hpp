@@ -6,6 +6,8 @@
 #include "../helpers.hpp"
 #include "bounding_box_calculator.hpp"
 #include "../../../types.hpp"
+#include "../../../math/polynomial/moments.hpp"
+#include "../../../math/polynomial/multi_index.hpp"
 #include "../../../std_ext/ranges.hpp"
 #include <cstdint>
 #include <Eigen/Core>
@@ -23,6 +25,8 @@ using globe::std_ext::all_circular_adjacent_pairs;
 using globe::std_ext::circular_adjacent_pairs;
 using globe::geometry::spherical::Arc;
 using globe::geometry::spherical::BoundingBox;
+using globe::math::polynomial::Moments;
+using globe::math::polynomial::MultiIndex;
 
 class Polygon {
  public:
@@ -35,32 +39,27 @@ class Polygon {
     [[nodiscard]] double bounding_sphere_radius() const;
 
     [[nodiscard]] double area() const;
+    [[nodiscard]] Moments moments(int max_degree) const;
     [[nodiscard]] VectorS2 first_moment() const;
     [[nodiscard]] Eigen::Matrix3d second_moment() const;
 
     [[nodiscard]] bool contains(const VectorS2& point) const;
 
  private:
-    static constexpr double EPSILON = 1e-10;
-
     std::vector<Arc> _arcs;
 
-    [[nodiscard]] bool empty() const;
     [[nodiscard]] bool arcs_form_closed_loop() const;
-    [[nodiscard]] bool is_convex() const;
+    [[nodiscard]] std::vector<double> turning_angles() const;
+    [[nodiscard]] VectorS2 vertex_average() const;
 
-    [[nodiscard]] static double spherical_angle(
-        const VectorS2& a, const VectorS2& b, const VectorS2& c
-    );
-    [[nodiscard]] static double spherical_triangle_area(
-        const VectorS2& a, const VectorS2& b, const VectorS2& c
-    );
+    [[nodiscard]] static double turning_angle(const Arc& incoming, const Arc& outgoing);
+    [[nodiscard]] static int leading_axis(const MultiIndex& index);
 };
 
 inline Polygon::Polygon(std::vector<Arc> arcs) :
     _arcs(std::move(arcs)) {
 
-    assert(!empty());
+    assert(!_arcs.empty());
     assert(arcs_form_closed_loop());
 }
 
@@ -70,22 +69,11 @@ inline auto Polygon::points() const {
     );
 }
 
-inline bool Polygon::empty() const {
-    return _arcs.empty();
-}
-
 inline bool Polygon::arcs_form_closed_loop() const {
     return all_circular_adjacent_pairs(_arcs, [](const auto& pair) {
-        const auto& [prev, next] = pair;
-        const VectorS2& prev_target = prev.target();
-        const VectorS2& next_source = next.source();
-        double dist_sq = (prev_target - next_source).squaredNorm();
-        return dist_sq < 1e-10;
+        const auto& [previous, next] = pair;
+        return (previous.target() - next.source()).squaredNorm() < GEOMETRIC_EPSILON;
     });
-}
-
-inline bool Polygon::is_convex() const {
-    return true;
 }
 
 inline BoundingBox Polygon::bounding_box() const {
@@ -93,157 +81,133 @@ inline BoundingBox Polygon::bounding_box() const {
 }
 
 inline VectorS2 Polygon::centroid() const {
-    if (empty()) {
-        return bounding_box().center();
+    VectorS2 moment = first_moment();
+    double norm = moment.norm();
+
+    if (norm < GEOMETRIC_EPSILON) {
+        return vertex_average();
     }
 
+    return moment / norm;
+}
+
+inline VectorS2 Polygon::vertex_average() const {
     VectorS2 sum = VectorS2::Zero();
-    size_t count = 0;
 
-    for (const VectorS2& v : points()) {
-        sum += v;
-        count++;
+    for (const VectorS2& point : points()) {
+        sum += point;
     }
 
-    if (count == 0) {
-        return bounding_box().center();
-    }
-
-    VectorS2 average = sum / static_cast<double>(count);
-    double len = average.norm();
-
-    if (len < 1e-15) {
-        return bounding_box().center();
-    }
-
-    return average / len;
+    double norm = sum.norm();
+    return norm < GEOMETRIC_EPSILON ? bounding_box().center() : VectorS2(sum / norm);
 }
 
 inline double Polygon::bounding_sphere_radius() const {
-    if (empty()) {
-        return 0.0;
-    }
-
     VectorS2 center = centroid();
-
     double max_squared_distance = 0.0;
+
     for (const VectorS2& point : points()) {
-        double dist_sq = (point - center).squaredNorm();
-        max_squared_distance = std::max(max_squared_distance, dist_sq);
+        max_squared_distance = std::max(max_squared_distance, (point - center).squaredNorm());
     }
 
     return std::sqrt(max_squared_distance);
 }
 
 inline double Polygon::area() const {
-    if (_arcs.size() < 3) {
-        return 0.0;
-    }
-
-    std::vector<double> angles;
-    angles.reserve(_arcs.size());
-    auto pairs = circular_adjacent_pairs(_arcs);
-
-    for (const auto& pair : pairs) {
-        const auto& [prev_arc, curr_arc] = pair;
-        angles.push_back(spherical_angle(
-            prev_arc.source(),
-            curr_arc.source(),
-            curr_arc.target()
-        ));
-    }
-
+    std::vector<double> angles = turning_angles();
     std::sort(angles.begin(), angles.end());
 
-    double angle_sum = 0.0;
+    double turning_sum = 0.0;
     for (double angle : angles) {
-        angle_sum += angle;
+        turning_sum += angle;
     }
 
-    return angle_sum - static_cast<double>(_arcs.size() - 2) * M_PI;
+    return TWO_PI - turning_sum;
+}
+
+inline std::vector<double> Polygon::turning_angles() const {
+    std::vector<double> angles;
+    angles.reserve(_arcs.size());
+
+    for (const auto& pair : circular_adjacent_pairs(_arcs)) {
+        const auto& [incoming, outgoing] = pair;
+        angles.push_back(turning_angle(incoming, outgoing));
+    }
+
+    return angles;
+}
+
+inline double Polygon::turning_angle(const Arc& incoming, const Arc& outgoing) {
+    const VectorS2& vertex = outgoing.source();
+    VectorS2 direction_in = incoming.normal().cross(vertex);
+    VectorS2 direction_out = outgoing.tangent_at_source();
+
+    return std::atan2(direction_in.cross(direction_out).dot(vertex), direction_in.dot(direction_out));
+}
+
+inline Moments Polygon::moments(int max_degree) const {
+    Moments result(max_degree);
+    result.set(MultiIndex{0, 0, 0}, area());
+
+    if (max_degree == 0) {
+        return result;
+    }
+
+    std::vector<Moments> arc_moments;
+    arc_moments.reserve(_arcs.size());
+    for (const Arc& arc : _arcs) {
+        arc_moments.push_back(arc.moments(max_degree - 1));
+    }
+
+    for (int degree = 1; degree <= max_degree; ++degree) {
+        for (const MultiIndex& beta : MultiIndex::all_of_degree(degree)) {
+            int axis = leading_axis(beta);
+            MultiIndex alpha = beta.lowered(axis);
+
+            double boundary_term = 0.0;
+            for (size_t i = 0; i < _arcs.size(); ++i) {
+                boundary_term += _arcs[i].normal()[axis] * arc_moments[i].at(alpha);
+            }
+
+            double interior_term = alpha[axis] > 0 ? alpha[axis] * result.at(alpha.lowered(axis)) : 0.0;
+
+            result.set(beta, (interior_term + boundary_term) / (alpha.degree() + 2));
+        }
+    }
+
+    return result;
+}
+
+inline int Polygon::leading_axis(const MultiIndex& index) {
+    return index.x > 0 ? 0 : (index.y > 0 ? 1 : 2);
 }
 
 inline VectorS2 Polygon::first_moment() const {
-    if (_arcs.size() < 3) {
-        return VectorS2::Zero();
-    }
-
-    VectorS2 total = VectorS2::Zero();
-    const VectorS2& v0 = _arcs[0].source();
-
-    for (size_t i = 1; i + 1 < _arcs.size(); ++i) {
-        const VectorS2& v1 = _arcs[i].source();
-        const VectorS2& v2 = _arcs[i + 1].source();
-
-        double tri_area = spherical_triangle_area(v0, v1, v2);
-
-        total += (tri_area / 3.0) * (v0 + v1 + v2);
-    }
-
-    return total;
+    Moments moments = this->moments(1);
+    return VectorS2(moments.at(1, 0, 0), moments.at(0, 1, 0), moments.at(0, 0, 1));
 }
 
 inline Eigen::Matrix3d Polygon::second_moment() const {
-    if (_arcs.size() < 3) {
-        return Eigen::Matrix3d::Zero();
+    Moments moments = this->moments(2);
+    Eigen::Matrix3d result;
+
+    for (int row = 0; row < 3; ++row) {
+        for (int column = 0; column < 3; ++column) {
+            result(row, column) = moments.at(MultiIndex::unit(row).raised(column));
+        }
     }
 
-    Eigen::Matrix3d total = Eigen::Matrix3d::Zero();
-    const VectorS2& v0 = _arcs[0].source();
-
-    for (size_t i = 1; i + 1 < _arcs.size(); ++i) {
-        const VectorS2& v1 = _arcs[i].source();
-        const VectorS2& v2 = _arcs[i + 1].source();
-
-        double tri_area = spherical_triangle_area(v0, v1, v2);
-
-        total += (tri_area / 3.0) * (
-            v0 * v0.transpose() + v1 * v1.transpose() + v2 * v2.transpose()
-        );
-    }
-
-    return total;
+    return result;
 }
 
 inline bool Polygon::contains(const VectorS2& point) const {
-    assert(is_convex());
-
     for (const auto& arc : _arcs) {
-        const VectorS2& arc_normal = arc.normal();
-        double sign = arc_normal.dot(point);
-
-        if (sign < -EPSILON) {
+        if (arc.normal().dot(point) < -GEOMETRIC_EPSILON) {
             return false;
         }
     }
 
     return true;
-}
-
-inline double Polygon::spherical_angle(
-    const VectorS2& a, const VectorS2& b, const VectorS2& c
-) {
-    VectorS2 ba = b.cross(a).normalized();
-    VectorS2 bc = b.cross(c).normalized();
-    return distance(ba, bc);
-}
-
-inline double Polygon::spherical_triangle_area(
-    const VectorS2& a, const VectorS2& b, const VectorS2& c
-) {
-    VectorS2 va = a.normalized();
-    VectorS2 vb = b.normalized();
-    VectorS2 vc = c.normalized();
-
-    double numerator = va.dot(vb.cross(vc));
-    double denominator = 1.0 + va.dot(vb) + vb.dot(vc) + vc.dot(va);
-
-    if (std::abs(denominator) < 1e-15) {
-        return 0.0;
-    }
-
-    double tan_half_omega = std::abs(numerator) / denominator;
-    return 2.0 * std::atan(tan_half_omega);
 }
 
 } // namespace globe::geometry::spherical::polygon

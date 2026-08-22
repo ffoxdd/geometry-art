@@ -46,7 +46,7 @@ inline HarmonicField::HarmonicField(
     _constant(constant),
     _linear(linear),
     _quadratic(quadratic),
-    _total_mass(constant * UNIT_SPHERE_AREA) {
+    _total_mass((constant + quadratic.trace() / 3.0) * UNIT_SPHERE_AREA) {
 }
 
 inline double HarmonicField::value(const VectorS2& point) const {

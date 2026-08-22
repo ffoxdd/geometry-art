@@ -77,7 +77,6 @@ class Sphere {
     size_t vertex_index(VertexHandle handle) const;
 
     static Arc to_spherical_arc(const CGALArc& cgal_arc);
-    static VectorS2 arc_normal(const CGALArc& arc);
 
     template<typename P>
     static cgal::Point3 to_point(const P& p);
@@ -200,7 +199,7 @@ inline std::vector<VoronoiVertex> Sphere::vertices() const {
             if ((arc.target() - position).squaredNorm() <
                 (arc.source() - position).squaredNorm()) {
                 // Reverse the arc so it starts from this vertex
-                arc = Arc(arc.target(), arc.source(), -arc.normal());
+                arc = Arc(arc.target(), arc.source());
             }
             vertex_arcs.push_back(arc);
         }
@@ -287,25 +286,7 @@ inline std::vector<CellEdgeInfo> Sphere::cell_edges(size_t index) const {
 inline Arc Sphere::to_spherical_arc(const CGALArc& cgal_arc) {
     VectorS2 source = to_vector_s2(to_point(cgal_arc.source()));
     VectorS2 target = to_vector_s2(to_point(cgal_arc.target()));
-    VectorS2 normal = arc_normal(cgal_arc);
-    return Arc(source, target, normal);
-}
-
-inline VectorS2 Sphere::arc_normal(const CGALArc& arc) {
-    auto circle = arc.supporting_circle();
-    auto plane = circle.supporting_plane();
-    auto normal = plane.orthogonal_vector();
-
-    double x = ::CGAL::to_double(normal.x());
-    double y = ::CGAL::to_double(normal.y());
-    double z = ::CGAL::to_double(normal.z());
-
-    double len = std::sqrt(x * x + y * y + z * z);
-    if (len < 1e-15) {
-        return VectorS2(0, 0, 1);
-    }
-
-    return VectorS2(x / len, y / len, z / len);
+    return Arc(source, target);
 }
 
 template<typename P>
