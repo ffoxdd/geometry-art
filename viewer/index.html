@@ -90,7 +90,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0e0f11);
 
 const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 100);
-camera.position.set(0, 0.9, 3.1);
+camera.position.set(0, 0.85, 3.9);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -180,9 +180,14 @@ function build() {
   const lowArea = Math.min(...areas);
   const highArea = Math.max(...areas);
 
+  // Scaled to the errors actually present rather than to a fixed multiple of
+  // the target: at convergence a fixed scale reports one flat colour, which
+  // says the solver worked but shows nothing about where the residue sits.
+  const worstError = Math.max(1e-300, ...cells.map(c => Math.abs(c.mass - target)));
+
   const shade = cell => {
     if (mode === 'capacity') {
-      return palette(Math.min(1, Math.abs(cell.mass - target) / target * 40));
+      return palette(Math.abs(cell.mass - target) / worstError);
     }
     if (mode === 'area') {
       return palette((cell.area - lowArea) / Math.max(1e-12, highArea - lowArea));
@@ -267,16 +272,33 @@ document.addEventListener('drop', event => {
   event.dataTransfer.files[0].text().then(load);
 });
 
-const requested = new URLSearchParams(location.search).get('snapshot');
+// The whole view is addressable, so a particular reading of a particular
+// run can be linked rather than described.
+const query = new URLSearchParams(location.search);
+
+for (const [parameter, id] of [['colour', 'colouring'], ['weight', 'weight']]) {
+  const value = query.get(parameter);
+  if (value) document.getElementById(id).value = value;
+}
+
+const requested = query.get('snapshot');
 if (requested) {
   fetch(requested).then(response => response.text()).then(load).catch(() => {});
 }
 
-addEventListener('resize', () => {
+function frame() {
   camera.aspect = innerWidth / innerHeight;
+  const vertical = THREE.MathUtils.degToRad(camera.fov) / 2;
+  const horizontal = Math.atan(Math.tan(vertical) * camera.aspect);
+  const distance = 1.12 / Math.sin(Math.min(vertical, horizontal));
+
+  camera.position.setLength(distance);
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
-});
+}
+
+addEventListener('resize', frame);
+frame();
 
 renderer.setAnimationLoop(() => {
   controls.update();
