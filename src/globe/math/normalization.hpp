@@ -18,6 +18,7 @@ class Normalization {
 
     [[nodiscard]] Vector3 gradient(const Vector3& site_gradient) const;
     [[nodiscard]] Matrix3 hessian(const Vector3& site_gradient, const Matrix3& site_hessian) const;
+    [[nodiscard]] Matrix3 tangential_hessian(const Vector3& site_gradient, const Matrix3& site_hessian) const;
     [[nodiscard]] Matrix3 mixed_hessian(const Matrix3& site_hessian, const Normalization& column) const;
 
  private:
@@ -46,6 +47,16 @@ inline Matrix3 Normalization::hessian(const Vector3& site_gradient, const Matrix
         projected * _site.transpose() -
         _site * projected.transpose()
     ) / (_norm * _norm);
+}
+
+// Scaling a site changes nothing, so the radial direction carries no
+// curvature and would read to a solver as a direction worth exploring.
+// Restricting to the tangent plane removes it.
+inline Matrix3 Normalization::tangential_hessian(
+    const Vector3& site_gradient,
+    const Matrix3& site_hessian
+) const {
+    return _projection * hessian(site_gradient, site_hessian) * _projection;
 }
 
 inline Matrix3 Normalization::mixed_hessian(const Matrix3& site_hessian, const Normalization& column) const {

@@ -1,4 +1,5 @@
 #include "normalization.hpp"
+#include <Eigen/Geometry>
 #include <gtest/gtest.h>
 #include <cmath>
 #include <vector>
@@ -82,4 +83,26 @@ TEST(NormalizationTest, HessianAnnihilatesTheRadialDirectionUpToTheGradient) {
     Vector3 radial = hessian * point + gradient;
 
     EXPECT_NEAR(radial.norm(), 0.0, 1e-12);
+}
+
+TEST(NormalizationTest, TangentialHessianHasNoRadialComponent) {
+    Vector3 point(0.6, -0.4, 0.9);
+    Normalization normalization(point);
+    Matrix3 tangential = normalization.tangential_hessian(site_gradient(normalization.site()), quadratic_form());
+
+    EXPECT_NEAR((tangential * normalization.site()).norm(), 0.0, 1e-12);
+    EXPECT_NEAR((normalization.site().transpose() * tangential).norm(), 0.0, 1e-12);
+}
+
+TEST(NormalizationTest, TangentialHessianAgreesWithTheAmbientOneOnTangentDirections) {
+    Vector3 point(0.6, -0.4, 0.9);
+    Normalization normalization(point);
+    Vector3 gradient = site_gradient(normalization.site());
+    Matrix3 ambient = normalization.hessian(gradient, quadratic_form());
+    Matrix3 tangential = normalization.tangential_hessian(gradient, quadratic_form());
+
+    Vector3 axis(0.0, 0.0, 1.0);
+    Vector3 direction = Vector3(normalization.site().cross(axis)).normalized();
+
+    EXPECT_NEAR(direction.dot(ambient * direction), direction.dot(tangential * direction), 1e-12);
 }

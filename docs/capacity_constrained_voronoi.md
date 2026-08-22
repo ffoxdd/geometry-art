@@ -94,6 +94,37 @@ arc integrals clip the region against each overlapping triangle
 kd-tree over triangle centres) and sum the per-triangle polynomial
 integrals, so the integration stays exact for the interpolant.
 
+## Second-order steps
+
+Moving a site sweeps each shared bisector at a normal rate proportional
+to the boundary point's projection on the displacement, so the CVT
+energy's second derivative couples two Delaunay neighbours through
+
+```
+H_kj = 2 * (integral of rho * x x^T along their bisector)
+     / |s_k - s_j|
+```
+
+and the diagonal block is the negated sum of a cell's own bisector
+blocks, which makes every block row sum to zero: translating all sites
+alike moves no bisector. `CvtHessian` assembles these; the density's
+second moment along an arc comes from the same moment machinery as the
+first, one degree higher.
+
+`Normalization` carries a gradient and a Hessian through the site
+normalisation the optimizer parameterises with, and also supplies the
+tangential restriction. The restriction matters: scaling a site changes
+nothing, so radial directions carry exactly zero curvature and a
+conjugate-gradient solver would read them as directions worth
+exploring.
+
+`NewtonOptimizer` minimises the CVT energy by trust-region Newton,
+solving each step with Steihaug's truncated conjugate gradient so only
+Hessian-vector products are needed. It is available as a warm start
+alongside Lloyd, and unlike Lloyd it reaches a stationary point: the
+gradient bottoms out near 1e-8 for the same reason the capacity error
+does.
+
 ## Geometry conventions
 
 - An `Arc` is traversed counter-clockwise about its `normal()`; the

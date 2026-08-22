@@ -6,6 +6,7 @@
 #include "../core/callback.hpp"
 #include "../optimizers/capacity_constrained_optimizer.hpp"
 #include "../optimizers/lloyd_optimizer.hpp"
+#include "../optimizers/newton_optimizer/newton_optimizer.hpp"
 #include "../../../fields/scalar/noise_field.hpp"
 #include "../../../math/interval.hpp"
 #include "../../../fields/spherical/field.hpp"
@@ -41,6 +42,8 @@ class Factory {
         int points_count,
         std::string density_field,
         size_t lloyd_passes,
+        std::string warm_start,
+        size_t newton_iterations,
         CapacityConstrainedParameters optimizer_parameters,
         std::optional<unsigned int> seed,
         Callback callback
@@ -62,6 +65,8 @@ class Factory {
     int _points_count;
     std::string _density_field;
     size_t _lloyd_passes;
+    std::string _warm_start;
+    size_t _newton_iterations;
     CapacityConstrainedParameters _optimizer_parameters;
     std::optional<unsigned int> _seed;
     Callback _callback;
@@ -77,6 +82,12 @@ class Factory {
     [[nodiscard]] std::unique_ptr<Sphere> warm_start(std::unique_ptr<Sphere> sphere, const FieldType& field) const;
 
     template<fields::spherical::Field FieldType>
+    [[nodiscard]] std::unique_ptr<Sphere> relax_with_lloyd(std::unique_ptr<Sphere> sphere, const FieldType& field) const;
+
+    template<fields::spherical::Field FieldType>
+    [[nodiscard]] std::unique_ptr<Sphere> relax_with_newton(std::unique_ptr<Sphere> sphere, const FieldType& field) const;
+
+    template<fields::spherical::Field FieldType>
     [[nodiscard]] std::unique_ptr<Sphere> optimize(std::unique_ptr<Sphere> sphere, const FieldType& field) const;
 
     [[nodiscard]] static PiecewisePolynomialField sample_noise_field();
@@ -87,6 +98,8 @@ inline Factory::Factory(
     int points_count,
     std::string density_field,
     size_t lloyd_passes,
+    std::string warm_start,
+    size_t newton_iterations,
     CapacityConstrainedParameters optimizer_parameters,
     std::optional<unsigned int> seed,
     Callback callback
@@ -94,6 +107,8 @@ inline Factory::Factory(
     _points_count(points_count),
     _density_field(std::move(density_field)),
     _lloyd_passes(lloyd_passes),
+    _warm_start(std::move(warm_start)),
+    _newton_iterations(newton_iterations),
     _optimizer_parameters(optimizer_parameters),
     _seed(seed),
     _callback(std::move(callback)) {
@@ -174,6 +189,15 @@ inline Factory::SeededPointGenerator Factory::seeded_point_generator(unsigned in
 
 template<fields::spherical::Field FieldType>
 std::unique_ptr<Sphere> Factory::warm_start(std::unique_ptr<Sphere> sphere, const FieldType& field) const {
+    if (_warm_start == "newton") {
+        return relax_with_newton(std::move(sphere), field);
+    }
+
+    return relax_with_lloyd(std::move(sphere), field);
+}
+
+template<fields::spherical::Field FieldType>
+std::unique_ptr<Sphere> Factory::relax_with_lloyd(std::unique_ptr<Sphere> sphere, const FieldType& field) const {
     if (_lloyd_passes == 0) {
         return sphere;
     }
@@ -185,6 +209,26 @@ std::unique_ptr<Sphere> Factory::warm_start(std::unique_ptr<Sphere> sphere, cons
         std::setw(3) << _lloyd_passes << " passes: centroid deviation " <<
         std::scientific << std::setprecision(3) << lloyd.final_deviation() <<
         std::defaultfloat << std::endl;
+
+    return sphere;
+}
+
+template<fields::spherical::Field FieldType>
+std::unique_ptr<Sphere> Factory::relax_with_newton(std::unique_ptr<Sphere> sphere, const FieldType& field) const {
+    if (_newton_iterations == 0) {
+        return sphere;
+    }
+
+    NewtonParameters parameters;
+    parameters.max_iterations = _newton_iterations;
+    NewtonOptimizer<FieldType> newton(std::move(sphere), field, parameters, _callback);
+    sphere = newton.optimize();
+
+    const NewtonReport& report = newton.report();
+    std::cout << "  " << std::setw(8) << std::left << "Newton" << std::right <<
+        std::setw(3) << report.iterations << " steps:  gradient norm " <<
+        std::scientific << std::setprecision(3) << report.gradient_norm <<
+        ", energy " << report.cvt_energy << std::defaultfloat << std::endl;
 
     return sphere;
 }

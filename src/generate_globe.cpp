@@ -30,6 +30,8 @@ struct Config {
     bool perform_render;
     std::string render_mode;
     int lloyd_passes;
+    std::string warm_start;
+    int newton_iterations;
     int max_outer_iterations;
     int max_inner_iterations;
     double capacity_tolerance = 1e-7;
@@ -48,7 +50,9 @@ int main(int argc, char *argv[]) {
         "  Density: " << config.density_field << std::endl <<
         "  Render: " << (config.perform_render ? "yes" : "no") << std::endl <<
         "  Render mode: " << config.render_mode << std::endl <<
+        "  Warm start: " << config.warm_start << std::endl <<
         "  Lloyd passes: " << config.lloyd_passes << std::endl <<
+        "  Newton iterations: " << config.newton_iterations << std::endl <<
         "  Max outer iterations: " << config.max_outer_iterations << std::endl <<
         "  Max inner iterations: " << config.max_inner_iterations << std::endl <<
         "  Capacity tolerance: " << config.capacity_tolerance << std::endl <<
@@ -97,6 +101,8 @@ int main(int argc, char *argv[]) {
         config.points_count,
         config.density_field,
         static_cast<size_t>(config.lloyd_passes),
+        config.warm_start,
+        static_cast<size_t>(config.newton_iterations),
         optimizer_parameters,
         config.seed,
         callback
@@ -147,6 +153,16 @@ Config parse_arguments(int argc, char *argv[]) {
         ->description("Render mode: wireframe, solid, or minimal")
         ->check(CLI::IsMember({"wireframe", "solid", "minimal"}))
         ->default_val("wireframe");
+
+    app.add_option("--warm-start", config.warm_start)
+        ->description("Warm start method before the capacity phase")
+        ->check(CLI::IsMember({"lloyd", "newton"}))
+        ->default_val("lloyd");
+
+    app.add_option("--newton-iterations", config.newton_iterations)
+        ->description("Maximum trust-region Newton steps when warm starting with newton")
+        ->default_val(50)
+        ->check(CLI::NonNegativeNumber);
 
     app.add_option("--lloyd-passes", config.lloyd_passes)
         ->description("Number of density-weighted Lloyd warm-start passes")

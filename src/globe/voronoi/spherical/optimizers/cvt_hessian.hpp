@@ -4,6 +4,7 @@
 #include "../../../types.hpp"
 #include "../../../fields/spherical/field.hpp"
 #include "../../../fields/spherical/polynomial_field.hpp"
+#include "../../../math/normalization.hpp"
 #include "../../../std_ext/parallel_for.hpp"
 #include "../core/sphere.hpp"
 #include <cstddef>
@@ -20,11 +21,18 @@ struct NeighborBlock {
 // Second derivatives of the CVT energy with respect to the sites as ambient
 // vectors. Only Delaunay neighbours couple, so the matrix is stored as one
 // dense block per cell plus one per shared bisector.
+//
+// through_normalization carries the blocks into the parameterisation the
+// optimizer descends, restricted to each site's tangent plane.
 struct CvtHessianBlocks {
     std::vector<Matrix3> diagonal;
     std::vector<std::vector<NeighborBlock>> neighbors;
 
     [[nodiscard]] std::vector<Vector3> multiply(const std::vector<Vector3>& directions) const;
+    [[nodiscard]] CvtHessianBlocks through_normalization(
+        const std::vector<Vector3>& points,
+        const std::vector<Vector3>& site_gradients
+    ) const;
 };
 
 template<fields::spherical::Field FieldType = fields::spherical::PolynomialField>
@@ -51,6 +59,36 @@ inline std::vector<Vector3> CvtHessianBlocks::multiply(const std::vector<Vector3
         }
 
         result[k] = sum;
+    }
+
+    return result;
+}
+
+inline CvtHessianBlocks CvtHessianBlocks::through_normalization(
+    const std::vector<Vector3>& points,
+    const std::vector<Vector3>& site_gradients
+) const {
+    std::vector<Normalization> normalizations;
+    normalizations.reserve(points.size());
+
+    for (const Vector3& point : points) {
+        normalizations.emplace_back(point);
+    }
+
+    CvtHessianBlocks result;
+    result.diagonal.reserve(points.size());
+    result.neighbors.resize(points.size());
+
+    for (size_t k = 0; k < points.size(); ++k) {
+        result.diagonal.push_back(normalizations[k].tangential_hessian(site_gradients[k], diagonal[k]));
+        result.neighbors[k].reserve(neighbors[k].size());
+
+        for (const NeighborBlock& block : neighbors[k]) {
+            result.neighbors[k].push_back(NeighborBlock{
+                block.neighbor_index,
+                normalizations[k].mixed_hessian(block.value, normalizations[block.neighbor_index])
+            });
+        }
     }
 
     return result;

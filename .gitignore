@@ -1,4 +1,5 @@
 build
+build-*
 output
 .DS_Store
 .idea

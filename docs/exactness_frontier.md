@@ -90,11 +90,15 @@ KKT solve, and attacks the iteration count directly.
 
 Ordered by leverage per unit of effort. See `TODO.md` for status.
 
-1. Make accuracy the input and the discretisation the output: request a
+1. Second-order steps on the constraint manifold, replacing the growing
+   penalty whose inner problems stiffen by construction.
+2. C¹ elements, so the piecewise path reaches the same floor as the
+   polynomial one and the second-order work pays its full return there.
+3. Move the global path to a spherical-harmonic basis.
+4. Make accuracy the input and the discretisation the output: request a
    tolerance, raise degree and refine the mesh until the representation
    error is below what the capacity tolerance needs.
-2. Move the global path to a spherical-harmonic basis.
-3. Parallelise per-cell integration.
-4. Exact Hessian and a Newton or SQP step on the constraint manifold.
-5. C¹ elements, if the piecewise path should reach the same floor as
-   the polynomial one.
+5. Image densities on a mesh aligned to their discontinuities.
+
+Done: per-cell integration runs in parallel, and the exact CVT Hessian
+is assembled and used by a trust-region Newton relaxation.
