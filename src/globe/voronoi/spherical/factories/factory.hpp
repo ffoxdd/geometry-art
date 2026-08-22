@@ -12,12 +12,17 @@
 #include "../../../fields/spherical/piecewise_polynomial_field.hpp"
 #include "../../../fields/spherical/polynomial_field.hpp"
 #include "../../../fields/spherical/polynomial_field_fitter.hpp"
+#include "../../../generators/cartesian/random_point_generator.hpp"
 #include "../../../generators/spherical/fibonacci_point_generator.hpp"
+#include "../../../generators/spherical/random_point_generator.hpp"
+#include "../../../geometry/cartesian/bounding_box_sampler/uniform_bounding_box_sampler.hpp"
+#include "../../../math/interval_sampler/uniform_interval_sampler.hpp"
 #include "../../../geometry/spherical/triangle_mesh.hpp"
 #include <cstddef>
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -37,6 +42,7 @@ class Factory {
         std::string density_field,
         size_t lloyd_passes,
         CapacityConstrainedParameters optimizer_parameters,
+        std::optional<unsigned int> seed,
         Callback callback
     );
 
@@ -49,10 +55,15 @@ class Factory {
     static constexpr double NOISE_DENSITY_FLOOR = 0.2;
     static constexpr int NOISE_MESH_DEGREE = 2;
 
+    using SeededBoundingBoxSampler = globe::UniformBoundingBoxSampler<globe::UniformIntervalSampler>;
+    using SeededCartesianGenerator = generators::cartesian::RandomPointGenerator<SeededBoundingBoxSampler>;
+    using SeededPointGenerator = generators::spherical::RandomPointGenerator<SeededCartesianGenerator>;
+
     int _points_count;
     std::string _density_field;
     size_t _lloyd_passes;
     CapacityConstrainedParameters _optimizer_parameters;
+    std::optional<unsigned int> _seed;
     Callback _callback;
 
     template<fields::spherical::Field FieldType>
@@ -60,6 +71,7 @@ class Factory {
 
     [[nodiscard]] PolynomialField create_polynomial_field() const;
     [[nodiscard]] std::unique_ptr<Sphere> build_initial() const;
+    [[nodiscard]] static SeededPointGenerator seeded_point_generator(unsigned int seed);
 
     template<fields::spherical::Field FieldType>
     [[nodiscard]] std::unique_ptr<Sphere> warm_start(std::unique_ptr<Sphere> sphere, const FieldType& field) const;
@@ -76,12 +88,14 @@ inline Factory::Factory(
     std::string density_field,
     size_t lloyd_passes,
     CapacityConstrainedParameters optimizer_parameters,
+    std::optional<unsigned int> seed,
     Callback callback
 ) :
     _points_count(points_count),
     _density_field(std::move(density_field)),
     _lloyd_passes(lloyd_passes),
     _optimizer_parameters(optimizer_parameters),
+    _seed(seed),
     _callback(std::move(callback)) {
 }
 
@@ -144,7 +158,18 @@ inline PolynomialField Factory::fit_noise_field() {
 }
 
 inline std::unique_ptr<Sphere> Factory::build_initial() const {
-    return RandomBuilder<>().build(_points_count);
+    if (!_seed.has_value()) {
+        return RandomBuilder<>().build(_points_count);
+    }
+
+    return RandomBuilder<SeededPointGenerator>(seeded_point_generator(*_seed)).build(_points_count);
+}
+
+inline Factory::SeededPointGenerator Factory::seeded_point_generator(unsigned int seed) {
+    return SeededPointGenerator(
+        SeededCartesianGenerator(SeededBoundingBoxSampler(globe::UniformIntervalSampler(seed))),
+        globe::UniformSphericalBoundingBoxSampler<>()
+    );
 }
 
 template<fields::spherical::Field FieldType>

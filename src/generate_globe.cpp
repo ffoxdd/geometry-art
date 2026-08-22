@@ -10,6 +10,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 
@@ -32,6 +33,7 @@ struct Config {
     int max_outer_iterations;
     int max_inner_iterations;
     double capacity_tolerance = 1e-7;
+    std::optional<unsigned int> seed;
     std::string output_dir;
 };
 
@@ -50,6 +52,7 @@ int main(int argc, char *argv[]) {
         "  Max outer iterations: " << config.max_outer_iterations << std::endl <<
         "  Max inner iterations: " << config.max_inner_iterations << std::endl <<
         "  Capacity tolerance: " << config.capacity_tolerance << std::endl <<
+        "  Seed: " << (config.seed.has_value() ? std::to_string(*config.seed) : "random") << std::endl <<
         std::endl;
 
     std::unique_ptr<Application> application;
@@ -95,6 +98,7 @@ int main(int argc, char *argv[]) {
         config.density_field,
         static_cast<size_t>(config.lloyd_passes),
         optimizer_parameters,
+        config.seed,
         callback
     );
 
@@ -163,6 +167,9 @@ Config parse_arguments(int argc, char *argv[]) {
         ->description("Relative RMS capacity error at which optimization stops")
         ->default_str("1e-7")
         ->check(CLI::PositiveNumber);
+
+    app.add_option("--seed", config.seed)
+        ->description("Seed for the initial random points; omit for a random seed");
 
     app.add_option("--output-dir,-o", config.output_dir)
         ->description("Output directory for saved spheres")

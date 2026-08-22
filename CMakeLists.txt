@@ -17,13 +17,14 @@ find_package(Boost REQUIRED CONFIG)
 find_package(anl REQUIRED)
 find_package(CLI11 REQUIRED CONFIG)
 find_package(Eigen3 REQUIRED)
+find_package(Threads REQUIRED)
 find_path(LBFGSPP_INCLUDE_DIR LBFGS.h REQUIRED)
 
 # Header-only core library
 
 add_library(globe INTERFACE)
 target_include_directories(globe INTERFACE ${CMAKE_SOURCE_DIR}/src ${LBFGSPP_INCLUDE_DIR})
-target_link_libraries(globe INTERFACE CGAL::CGAL Eigen3::Eigen Boost::boost)
+target_link_libraries(globe INTERFACE CGAL::CGAL Eigen3::Eigen Boost::boost Threads::Threads)
 
 add_library(globe_noise STATIC src/globe/fields/scalar/anl_implementation.cpp)
 target_link_libraries(globe_noise PUBLIC globe anl)

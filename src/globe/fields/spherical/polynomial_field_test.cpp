@@ -45,6 +45,30 @@ PolynomialField equator_dense_field() {
 
 }
 
+TEST(PolynomialFieldTest, SecondMomentOfConstantFieldOverEquatorialQuarterArc) {
+    PolynomialField field = PolynomialField::constant(1.0);
+    Arc quarter(VectorS2(1, 0, 0), VectorS2(0, 1, 0));
+
+    Matrix3 moment = field.second_moment(quarter);
+
+    EXPECT_NEAR(moment(0, 0), M_PI / 4.0, 1e-12);
+    EXPECT_NEAR(moment(1, 1), M_PI / 4.0, 1e-12);
+    EXPECT_NEAR(moment(0, 1), 0.5, 1e-12);
+    EXPECT_NEAR(moment(1, 0), 0.5, 1e-12);
+    EXPECT_NEAR(moment(2, 2), 0.0, 1e-12);
+    EXPECT_NEAR(moment(0, 2), 0.0, 1e-12);
+    EXPECT_NEAR(moment(1, 2), 0.0, 1e-12);
+}
+
+TEST(PolynomialFieldTest, SecondMomentTraceIsTheArcMass) {
+    PolynomialField field = PolynomialField::linear(2.0, Vector3(0.3, -0.2, 0.5));
+    Arc arc(VectorS2(1, 0, 0), VectorS2(0, 1, 1).normalized());
+
+    Matrix3 moment = field.second_moment(arc);
+
+    EXPECT_NEAR(moment.trace(), field.integrals(arc).mass, 1e-12);
+}
+
 TEST(PolynomialFieldTest, ConstantFieldValueAndTotalMass) {
     PolynomialField field = PolynomialField::constant(2.0);
 

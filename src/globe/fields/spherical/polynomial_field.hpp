@@ -8,6 +8,7 @@
 #include "../../geometry/spherical/polygon/polygon.hpp"
 #include "../../math/polynomial/moments.hpp"
 #include "../../math/polynomial/polynomial.hpp"
+#include <CGAL/assertions.h>
 #include <array>
 #include <utility>
 #include <vector>
@@ -29,6 +30,9 @@ class PolynomialField {
     [[nodiscard]] RegionIntegrals integrals(const Arc& arc) const;
     [[nodiscard]] RegionIntegrals integrals(const Polygon& polygon, const std::vector<Moments>& arc_moments) const;
     [[nodiscard]] RegionIntegrals integrals(const Arc& arc, const Moments& arc_moments) const;
+    [[nodiscard]] Matrix3 second_moment(const Arc& arc) const;
+    [[nodiscard]] Matrix3 second_moment(const Arc& arc, const Moments& arc_moments) const;
+    [[nodiscard]] static int second_moment_degree(int density_degree) { return density_degree + 2; }
     [[nodiscard]] double total_mass() const { return _total_mass; }
 
     [[nodiscard]] static PolynomialField constant(double value);
@@ -42,9 +46,12 @@ class PolynomialField {
  private:
     Polynomial _density;
     std::array<Polynomial, 3> _density_times_coordinate;
+    std::vector<Polynomial> _density_times_coordinate_pair;
     double _total_mass;
 
     [[nodiscard]] RegionIntegrals integrate(const Moments& moments) const;
+    [[nodiscard]] Matrix3 second_moment_from(const Moments& moments) const;
+    [[nodiscard]] static std::vector<Polynomial> coordinate_pair_products(const Polynomial& density);
 };
 
 inline PolynomialField::PolynomialField(Polynomial density) :
@@ -54,6 +61,7 @@ inline PolynomialField::PolynomialField(Polynomial density) :
         _density.times_coordinate(1),
         _density.times_coordinate(2)
     },
+    _density_times_coordinate_pair(coordinate_pair_products(_density)),
     _total_mass(_density.integrate(Moments::unit_sphere(_density.max_degree()))) {
 }
 
@@ -75,6 +83,45 @@ inline RegionIntegrals PolynomialField::integrals(const Polygon& polygon, const 
 
 inline RegionIntegrals PolynomialField::integrals([[maybe_unused]] const Arc& arc, const Moments& arc_moments) const {
     return integrate(arc_moments);
+}
+
+inline Matrix3 PolynomialField::second_moment(const Arc& arc) const {
+    return second_moment_from(arc.moments(second_moment_degree(degree())));
+}
+
+inline Matrix3 PolynomialField::second_moment(
+    [[maybe_unused]] const Arc& arc,
+    const Moments& arc_moments
+) const {
+    CGAL_precondition(arc_moments.max_degree() >= second_moment_degree(degree()));
+    return second_moment_from(arc_moments);
+}
+
+inline Matrix3 PolynomialField::second_moment_from(const Moments& moments) const {
+    Matrix3 result;
+
+    for (int row = 0; row < 3; ++row) {
+        for (int column = 0; column < 3; ++column) {
+            result(row, column) = _density_times_coordinate_pair[row * 3 + column].integrate(moments);
+        }
+    }
+
+    return result;
+}
+
+inline std::vector<Polynomial> PolynomialField::coordinate_pair_products(const Polynomial& density) {
+    std::vector<Polynomial> products;
+    products.reserve(9);
+
+    for (int row = 0; row < 3; ++row) {
+        Polynomial row_product = density.times_coordinate(row);
+
+        for (int column = 0; column < 3; ++column) {
+            products.push_back(row_product.times_coordinate(column));
+        }
+    }
+
+    return products;
 }
 
 inline RegionIntegrals PolynomialField::integrate(const Moments& moments) const {

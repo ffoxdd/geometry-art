@@ -28,6 +28,8 @@ concept Field = requires(
     { field.integrals(arc) } -> std::convertible_to<RegionIntegrals>;
     { field.integrals(polygon, polygon_arc_moments) } -> std::convertible_to<RegionIntegrals>;
     { field.integrals(arc, arc_moments) } -> std::convertible_to<RegionIntegrals>;
+    { field.second_moment(arc) } -> std::convertible_to<Matrix3>;
+    { field.second_moment(arc, arc_moments) } -> std::convertible_to<Matrix3>;
     { field.total_mass() } -> std::convertible_to<double>;
 };
 

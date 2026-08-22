@@ -11,6 +11,7 @@ concept VectorXYZ = requires(const T &value) { value.x(); value.y(); value.z(); 
 
 // Canonical type for 3D Cartesian points.
 using Vector3 = Eigen::Vector3d;
+using Matrix3 = Eigen::Matrix3d;
 
 // Canonical type for points on the unit sphere.
 // Represents a normalized 3D vector (direction from origin to point on S2).
