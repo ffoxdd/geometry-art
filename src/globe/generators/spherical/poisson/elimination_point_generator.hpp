@@ -175,28 +175,28 @@ std::vector<VectorS2> EliminationPointGenerator<PointGeneratorType>::eliminate_t
 
     // Eliminate points until we reach target count
     while (active_count > target_count && !heap.empty()) {
-        auto [weight, idx] = heap.top();
+        auto [weight, index] = heap.top();
         heap.pop();
 
-        if (!active[idx]) {
+        if (!active[index]) {
             continue;
         }
 
         // Check if weight is stale (was updated after being pushed)
-        if (std::abs(weight - weights[idx]) > 1e-10) {
+        if (std::abs(weight - weights[index]) > 1e-10) {
             // Re-push with current weight
-            heap.emplace(weights[idx], idx);
+            heap.emplace(weights[index], index);
             continue;
         }
 
         // Eliminate this point
-        active[idx] = false;
+        active[index] = false;
         active_count--;
 
         // Update weights of neighbors
-        const VectorS2& vi = candidates[idx];
+        const VectorS2& vi = candidates[index];
 
-        for (size_t j : neighbor_indices[idx]) {
+        for (size_t j : neighbor_indices[index]) {
             if (!active[j]) continue;
 
             const VectorS2& vj = candidates[j];

@@ -357,7 +357,7 @@ inline void VoronoiSphereWireframeBuilder::build_flat_cap(
     }
     centroid = centroid * (1.0 / n);
 
-    VertexIndex center_idx = get_or_create_vertex(centroid);
+    VertexIndex center_index = get_or_create_vertex(centroid);
 
     for (size_t i = 0; i < n; ++i) {
         size_t next_i = (i + 1) % n;
@@ -365,9 +365,9 @@ inline void VoronoiSphereWireframeBuilder::build_flat_cap(
         VertexIndex i2 = get_or_create_vertex(polygon_vertices[next_i]);
 
         if (outward_normal) {
-            _mesh.add_face(center_idx, i1, i2);
+            _mesh.add_face(center_index, i1, i2);
         } else {
-            _mesh.add_face(center_idx, i2, i1);
+            _mesh.add_face(center_index, i2, i1);
         }
     }
 }
@@ -385,9 +385,9 @@ inline VertexIndex VoronoiSphereWireframeBuilder::get_or_create_vertex(const Vec
     }
 
     cgal::Point3 cgal_point(point.x(), point.y(), point.z());
-    VertexIndex idx = _mesh.add_vertex(cgal_point);
-    _vertex_cache[key] = idx;
-    return idx;
+    VertexIndex index = _mesh.add_vertex(cgal_point);
+    _vertex_cache[key] = index;
+    return index;
 }
 
 } // namespace globe::io::mesh

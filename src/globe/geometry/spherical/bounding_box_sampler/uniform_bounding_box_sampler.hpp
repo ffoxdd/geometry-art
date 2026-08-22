@@ -6,6 +6,7 @@
 #include "../helpers.hpp"
 #include "../../../math/interval_sampler/interval_sampler.hpp"
 #include "../../../math/interval_sampler/uniform_interval_sampler.hpp"
+#include "../../../math/circular_interval_sampler/circular_interval_sampler.hpp"
 #include "../../../math/circular_interval_sampler/uniform_circular_interval_sampler.hpp"
 #include <cmath>
 
@@ -15,10 +16,12 @@ using globe::VectorS2;
 using globe::IntervalSampler;
 using globe::UniformIntervalSampler;
 using globe::UniformCircularIntervalSampler;
+using globe::CircularIntervalSampler;
+using globe::TWO_PI;
 
 template<
     IntervalSampler IntervalSamplerType = UniformIntervalSampler,
-    typename CircularIntervalSamplerType = UniformCircularIntervalSampler
+    CircularIntervalSampler<TWO_PI> CircularIntervalSamplerType = UniformCircularIntervalSampler
 >
 class UniformBoundingBoxSampler {
  public:
@@ -52,7 +55,7 @@ class UniformBoundingBoxSampler {
 namespace globe {
 template<
     IntervalSampler IntervalSamplerType = UniformIntervalSampler,
-    typename CircularIntervalSamplerType = UniformCircularIntervalSampler
+    CircularIntervalSampler<TWO_PI> CircularIntervalSamplerType = UniformCircularIntervalSampler
 >
 using UniformSphericalBoundingBoxSampler = geometry::spherical::UniformBoundingBoxSampler<IntervalSamplerType, CircularIntervalSamplerType>;
 }

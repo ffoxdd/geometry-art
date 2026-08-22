@@ -28,7 +28,6 @@ class BoundingBoxCalculator {
     [[nodiscard]] BoundingBox calculate() const;
 
  private:
-    static constexpr double EPSILON = 1e-10;
 
     const std::vector<Arc>& _arcs;
 
@@ -234,11 +233,11 @@ inline double BoundingBoxCalculator::theta(const VectorS2& point) {
 }
 
 inline bool BoundingBoxCalculator::is_zero(const VectorS2& v) {
-    return v.squaredNorm() < EPSILON;
+    return v.squaredNorm() < GEOMETRIC_EPSILON;
 }
 
 inline bool BoundingBoxCalculator::is_zero(double v) {
-    return std::abs(v) < EPSILON;
+    return std::abs(v) < GEOMETRIC_EPSILON;
 }
 
 inline VectorS2 BoundingBoxCalculator::project_to_xy_plane(const VectorS2& v) {
@@ -253,12 +252,12 @@ inline bool BoundingBoxCalculator::parallel(const VectorS2& v1, const VectorS2& 
     double v1_squared_length = v1.squaredNorm();
     double v2_squared_length = v2.squaredNorm();
 
-    if (v1_squared_length < EPSILON || v2_squared_length < EPSILON) {
+    if (v1_squared_length < GEOMETRIC_EPSILON || v2_squared_length < GEOMETRIC_EPSILON) {
         return true;
     }
 
     VectorS2 cross = v1.cross(v2);
-    return cross.squaredNorm() / (v1_squared_length * v2_squared_length) < EPSILON;
+    return cross.squaredNorm() / (v1_squared_length * v2_squared_length) < GEOMETRIC_EPSILON;
 }
 
 } // namespace globe::geometry::spherical::polygon
