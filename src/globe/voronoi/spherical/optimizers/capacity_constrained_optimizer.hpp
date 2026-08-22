@@ -20,6 +20,7 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -205,21 +206,27 @@ size_t CapacityConstrainedOptimizer<FieldType>::minimize_lagrangian_by_newton() 
     double radius = _parameters.newton.initial_trust_radius;
     size_t iterations = 0;
 
+    // A rejected step leaves the iterate where it was, so the gradient and
+    // the curvature there are still the ones just computed.
+    std::vector<Vector3> gradient;
+    std::optional<CapacityConstrainedHessian> hessian;
+
     while (iterations < _parameters.max_inner_iterations) {
-        std::vector<Vector3> gradient = tangential_gradient(evaluation.site_gradients, current);
+        if (!hessian.has_value()) {
+            gradient = tangential_gradient(evaluation.site_gradients, current);
+            hessian.emplace(
+                _curvature.assemble(*_sphere).through_normalization(current, evaluation.site_gradients),
+                CapacityJacobian(state, current),
+                current,
+                _penalty
+            );
+        }
 
         if (gradient_norm(gradient) <= _parameters.newton.gradient_tolerance) {
             break;
         }
 
-        CapacityConstrainedHessian hessian(
-            _curvature.assemble(*_sphere).through_normalization(current, evaluation.site_gradients),
-            CapacityJacobian(state, current),
-            current,
-            _penalty
-        );
-
-        TrustRegionStep::Result step = solver.solve(gradient, hessian, radius);
+        TrustRegionStep::Result step = solver.solve(gradient, *hessian, radius);
         ++iterations;
 
         if (step.predicted_decrease <= 0.0) {
@@ -251,6 +258,7 @@ size_t CapacityConstrainedOptimizer<FieldType>::minimize_lagrangian_by_newton() 
         current = std::move(trial);
         state = std::move(trial_state);
         evaluation = std::move(trial_evaluation);
+        hessian.reset();
     }
 
     return iterations;

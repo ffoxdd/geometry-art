@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -108,6 +109,10 @@ std::unique_ptr<Sphere> NewtonOptimizer<FieldType>::optimize() {
     Evaluation evaluation = evaluate();
     double radius = _parameters.initial_trust_radius;
 
+    // A rejected step leaves the iterate where it was, so the curvature
+    // there is still the one just assembled.
+    std::optional<CvtHessianBlocks> blocks;
+
     while (_report.iterations < _parameters.max_iterations) {
         _report.gradient_norm = norm(evaluation.gradient);
 
@@ -116,11 +121,11 @@ std::unique_ptr<Sphere> NewtonOptimizer<FieldType>::optimize() {
             break;
         }
 
-        CvtHessianBlocks blocks = _hessian
-            .assemble(*_sphere)
-            .through_normalization(current, evaluation.site_gradients);
+        if (!blocks.has_value()) {
+            blocks = _hessian.assemble(*_sphere).through_normalization(current, evaluation.site_gradients);
+        }
 
-        TrustRegionStep::Result step = solver.solve(evaluation.gradient, blocks, radius);
+        TrustRegionStep::Result step = solver.solve(evaluation.gradient, *blocks, radius);
         ++_report.iterations;
 
         if (step.predicted_decrease <= 0.0) {
@@ -147,6 +152,7 @@ std::unique_ptr<Sphere> NewtonOptimizer<FieldType>::optimize() {
 
         current = std::move(trial);
         evaluation = std::move(trial_evaluation);
+        blocks.reset();
         ++_report.accepted_steps;
         _callback(*_sphere);
     }
