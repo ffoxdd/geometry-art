@@ -2,6 +2,7 @@
 #define GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_CAPACITY_CONSTRAINED_OPTIMIZER_HPP_
 
 #include "capacity_constrained_lagrangian.hpp"
+#include "../../../math/normalization.hpp"
 #include "../../../types.hpp"
 #include "../../../fields/spherical/field.hpp"
 #include "../../../fields/spherical/polynomial_field.hpp"
@@ -250,11 +251,8 @@ Eigen::VectorXd CapacityConstrainedOptimizer<FieldType>::chain_rule_gradient(
 
     for (size_t i = 0; i < site_gradients.size(); ++i) {
         Eigen::Index offset = 3 * static_cast<Eigen::Index>(i);
-        Vector3 raw = x.segment<3>(offset);
-        double norm = raw.norm();
-        Vector3 site = raw / norm;
-        Vector3 ambient = site_gradients[i];
-        gradient.segment<3>(offset) = (ambient - ambient.dot(site) * site) / norm;
+        Normalization normalization(x.segment<3>(offset));
+        gradient.segment<3>(offset) = normalization.gradient(site_gradients[i]);
     }
 
     return gradient;
