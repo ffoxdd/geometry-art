@@ -35,7 +35,7 @@ Snapshot built(int sites, const std::string& field, const std::string& inner_sol
     parameters.relative_capacity_tolerance = 1e-6;
     parameters.inner_solver = inner_solver;
 
-    Factory factory(sites, field, 5, "lloyd", 0, parameters, SEED, noop_callback());
+    Factory factory(sites, field, 5, "lloyd", 0, parameters, SEED, noop_callback(), {}, std::chrono::milliseconds(0));
     factory.build();
 
     return factory.snapshot();

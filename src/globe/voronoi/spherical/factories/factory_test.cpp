@@ -20,7 +20,7 @@ CapacityConstrainedParameters quick_parameters() {
 constexpr unsigned int TEST_SEED = 20250822;
 
 TEST(FactoryTest, BuildWithConstantDensityPreservesPointCount) {
-    Factory factory(6, "constant", 1, "lloyd", 0, quick_parameters(), TEST_SEED, noop_callback());
+    Factory factory(6, "constant", 1, "lloyd", 0, quick_parameters(), TEST_SEED, noop_callback(), {}, std::chrono::milliseconds(0));
 
     auto sphere = factory.build();
 
@@ -28,7 +28,7 @@ TEST(FactoryTest, BuildWithConstantDensityPreservesPointCount) {
 }
 
 TEST(FactoryTest, BuildWithNewtonWarmStartPreservesPointCount) {
-    Factory factory(6, "constant", 0, "newton", 3, quick_parameters(), TEST_SEED, noop_callback());
+    Factory factory(6, "constant", 0, "newton", 3, quick_parameters(), TEST_SEED, noop_callback(), {}, std::chrono::milliseconds(0));
 
     auto sphere = factory.build();
 
@@ -40,7 +40,7 @@ TEST(FactoryTest, EXPENSIVE_BuildWithQuadraticDensityEqualizesCapacities) {
 
     CapacityConstrainedParameters parameters;
     parameters.relative_capacity_tolerance = 1e-6;
-    Factory factory(40, "quadratic", 5, "lloyd", 0, parameters, TEST_SEED, noop_callback());
+    Factory factory(40, "quadratic", 5, "lloyd", 0, parameters, TEST_SEED, noop_callback(), {}, std::chrono::milliseconds(0));
 
     auto sphere = factory.build();
 
@@ -60,7 +60,7 @@ TEST(FactoryTest, EXPENSIVE_BuildWithQuadraticDensityEqualizesCapacities) {
 TEST(FactoryTest, EXPENSIVE_BuildWithNoiseDensity) {
     REQUIRE_EXPENSIVE();
 
-    Factory factory(20, "noise", 2, "lloyd", 0, quick_parameters(), TEST_SEED, noop_callback());
+    Factory factory(20, "noise", 2, "lloyd", 0, quick_parameters(), TEST_SEED, noop_callback(), {}, std::chrono::milliseconds(0));
 
     auto sphere = factory.build();
 
@@ -70,7 +70,7 @@ TEST(FactoryTest, EXPENSIVE_BuildWithNoiseDensity) {
 TEST(FactoryTest, EXPENSIVE_BuildWithFittedNoiseDensity) {
     REQUIRE_EXPENSIVE();
 
-    Factory factory(20, "noise-fit", 2, "lloyd", 0, quick_parameters(), TEST_SEED, noop_callback());
+    Factory factory(20, "noise-fit", 2, "lloyd", 0, quick_parameters(), TEST_SEED, noop_callback(), {}, std::chrono::milliseconds(0));
 
     auto sphere = factory.build();
 

@@ -19,25 +19,95 @@
     position: fixed;
     top: 16px;
     left: 16px;
-    width: 236px;
+    width: 272px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
     padding: 14px 16px;
     border-radius: 10px;
     background: rgba(22, 23, 26, 0.82);
     backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.09);
+    scrollbar-width: thin;
   }
   h1 { margin: 0 0 10px; font-size: 13px; font-weight: 600; letter-spacing: 0.01em; }
   .row { display: flex; justify-content: space-between; gap: 10px; padding: 2px 0; }
   .row span:last-child { font-variant-numeric: tabular-nums; opacity: 0.75; }
   label { display: block; margin-top: 10px; }
-  select, input[type=range] { width: 100%; margin-top: 3px; }
-  select {
+  select, input[type=range], input[type=number], input[type=text] { width: 100%; margin-top: 3px; }
+  select, input[type=number], input[type=text] {
     background: rgba(255, 255, 255, 0.07);
     color: inherit;
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 6px;
     padding: 4px 6px;
+    font: inherit;
   }
+  input[type=number] { font-variant-numeric: tabular-nums; }
+  h2 {
+    margin: 16px 0 6px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.09);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.6;
+  }
+  #studio { display: none; }
+  #studio.available { display: block; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+  .grid label { margin-top: 4px; font-size: 12px; opacity: 0.85; }
+  button {
+    font: inherit;
+    color: inherit;
+    background: rgba(122, 162, 247, 0.22);
+    border: 1px solid rgba(122, 162, 247, 0.5);
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+  }
+  button:hover { background: rgba(122, 162, 247, 0.35); }
+  button.quiet {
+    background: transparent;
+    border-color: transparent;
+    padding: 0 4px;
+    opacity: 0.55;
+  }
+  button.quiet:hover { opacity: 1; }
+  #run { width: 100%; margin-top: 10px; }
+  #error { color: #f7768e; margin-top: 6px; min-height: 1em; }
+  #runs { list-style: none; margin: 0; padding: 0; }
+  #runs li {
+    display: grid;
+    grid-template-columns: 8px 1fr auto;
+    gap: 8px;
+    align-items: start;
+    padding: 6px 6px;
+    margin: 0 -6px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  #runs li:hover { background: rgba(255, 255, 255, 0.05); }
+  #runs li.selected { background: rgba(122, 162, 247, 0.14); }
+  #runs .dot { width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: #6b7280; }
+  #runs .dot.running { background: #7aa2f7; box-shadow: 0 0 0 3px rgba(122, 162, 247, 0.25); }
+  #runs .dot.queued { background: #e0af68; }
+  #runs .dot.finished { background: #9ece6a; }
+  #runs .dot.failed, #runs .dot.interrupted { background: #f7768e; }
+  #runs .title { font-weight: 600; }
+  #runs .detail { opacity: 0.65; font-variant-numeric: tabular-nums; }
+  #log {
+    margin-top: 8px;
+    padding: 8px;
+    max-height: 150px;
+    overflow: auto;
+    font: 11px/1.45 ui-monospace, Menlo, monospace;
+    white-space: pre;
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 6px;
+    opacity: 0.85;
+  }
+  #log:empty { display: none; }
   #drop {
     margin-top: 12px;
     padding: 12px;
@@ -65,6 +135,47 @@
   </label>
   <label>edge weight <input id="weight" type="range" min="1" max="30" value="9"></label>
   <div id="drop">drop a snapshot .json</div>
+
+  <div id="studio">
+    <h2>Run</h2>
+    <div class="grid">
+      <label>points <input id="points" type="number" min="2" max="20000" value="200"></label>
+      <label>field
+        <select id="density_field">
+          <option value="noise">noise</option>
+          <option value="noise-fit">noise (global fit)</option>
+          <option value="quadratic">quadratic</option>
+          <option value="quadratic-piecewise">quadratic (tiles)</option>
+          <option value="linear">linear</option>
+          <option value="constant">constant</option>
+        </select>
+      </label>
+      <label>seed <input id="seed" type="number" min="0" placeholder="random"></label>
+      <label>tolerance <input id="capacity_tolerance" type="text" value="1e-7"></label>
+      <label>warm start
+        <select id="warm_start">
+          <option value="lloyd">lloyd</option>
+          <option value="newton">newton</option>
+        </select>
+      </label>
+      <label>lloyd passes <input id="lloyd_passes" type="number" min="0" max="1000" value="5"></label>
+      <label>inner solver
+        <select id="inner_solver">
+          <option value="lbfgs">lbfgs</option>
+          <option value="newton">newton</option>
+        </select>
+      </label>
+      <label>max outer <input id="max_outer_iterations" type="number" min="1" max="1000" value="30"></label>
+      <label>max inner <input id="max_inner_iterations" type="number" min="1" max="100000" value="200"></label>
+      <label>newton warm steps <input id="newton_iterations" type="number" min="0" max="10000" value="50"></label>
+    </div>
+    <button id="run">Run</button>
+    <div id="error"></div>
+
+    <h2>Runs</h2>
+    <ul id="runs"></ul>
+    <div id="log"></div>
+  </div>
 </div>
 
 <script type="importmap">
@@ -285,6 +396,135 @@ const requested = query.get('snapshot');
 if (requested) {
   fetch(requested).then(response => response.text()).then(load).catch(() => {});
 }
+
+// The studio: present only when the page is served by viewer/server.py,
+// which runs generate_globe on request. A run's snapshot is rewritten while
+// it is in flight, so polling its version is enough to watch it evolve.
+const studio = {
+  fields: ['points', 'density_field', 'seed', 'capacity_tolerance', 'warm_start', 'lloyd_passes',
+           'inner_solver', 'max_outer_iterations', 'max_inner_iterations', 'newton_iterations'],
+  selected: query.get('run'),
+  version: null,
+  runs: [],
+};
+
+async function api(path, options) {
+  const response = await fetch(path, options);
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || response.statusText);
+  return payload;
+}
+
+function parameters() {
+  const values = {};
+  for (const id of studio.fields) values[id] = document.getElementById(id).value;
+  return values;
+}
+
+function describe(run) {
+  const p = run.parameters;
+  return `${p.points} · ${p.density_field} · ${p.inner_solver}` + (p.seed != null ? ` · seed ${p.seed}` : '');
+}
+
+function elapsed(run) {
+  if (!run.started) return '';
+  const seconds = ((run.finished || Date.now() / 1000) - run.started);
+  return seconds < 90 ? `${seconds.toFixed(0)}s` : `${(seconds / 60).toFixed(1)}m`;
+}
+
+function renderRuns() {
+  const list = document.getElementById('runs');
+  list.replaceChildren();
+
+  for (const run of studio.runs) {
+    const item = document.createElement('li');
+    item.className = run.id === studio.selected ? 'selected' : '';
+    item.addEventListener('click', () => select(run.id));
+
+    const dot = document.createElement('span');
+    dot.className = `dot ${run.status}`;
+
+    const text = document.createElement('div');
+    const title = document.createElement('div');
+    title.className = 'title';
+    title.textContent = describe(run);
+    const detail = document.createElement('div');
+    detail.className = 'detail';
+    const summary = run.summary ? run.summary.replace(/^\s*Final\s*/, '') : run.status;
+    detail.textContent = `${summary} ${elapsed(run)}`.trim();
+    text.append(title, detail);
+
+    const action = document.createElement('button');
+    action.className = 'quiet';
+    const active = run.status === 'running' || run.status === 'queued';
+    action.textContent = active ? 'stop' : '×';
+    action.title = active ? 'cancel this run' : 'delete this run';
+    action.addEventListener('click', async event => {
+      event.stopPropagation();
+      await api(`/api/runs/${run.id}` + (active ? '/cancel' : ''), { method: active ? 'POST' : 'DELETE' });
+      if (!active && studio.selected === run.id) studio.selected = null;
+      refreshRuns();
+    });
+
+    item.append(dot, text, action);
+    list.append(item);
+  }
+}
+
+async function refreshRuns() {
+  studio.runs = await api('/api/runs');
+  renderRuns();
+}
+
+function select(id) {
+  studio.selected = id;
+  studio.version = null;
+  history.replaceState(null, '', `?run=${id}`);
+  renderRuns();
+  poll();
+}
+
+async function poll() {
+  if (!studio.selected) return;
+  const run = await api(`/api/runs/${studio.selected}`);
+  document.getElementById('log').textContent = run.log.slice(-12).join('\n');
+
+  if (run.snapshot && run.snapshot_version !== studio.version) {
+    studio.version = run.snapshot_version;
+    const text = await (await fetch(`${run.snapshot}?v=${run.snapshot_version}`)).text();
+    load(text);
+  }
+
+  const index = studio.runs.findIndex(r => r.id === run.id);
+  if (index >= 0 && studio.runs[index].status !== run.status) refreshRuns();
+}
+
+async function startRun() {
+  document.getElementById('error').textContent = '';
+  try {
+    const run = await api('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(parameters()),
+    });
+    await refreshRuns();
+    select(run.id);
+  } catch (error) {
+    document.getElementById('error').textContent = error.message;
+  }
+}
+
+api('/api/runs').then(runs => {
+  studio.runs = runs;
+  document.getElementById('studio').classList.add('available');
+  document.getElementById('run').addEventListener('click', startRun);
+  renderRuns();
+  if (studio.selected) poll();
+  setInterval(() => {
+    poll().catch(() => {});
+    if (studio.runs.some(r => r.status === 'running' || r.status === 'queued')) refreshRuns().catch(() => {});
+  }, 1000);
+}).catch(() => {});
 
 function frame() {
   camera.aspect = innerWidth / innerHeight;

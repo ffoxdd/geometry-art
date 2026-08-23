@@ -43,6 +43,7 @@ struct Config {
     std::optional<unsigned int> seed;
     std::string output_dir;
     std::string snapshot_path;
+    double snapshot_interval = 0.0;
 };
 
 Config parse_arguments(int argc, char *argv[]);
@@ -115,13 +116,16 @@ int main(int argc, char *argv[]) {
         static_cast<size_t>(config.newton_iterations),
         optimizer_parameters,
         config.seed,
-        callback
+        callback,
+        [&](const globe::io::snapshot::Snapshot& snapshot) { write_snapshot(snapshot, config.snapshot_path); },
+        std::chrono::milliseconds(static_cast<long long>(config.snapshot_interval * 1000.0))
     );
 
     auto sphere = factory.build();
 
     if (!config.snapshot_path.empty()) {
         write_snapshot(factory.snapshot(), config.snapshot_path);
+        std::cout << "Snapshot: " << config.snapshot_path << ".json and " << config.snapshot_path << ".svg" << std::endl;
     }
 
     std::filesystem::create_directories(config.output_dir);
@@ -145,16 +149,23 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
+// Written beside the target and renamed into place, so a reader polling the
+// file never sees a partial one.
 void write_snapshot(const globe::io::snapshot::Snapshot& snapshot, const std::string& path) {
-    std::filesystem::create_directories(std::filesystem::path(path).parent_path());
+    std::filesystem::path target(path);
+    std::filesystem::create_directories(target.parent_path());
 
-    std::ofstream json(path + ".json");
-    globe::io::snapshot::JsonWriter().write(snapshot, json);
+    {
+        std::ofstream json(path + ".json.tmp");
+        globe::io::snapshot::JsonWriter().write(snapshot, json);
+    }
+    std::filesystem::rename(path + ".json.tmp", path + ".json");
 
-    std::ofstream drawing(path + ".svg");
-    globe::io::snapshot::SvgWriter().write(snapshot, drawing);
-
-    std::cout << "Snapshot: " << path << ".json and " << path << ".svg" << std::endl;
+    {
+        std::ofstream drawing(path + ".svg.tmp");
+        globe::io::snapshot::SvgWriter().write(snapshot, drawing);
+    }
+    std::filesystem::rename(path + ".svg.tmp", path + ".svg");
 }
 
 Config parse_arguments(int argc, char *argv[]) {
@@ -225,6 +236,11 @@ Config parse_arguments(int argc, char *argv[]) {
 
     app.add_option("--snapshot", config.snapshot_path)
         ->description("Write the tessellation as JSON and SVG to this path without an extension");
+
+    app.add_option("--snapshot-interval", config.snapshot_interval)
+        ->description("Also rewrite the snapshot every this many seconds while running (0 = only at the end)")
+        ->default_val(0.0)
+        ->check(CLI::NonNegativeNumber);
 
     app.add_option("--output-dir,-o", config.output_dir)
         ->description("Output directory for saved spheres")

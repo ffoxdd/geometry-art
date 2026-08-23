@@ -20,7 +20,9 @@
 #include "../../../geometry/cartesian/bounding_box_sampler/uniform_bounding_box_sampler.hpp"
 #include "../../../math/interval_sampler/uniform_interval_sampler.hpp"
 #include "../../../geometry/spherical/triangle_mesh.hpp"
+#include <chrono>
 #include <cstddef>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <memory>
@@ -37,6 +39,8 @@ using fields::spherical::PolynomialField;
 using fields::spherical::PolynomialFieldFitter;
 using geometry::spherical::TriangleMesh;
 
+using SnapshotCallback = std::function<void(const io::snapshot::Snapshot&)>;
+
 class Factory {
  public:
     Factory(
@@ -47,7 +51,9 @@ class Factory {
         size_t newton_iterations,
         CapacityConstrainedParameters optimizer_parameters,
         std::optional<unsigned int> seed,
-        Callback callback
+        Callback callback,
+        SnapshotCallback snapshot_callback,
+        std::chrono::milliseconds snapshot_interval
     );
 
     std::unique_ptr<Sphere> build();
@@ -75,6 +81,8 @@ class Factory {
     CapacityConstrainedParameters _optimizer_parameters;
     std::optional<unsigned int> _seed;
     Callback _callback;
+    SnapshotCallback _snapshot_callback;
+    std::chrono::milliseconds _snapshot_interval;
     io::snapshot::Snapshot _snapshot;
 
     template<fields::spherical::Field FieldType>
@@ -85,16 +93,19 @@ class Factory {
     [[nodiscard]] static SeededPointGenerator seeded_point_generator(unsigned int seed);
 
     template<fields::spherical::Field FieldType>
-    [[nodiscard]] std::unique_ptr<Sphere> warm_start(std::unique_ptr<Sphere> sphere, const FieldType& field) const;
+    [[nodiscard]] Callback snapshotting_callback(const FieldType& field) const;
 
     template<fields::spherical::Field FieldType>
-    [[nodiscard]] std::unique_ptr<Sphere> relax_with_lloyd(std::unique_ptr<Sphere> sphere, const FieldType& field) const;
+    [[nodiscard]] std::unique_ptr<Sphere> warm_start(std::unique_ptr<Sphere> sphere, const FieldType& field, const Callback& callback) const;
 
     template<fields::spherical::Field FieldType>
-    [[nodiscard]] std::unique_ptr<Sphere> relax_with_newton(std::unique_ptr<Sphere> sphere, const FieldType& field) const;
+    [[nodiscard]] std::unique_ptr<Sphere> relax_with_lloyd(std::unique_ptr<Sphere> sphere, const FieldType& field, const Callback& callback) const;
 
     template<fields::spherical::Field FieldType>
-    [[nodiscard]] std::unique_ptr<Sphere> optimize(std::unique_ptr<Sphere> sphere, const FieldType& field) const;
+    [[nodiscard]] std::unique_ptr<Sphere> relax_with_newton(std::unique_ptr<Sphere> sphere, const FieldType& field, const Callback& callback) const;
+
+    template<fields::spherical::Field FieldType>
+    [[nodiscard]] std::unique_ptr<Sphere> optimize(std::unique_ptr<Sphere> sphere, const FieldType& field, const Callback& callback) const;
 
     [[nodiscard]] static PiecewisePolynomialField sample_noise_field();
     [[nodiscard]] PiecewisePolynomialField sample_quadratic_field() const;
@@ -109,7 +120,9 @@ inline Factory::Factory(
     size_t newton_iterations,
     CapacityConstrainedParameters optimizer_parameters,
     std::optional<unsigned int> seed,
-    Callback callback
+    Callback callback,
+    SnapshotCallback snapshot_callback,
+    std::chrono::milliseconds snapshot_interval
 ) :
     _points_count(points_count),
     _density_field(std::move(density_field)),
@@ -118,7 +131,9 @@ inline Factory::Factory(
     _newton_iterations(newton_iterations),
     _optimizer_parameters(optimizer_parameters),
     _seed(seed),
-    _callback(std::move(callback)) {
+    _callback(std::move(callback)),
+    _snapshot_callback(std::move(snapshot_callback)),
+    _snapshot_interval(snapshot_interval) {
 }
 
 inline std::unique_ptr<Sphere> Factory::build() {
@@ -138,13 +153,38 @@ std::unique_ptr<Sphere> Factory::build_with(const FieldType& field) {
     std::cout << "Generating " << _points_count << " random points..." << std::flush;
     auto sphere = build_initial();
     std::cout << " done" << std::endl;
-    _callback(*sphere);
+    Callback callback = snapshotting_callback(field);
+    callback(*sphere);
 
-    sphere = warm_start(std::move(sphere), field);
-    sphere = optimize(std::move(sphere), field);
+    sphere = warm_start(std::move(sphere), field, callback);
+    sphere = optimize(std::move(sphere), field, callback);
     _snapshot = io::snapshot::capture(*sphere, field);
 
     return sphere;
+}
+
+// The optimizers report every step; snapshots are taken on a clock so the
+// cost of capturing one stays a fixed fraction of the run regardless of how
+// cheap the steps are.
+template<fields::spherical::Field FieldType>
+Callback Factory::snapshotting_callback(const FieldType& field) const {
+    if (!_snapshot_callback || _snapshot_interval.count() <= 0) {
+        return _callback;
+    }
+
+    auto last = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
+
+    return [this, &field, last](const Sphere& sphere) {
+        _callback(sphere);
+        auto now = std::chrono::steady_clock::now();
+
+        if (now - *last < _snapshot_interval) {
+            return;
+        }
+
+        *last = now;
+        _snapshot_callback(io::snapshot::capture(sphere, field));
+    };
 }
 
 inline PolynomialField Factory::create_polynomial_field() const {
@@ -209,21 +249,21 @@ inline Factory::SeededPointGenerator Factory::seeded_point_generator(unsigned in
 }
 
 template<fields::spherical::Field FieldType>
-std::unique_ptr<Sphere> Factory::warm_start(std::unique_ptr<Sphere> sphere, const FieldType& field) const {
+std::unique_ptr<Sphere> Factory::warm_start(std::unique_ptr<Sphere> sphere, const FieldType& field, const Callback& callback) const {
     if (_warm_start == "newton") {
-        return relax_with_newton(std::move(sphere), field);
+        return relax_with_newton(std::move(sphere), field, callback);
     }
 
-    return relax_with_lloyd(std::move(sphere), field);
+    return relax_with_lloyd(std::move(sphere), field, callback);
 }
 
 template<fields::spherical::Field FieldType>
-std::unique_ptr<Sphere> Factory::relax_with_lloyd(std::unique_ptr<Sphere> sphere, const FieldType& field) const {
+std::unique_ptr<Sphere> Factory::relax_with_lloyd(std::unique_ptr<Sphere> sphere, const FieldType& field, const Callback& callback) const {
     if (_lloyd_passes == 0) {
         return sphere;
     }
 
-    LloydOptimizer<FieldType> lloyd(std::move(sphere), field, _lloyd_passes, _callback);
+    LloydOptimizer<FieldType> lloyd(std::move(sphere), field, _lloyd_passes, callback);
     sphere = lloyd.optimize();
 
     std::cout << "  " << std::setw(8) << std::left << "Lloyd" << std::right <<
@@ -235,14 +275,14 @@ std::unique_ptr<Sphere> Factory::relax_with_lloyd(std::unique_ptr<Sphere> sphere
 }
 
 template<fields::spherical::Field FieldType>
-std::unique_ptr<Sphere> Factory::relax_with_newton(std::unique_ptr<Sphere> sphere, const FieldType& field) const {
+std::unique_ptr<Sphere> Factory::relax_with_newton(std::unique_ptr<Sphere> sphere, const FieldType& field, const Callback& callback) const {
     if (_newton_iterations == 0) {
         return sphere;
     }
 
     NewtonParameters parameters;
     parameters.max_iterations = _newton_iterations;
-    NewtonOptimizer<FieldType> newton(std::move(sphere), field, parameters, _callback);
+    NewtonOptimizer<FieldType> newton(std::move(sphere), field, parameters, callback);
     sphere = newton.optimize();
 
     const NewtonReport& report = newton.report();
@@ -255,8 +295,8 @@ std::unique_ptr<Sphere> Factory::relax_with_newton(std::unique_ptr<Sphere> spher
 }
 
 template<fields::spherical::Field FieldType>
-std::unique_ptr<Sphere> Factory::optimize(std::unique_ptr<Sphere> sphere, const FieldType& field) const {
-    CapacityConstrainedOptimizer<FieldType> optimizer(std::move(sphere), field, _optimizer_parameters, _callback);
+std::unique_ptr<Sphere> Factory::optimize(std::unique_ptr<Sphere> sphere, const FieldType& field, const Callback& callback) const {
+    CapacityConstrainedOptimizer<FieldType> optimizer(std::move(sphere), field, _optimizer_parameters, callback);
     sphere = optimizer.optimize();
 
     const auto& report = optimizer.report();
