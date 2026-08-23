@@ -6,6 +6,7 @@
 #include "multi_index.hpp"
 #include "../../types.hpp"
 #include <CGAL/assertions.h>
+#include <algorithm>
 #include <cmath>
 
 namespace globe::math::polynomial {
@@ -24,6 +25,9 @@ class Polynomial {
     [[nodiscard]] double value(const Vector3& point) const;
     [[nodiscard]] double integrate(const Moments& moments) const;
     [[nodiscard]] Polynomial times_coordinate(int axis) const;
+    [[nodiscard]] Polynomial times_linear_form(const Vector3& form) const;
+    [[nodiscard]] Polynomial plus(const Polynomial& other) const;
+    [[nodiscard]] Polynomial scaled(double factor) const;
 
     [[nodiscard]] bool operator==(const Polynomial& other) const = default;
 
@@ -79,6 +83,50 @@ inline Polynomial Polynomial::times_coordinate(int axis) const {
 
     for (const MultiIndex& index : MultiIndex::all_up_to(max_degree())) {
         result.set_coefficient(index.raised(axis), _coefficients.at(index));
+    }
+
+    return result;
+}
+
+// The generalisation of multiplying by one coordinate: any linear form
+// `form . x`, which is what a barycentric coordinate is.
+inline Polynomial Polynomial::times_linear_form(const Vector3& form) const {
+    Polynomial result(max_degree() + 1);
+
+    for (const MultiIndex& index : MultiIndex::all_up_to(max_degree())) {
+        double coefficient = _coefficients.at(index);
+
+        if (coefficient == 0.0) {
+            continue;
+        }
+
+        for (int axis = 0; axis < 3; ++axis) {
+            result.add_coefficient(index.raised(axis), coefficient * form[axis]);
+        }
+    }
+
+    return result;
+}
+
+inline Polynomial Polynomial::plus(const Polynomial& other) const {
+    Polynomial result(std::max(max_degree(), other.max_degree()));
+
+    for (const MultiIndex& index : MultiIndex::all_up_to(max_degree())) {
+        result.add_coefficient(index, _coefficients.at(index));
+    }
+
+    for (const MultiIndex& index : MultiIndex::all_up_to(other.max_degree())) {
+        result.add_coefficient(index, other.coefficient(index));
+    }
+
+    return result;
+}
+
+inline Polynomial Polynomial::scaled(double factor) const {
+    Polynomial result(max_degree());
+
+    for (const MultiIndex& index : MultiIndex::all_up_to(max_degree())) {
+        result.set_coefficient(index, _coefficients.at(index) * factor);
     }
 
     return result;

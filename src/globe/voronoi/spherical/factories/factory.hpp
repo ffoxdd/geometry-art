@@ -14,6 +14,7 @@
 #include "../../../fields/spherical/piecewise_polynomial_field.hpp"
 #include "../../../fields/spherical/polynomial_field.hpp"
 #include "../../../fields/spherical/polynomial_field_fitter.hpp"
+#include "../../../fields/spherical/powell_sabin_interpolant.hpp"
 #include "../../../generators/cartesian/random_point_generator.hpp"
 #include "../../../generators/spherical/fibonacci_point_generator.hpp"
 #include "../../../generators/spherical/random_point_generator.hpp"
@@ -37,6 +38,7 @@ using globe::Interval;
 using fields::spherical::PiecewisePolynomialField;
 using fields::spherical::PolynomialField;
 using fields::spherical::PolynomialFieldFitter;
+using fields::spherical::PowellSabinInterpolant;
 using geometry::spherical::TriangleMesh;
 
 using SnapshotCallback = std::function<void(const io::snapshot::Snapshot&)>;
@@ -68,6 +70,7 @@ class Factory {
     static constexpr int NOISE_MESH_SUBDIVISIONS = 4;
     static constexpr double NOISE_DENSITY_FLOOR = 0.2;
     static constexpr int NOISE_MESH_DEGREE = 2;
+    static constexpr int SMOOTH_NOISE_SUBDIVISIONS = 4;
 
     using SeededBoundingBoxSampler = globe::UniformBoundingBoxSampler<globe::UniformIntervalSampler>;
     using SeededCartesianGenerator = generators::cartesian::RandomPointGenerator<SeededBoundingBoxSampler>;
@@ -108,6 +111,7 @@ class Factory {
     [[nodiscard]] std::unique_ptr<Sphere> optimize(std::unique_ptr<Sphere> sphere, const FieldType& field, const Callback& callback) const;
 
     [[nodiscard]] static PiecewisePolynomialField sample_noise_field();
+    [[nodiscard]] static PiecewisePolynomialField sample_smooth_noise_field();
     [[nodiscard]] PiecewisePolynomialField sample_quadratic_field() const;
     [[nodiscard]] static PolynomialField fit_noise_field();
 };
@@ -139,6 +143,10 @@ inline Factory::Factory(
 inline std::unique_ptr<Sphere> Factory::build() {
     if (_density_field == "noise") {
         return build_with(sample_noise_field());
+    }
+
+    if (_density_field == "noise-smooth") {
+        return build_with(sample_smooth_noise_field());
     }
 
     if (_density_field == "quadratic-piecewise") {
@@ -213,6 +221,26 @@ inline PiecewisePolynomialField Factory::sample_noise_field() {
         field.mesh().triangles.size() << " triangles" << std::endl;
 
     return field;
+}
+
+// The C1 representation: quadratic pieces on the Powell-Sabin split, whose
+// gradient is continuous and whose positivity is certified by the
+// coefficients rather than sampled for.
+inline PiecewisePolynomialField Factory::sample_smooth_noise_field() {
+    NoiseField noise_field(Interval(NOISE_DENSITY_FLOOR, 1.0));
+    PowellSabinInterpolant interpolant;
+    auto result = interpolant.interpolate(TriangleMesh::icosphere(SMOOTH_NOISE_SUBDIVISIONS), noise_field);
+
+    std::cout << "Interpolated noise onto a C1 quadratic spline with " <<
+        result.field.mesh().triangles.size() << " pieces, density at least " <<
+        result.lowest_coefficient << std::endl;
+
+    if (result.least_damping < 1.0) {
+        std::cout << "  the mesh does not carry the field's gradients; damped to " <<
+            result.least_damping << " to keep the density positive" << std::endl;
+    }
+
+    return std::move(result.field);
 }
 
 // The quadratic field represented on the noise mesh: the same function, so

@@ -250,7 +250,7 @@ a:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     <li><a href="#chain"><span>7</span>Density to landscape</a></li>
     <li><a href="#dropped"><span>8</span>The term we leave out</a></li>
     <li><a href="#noise"><span>9</span>How noise becomes tiles</a></li>
-    <li><a href="#tiles"><span>10</span>Which tiles next</a></li>
+    <li><a href="#tiles"><span>10</span>Which tiles, and why</a></li>
     <li><a href="#glossary"><span>11</span>Glossary</a></li>
   </ol>
 </nav>
@@ -423,9 +423,12 @@ a:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 </section>
 
 <section id="tiles">
-<h2><span class="number">10</span>Which tiles next</h2>
+<h2><span class="number">10</span>Which tiles, and why</h2>
 <p>A reminder of the contract that makes everything exact. A polynomial density integrated over a region bounded by <strong>great-circle arcs</strong> has a closed-form answer (Stokes’ theorem, applied recursively). Voronoi cells on the sphere are bounded by great-circle arcs. So as long as the density is polynomial — or polynomial on tiles whose <em>own</em> edges are great-circle arcs, so that a cell clipped to a tile is again such a region — every integral the solver needs is exact. No quadrature, no sampling error, no mesh of the <em>space</em>. What we discretise instead is the <em>function</em>: we replace the density you hand us with the nearest member of a family we can integrate exactly.</p>
-<p>The simplest family is “polynomial per triangle, values agree at edges”. The family we want is “polynomial per triangle, values <strong>and slopes</strong> agree at edges” — a C¹ spline on the sphere. The standard way to build one from quadratic pieces is the <strong>Powell–Sabin</strong> split: cut each triangle into six, then the nine numbers “value and slope at each corner” determine a quadratic on every sixth with matching slopes across all seams. Sampling value and slope at mesh vertices is something we can do for any density you give us — function, noise, image. The <strong>Bézier form</strong> writes each piece in terms of a few control values; if all the control values are positive the density is positive, which is how “no negative density, ever” becomes a check on a list of numbers rather than a hope. Because each sixth is still a polynomial on a great-circle triangle, the integration path does not change at all: a C¹ field is just a piecewise field built more carefully.</p>
+<p>The simplest family is “polynomial per triangle, values agree at edges” — what you get by sampling the function at six points per triangle and fitting. Neighbouring pieces then share those samples, so the values match along the seams but the <em>slopes</em> do not: the field is continuous with kinks in it, and by the table in section 7 those kinks are what make the constraint curvature jump.</p>
+<p>The family that removes them is “polynomial per triangle, values <strong>and slopes</strong> agree at edges” — a C¹ spline. The standard construction from quadratic pieces is the <strong>Powell–Sabin</strong> split: cut each triangle into six, and the nine numbers “value and gradient at each corner” then determine a quadratic on every sixth with matching slopes across every seam. The one subtle part is where to cut: the split point on a shared edge has to be where the great circle joining the two neighbouring triangles’ interior points crosses it. That placement is what makes the two sides agree on the direction the surface leaves the edge in; any other split point and no such spline exists.</p>
+<p>Two things come free with it. First, the <strong>Bézier form</strong> writes each piece in terms of a few control values, and the piece is bounded below by the least of them — so “this density is positive everywhere” becomes a check on a list of numbers rather than a search over the sphere that might miss a dip. Second, when the mesh is too coarse to carry the gradients you sampled, the interpolant overshoots and can dip below zero; damping the gradients <em>at the vertices</em> pulls it back, and because a vertex is shared by every piece that touches it, the field stays exactly C¹ while it is brought back into range. The report says how much damping was needed, which is a direct measurement of whether the mesh resolves the field.</p>
+<p>Because each sixth is still a polynomial on a great-circle triangle, none of this touches the integration path: a C¹ field is just a piecewise field built more carefully.</p>
 <p>How fine should the mesh be? Not “as fine as the density’s detail”. Cells have a size — roughly</p>
 <figure class="plate">
 <math display="block">

@@ -179,7 +179,7 @@ Config parse_arguments(int argc, char *argv[]) {
 
     app.add_option("--density-field,-f", config.density_field)
         ->description("Density field type")
-        ->check(CLI::IsMember({"constant", "linear", "quadratic", "quadratic-piecewise", "noise", "noise-fit"}))
+        ->check(CLI::IsMember({"constant", "linear", "quadratic", "quadratic-piecewise", "noise", "noise-smooth", "noise-fit"}))
         ->default_val("quadratic");
 
     app.add_option("--render", config.perform_render)

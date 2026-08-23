@@ -29,7 +29,7 @@ VIEWER = Path(__file__).resolve().parent
 
 PARAMETERS = {
     "points": {"flag": "--points", "type": int, "low": 2, "high": 20000, "default": 200},
-    "density_field": {"flag": "--density-field", "type": str, "choices": ["constant", "linear", "quadratic", "quadratic-piecewise", "noise", "noise-fit"], "default": "noise"},
+    "density_field": {"flag": "--density-field", "type": str, "choices": ["constant", "linear", "quadratic", "quadratic-piecewise", "noise", "noise-smooth", "noise-fit"], "default": "noise"},
     "seed": {"flag": "--seed", "type": int, "low": 0, "high": 2**31 - 1, "default": None},
     "warm_start": {"flag": "--warm-start", "type": str, "choices": ["lloyd", "newton"], "default": "lloyd"},
     "lloyd_passes": {"flag": "--lloyd-passes", "type": int, "low": 0, "high": 1000, "default": 5},
