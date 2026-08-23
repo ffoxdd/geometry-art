@@ -249,8 +249,9 @@ a:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
     <li><a href="#smoothness"><span>6</span>Smoothness</a></li>
     <li><a href="#chain"><span>7</span>Density to landscape</a></li>
     <li><a href="#dropped"><span>8</span>The term we leave out</a></li>
-    <li><a href="#tiles"><span>9</span>Why tiles, and which</a></li>
-    <li><a href="#glossary"><span>10</span>Glossary</a></li>
+    <li><a href="#noise"><span>9</span>How noise becomes tiles</a></li>
+    <li><a href="#tiles"><span>10</span>Which tiles next</a></li>
+    <li><a href="#glossary"><span>11</span>Glossary</a></li>
   </ol>
 </nav>
 
@@ -406,8 +407,23 @@ a:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 <p>Near a solution the <strong>fourth</strong> term dies on its own: the mass errors <math><msub><mi>c</mi><mi>k</mi></msub></math> go to zero. The <strong>second</strong> does not. The prices <math><msub><mi>λ</mi><mi>k</mi></msub></math> settle to nonzero values — mass genuinely has a price when the density varies — so the Gauss–Newton model is permanently off by <math><mo>∑</mo><msub><mi>λ</mi><mi>k</mi></msub><msup><mo>∇</mo><mn>2</mn></msup><msub><mi>c</mi><mi>k</mi></msub></math>. That alone makes it a good quasi-Newton method rather than a true one: it still converges, but linearly rather than quadratically, and on a kinked density the missing term is exactly the one that jumps. The test for how much this costs is to feed the trust-region step the true curvature measured by finite differences — nudge the sites along a direction, re-evaluate the slope, divide by the nudge — and count iterations. When that halves the count, the term is worth deriving.</p>
 </section>
 
+<section id="noise">
+<h2><span class="number">9</span>How a noise field becomes tiles</h2>
+<p>This is the whole “discretise the function, not the space” idea made concrete. Passing <code>-f noise</code> does four things:</p>
+<ol class="steps">
+  <li><strong>Start with something we cannot integrate.</strong> The noise is a Perlin-style function evaluated anywhere on the sphere, floored into a range like 0.2–1.0 so density is never zero. It is smooth, but it has no formula that integrates in closed form.</li>
+  <li><strong>Lay a triangle mesh over the sphere.</strong> An icosahedron, each triangle split into four, four times over: 5 120 spherical triangles about 6° across. Every edge is a great-circle arc — the same kind of curve the cells are made of.</li>
+  <li><strong>On each triangle, replace the noise by the quadratic that agrees with it at six points.</strong> A quadratic on the sphere has six degrees of freedom,
+    <math><msup><mi>x</mi><mn>2</mn></msup><mo>,</mo><msup><mi>y</mi><mn>2</mn></msup><mo>,</mo><msup><mi>z</mi><mn>2</mn></msup><mo>,</mo><mi>x</mi><mi>y</mi><mo>,</mo><mi>y</mi><mi>z</mi><mo>,</mo><mi>z</mi><mi>x</mi></math>,
+    and because <math><msup><mi>x</mi><mn>2</mn></msup><mo>+</mo><msup><mi>y</mi><mn>2</mn></msup><mo>+</mo><msup><mi>z</mi><mn>2</mn></msup><mo>=</mo><mn>1</mn></math> on the sphere this family already contains the constants. Sample the noise at the three corners and three edge midpoints, solve a six-by-six system, and you have the one quadratic through those values. Neighbouring triangles share their samples, so tiles agree in <em>value</em> along shared edges — no gaps — but not in slope. Kinks.</li>
+  <li><strong>Now every integral is exact.</strong> A cell is bounded by great-circle arcs; a tile is bounded by great-circle arcs; their overlap is again such a polygon, and the tile’s quadratic integrates over it in closed form. The solver sums over the five to ten tiles a cell touches. The only approximation in the pipeline is step 3, made once, up front.</li>
+</ol>
+<p>Why this is the right trade: the error in step 3 is a quadratic fitting a smooth function over a 6° patch — small — and, by the bandwidth rule, detail finer than a cell cannot move the cells anyway. At 200 sites a cell is about 8° across, so 6° tiles already resolve everything the tessellation can see; at 2 000 sites you would subdivide once or twice more. What you never do is make the mesh as fine as the noise.</p>
+<aside class="note"><p>The alternative, <code>-f noise-fit</code>, fits one global degree-8 polynomial to twenty thousand samples. It is perfectly smooth, but one polynomial cannot follow noise across the whole sphere without wobbling, and raising the degree makes the fit ill-conditioned. Local tiles of low degree have neither problem, and their one weakness — the kinks — is fixable.</p></aside>
+</section>
+
 <section id="tiles">
-<h2><span class="number">9</span>Why tiles at all, and which tiles</h2>
+<h2><span class="number">10</span>Which tiles next</h2>
 <p>A reminder of the contract that makes everything exact. A polynomial density integrated over a region bounded by <strong>great-circle arcs</strong> has a closed-form answer (Stokes’ theorem, applied recursively). Voronoi cells on the sphere are bounded by great-circle arcs. So as long as the density is polynomial — or polynomial on tiles whose <em>own</em> edges are great-circle arcs, so that a cell clipped to a tile is again such a region — every integral the solver needs is exact. No quadrature, no sampling error, no mesh of the <em>space</em>. What we discretise instead is the <em>function</em>: we replace the density you hand us with the nearest member of a family we can integrate exactly.</p>
 <p>The simplest family is “polynomial per triangle, values agree at edges”. The family we want is “polynomial per triangle, values <strong>and slopes</strong> agree at edges” — a C¹ spline on the sphere. The standard way to build one from quadratic pieces is the <strong>Powell–Sabin</strong> split: cut each triangle into six, then the nine numbers “value and slope at each corner” determine a quadratic on every sixth with matching slopes across all seams. Sampling value and slope at mesh vertices is something we can do for any density you give us — function, noise, image. The <strong>Bézier form</strong> writes each piece in terms of a few control values; if all the control values are positive the density is positive, which is how “no negative density, ever” becomes a check on a list of numbers rather than a hope. Because each sixth is still a polynomial on a great-circle triangle, the integration path does not change at all: a C¹ field is just a piecewise field built more carefully.</p>
 <p>How fine should the mesh be? Not “as fine as the density’s detail”. Cells have a size — roughly</p>
@@ -421,7 +437,7 @@ a:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 </section>
 
 <section id="glossary">
-<h2><span class="number">10</span>Glossary</h2>
+<h2><span class="number">11</span>Glossary</h2>
 <dl class="glossary">
 <div><dt>Gradient / slope</dt><dd>The direction and rate of steepest increase. We step against it.</dd></div>
 <div><dt>Hessian / curvature</dt><dd>How the slope changes as you move; a matrix, but we only ever use it as “curvature along a direction”.</dd></div>
