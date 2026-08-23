@@ -77,6 +77,20 @@ the cost shows up as iteration count, with Newton needing roughly
 twice the inner iterations it needs on a polynomial field. Restoring
 C² means making the density C¹ — C¹ elements.
 
+**Aliasing — real, and it is what limits how coarse the mesh can be.**
+Choosing a representation's coefficients by evaluating the field at points
+puts whatever the field does between those points into the result as
+though it were structure at the mesh's scale. What that corrupts is the
+local average, which is the one thing a tessellation reads, so the
+bandwidth rule's licence to stop at cell scale is not usable with a
+sampling operator: at 200 sites a mesh matched to the cell scale is
+several percent wrong about cell masses. Reading a gradient at a point is
+the worst case, since a difference quotient on a rough field reports the
+roughness rather than the trend. `LocalQuadraticFit` reads each vertex by
+least squares over a mesh-scale neighbourhood instead, which halves the
+cell-scale error and, more usefully, keeps the represented field inside
+the range of the field it came from.
+
 **Positivity — real, and now certified rather than sampled for.** The
 Bernstein-Bezier form bounds a piece below by its coefficients, so
 `PowellSabinInterpolant` reports a lower bound on the density it built

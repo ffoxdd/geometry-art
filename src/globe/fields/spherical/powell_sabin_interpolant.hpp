@@ -1,6 +1,7 @@
 #ifndef GLOBEART_SRC_GLOBE_FIELDS_SPHERICAL_POWELL_SABIN_INTERPOLANT_HPP_
 #define GLOBEART_SRC_GLOBE_FIELDS_SPHERICAL_POWELL_SABIN_INTERPOLANT_HPP_
 
+#include "local_quadratic_fit.hpp"
 #include "piecewise_polynomial_field.hpp"
 #include "../scalar/field.hpp"
 #include "../../types.hpp"
@@ -13,6 +14,7 @@
 #include <Eigen/Dense>
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <limits>
 #include <utility>
@@ -27,7 +29,7 @@ using geometry::spherical::TriangleMesh;
 using globe::math::polynomial::MultiIndex;
 using globe::math::polynomial::Polynomial;
 
-// Builds a C1 field from any callable by sampling its value and gradient at
+// Builds a C1 field from any callable by reading its value and gradient at
 // the mesh vertices.
 //
 // The pieces are quadratics on the Powell-Sabin refinement, which is the
@@ -39,7 +41,13 @@ using globe::math::polynomial::Polynomial;
 //     smoothness its convergence rests on;
 //   - the pieces are bounded by their Bezier coefficients, so a lower bound
 //     on the density is read off the coefficients rather than sampled for,
-//     and a fit that dips below zero is impossible to miss.
+//     and a fit that dips below zero is impossible to miss;
+//   - the vertex readings come from a fit across a neighbourhood the size
+//     of the mesh rather than from samples at the vertex, so structure
+//     finer than the mesh is averaged away instead of being aliased into
+//     the result. That is what makes the represented field faithful in the
+//     local averages the tessellation reads, at a mesh no finer than it
+//     needs to be.
 //
 // Every piece is still a polynomial on a great-circle triangle, so the
 // integration path is the one already in use.
@@ -60,7 +68,11 @@ class PowellSabinInterpolant {
         double least_damping;
     };
 
-    explicit PowellSabinInterpolant(double gradient_step = 1e-5);
+    // The neighbourhood each vertex is read over, as a fraction of the mean
+    // distance between neighbouring vertices. Below about a half the fit
+    // stops averaging usefully; well above one it reaches past the
+    // structure the mesh is able to carry.
+    explicit PowellSabinInterpolant(double stencil_fraction = DEFAULT_STENCIL_FRACTION);
 
     template<scalar::Field ScalarFieldType>
     [[nodiscard]] Result interpolate(const TriangleMesh& mesh, ScalarFieldType& scalar_field) const;
@@ -72,6 +84,7 @@ class PowellSabinInterpolant {
     static constexpr int VERTEX_CONDITION_COUNT = 12;
     static constexpr int SMOOTHNESS_CONDITION_COUNT = 12;
     static constexpr int DEGREE = 2;
+    static constexpr double DEFAULT_STENCIL_FRACTION = 0.75;
     static constexpr int MAXIMUM_DAMPING_ROUNDS = 60;
     static constexpr double DAMPING_FACTOR = 0.5;
 
@@ -100,10 +113,9 @@ class PowellSabinInterpolant {
         {2, 10, 11, 15}
     }};
 
-    double _gradient_step;
+    double _stencil_fraction;
 
-    template<scalar::Field ScalarFieldType>
-    [[nodiscard]] Vector3 tangential_gradient(ScalarFieldType& scalar_field, const VectorS2& point) const;
+    [[nodiscard]] static double mean_edge_length(const TriangleMesh& mesh);
 
     [[nodiscard]] static std::array<Vector3, 3> corner_gradients(
         const PowellSabinRefinement::Cell& cell,
@@ -123,8 +135,8 @@ class PowellSabinInterpolant {
     [[nodiscard]] static bool contains(const std::array<int, 3>& values, int value);
 };
 
-inline PowellSabinInterpolant::PowellSabinInterpolant(double gradient_step) :
-    _gradient_step(gradient_step) {
+inline PowellSabinInterpolant::PowellSabinInterpolant(double stencil_fraction) :
+    _stencil_fraction(stencil_fraction) {
 }
 
 template<scalar::Field ScalarFieldType>
@@ -134,12 +146,14 @@ PowellSabinInterpolant::Result PowellSabinInterpolant::interpolate(
 ) const {
     PowellSabinRefinement refinement(mesh);
 
+    LocalQuadraticFit reading(_stencil_fraction * mean_edge_length(mesh));
     std::vector<double> values(mesh.vertices.size());
     std::vector<Vector3> gradients(mesh.vertices.size());
 
     for (size_t index = 0; index < mesh.vertices.size(); ++index) {
-        values[index] = scalar_field.value(mesh.vertices[index]);
-        gradients[index] = tangential_gradient(scalar_field, mesh.vertices[index]);
+        LocalQuadraticFit::Reading local = reading.at(scalar_field, mesh.vertices[index]);
+        values[index] = local.value;
+        gradients[index] = local.tangential_gradient;
     }
 
     const std::vector<PowellSabinRefinement::Cell>& cells = refinement.cells();
@@ -244,22 +258,20 @@ inline std::array<Vector3, 3> PowellSabinInterpolant::corner_gradients(
     return result;
 }
 
-// Central differences along two directions of the tangent plane.
-template<scalar::Field ScalarFieldType>
-Vector3 PowellSabinInterpolant::tangential_gradient(ScalarFieldType& scalar_field, const VectorS2& point) const {
-    Vector3 helper = std::abs(point.z()) < 0.9 ? Vector3::UnitZ() : Vector3::UnitX();
-    Vector3 first = point.cross(helper).normalized();
-    Vector3 second = point.cross(first);
+inline double PowellSabinInterpolant::mean_edge_length(const TriangleMesh& mesh) {
+    double total = 0.0;
+    size_t count = 0;
 
-    Vector3 gradient = Vector3::Zero();
-
-    for (const Vector3& direction : {first, second}) {
-        double ahead = scalar_field.value(VectorS2(point + _gradient_step * direction).normalized());
-        double behind = scalar_field.value(VectorS2(point - _gradient_step * direction).normalized());
-        gradient += (ahead - behind) / (2.0 * _gradient_step) * direction;
+    for (const std::array<size_t, 3>& triangle : mesh.triangles) {
+        for (int corner = 0; corner < 3; ++corner) {
+            const VectorS2& from = mesh.vertices[triangle[corner]];
+            const VectorS2& to = mesh.vertices[triangle[(corner + 1) % 3]];
+            total += std::acos(std::clamp(from.dot(to), -1.0, 1.0));
+            ++count;
+        }
     }
 
-    return gradient;
+    return total / static_cast<double>(count);
 }
 
 // One small dense solve per cell. The unknowns are the coefficients at the

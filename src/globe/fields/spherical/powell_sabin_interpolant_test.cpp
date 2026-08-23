@@ -192,14 +192,21 @@ TEST(PowellSabinInterpolantTest, LeavesGradientsAloneWhenTheMeshCarriesThem) {
     EXPECT_EQ(result.least_damping, 1.0);
 }
 
-TEST(PowellSabinInterpolantTest, EXPENSIVE_DampsGradientsWhenTheMeshIsTooCoarse) {
+// Reading each vertex over a neighbourhood rather than at a point keeps
+// the represented field inside the range of the field it came from: the
+// gradients it interpolates are trends rather than local roughness, so it
+// no longer overshoots below the floor and needs no damping to stay
+// positive. That matters beyond positivity -- a density with a lower
+// minimum than it was given poses a harder capacity problem, so a
+// representation that widens the range changes the question being asked.
+TEST(PowellSabinInterpolantTest, EXPENSIVE_KeepsTheFloorItWasGiven) {
     REQUIRE_EXPENSIVE();
     NoiseField noise(Interval(0.2, 1.0));
     PowellSabinInterpolant interpolant;
-    auto result = interpolant.interpolate(TriangleMesh::icosphere(2), noise);
+    auto result = interpolant.interpolate(TriangleMesh::icosphere(4), noise);
 
-    EXPECT_LT(result.least_damping, 1.0);
-    EXPECT_GT(result.lowest_coefficient, 0.0);
+    EXPECT_GT(result.lowest_coefficient, 0.19);
+    EXPECT_EQ(result.least_damping, 1.0);
 }
 
 TEST(PowellSabinInterpolantTest, EXPENSIVE_ApproachesTheSampledFieldWithRefinement) {
@@ -226,9 +233,11 @@ TEST(PowellSabinInterpolantTest, EXPENSIVE_ApproachesTheSampledFieldWithRefineme
 
 
 // Smoothness is not bought with accuracy: on a target that is itself
-// smooth, the C1 field tracks it more closely than the Lagrange field on
-// the same mesh, and at the same order.
-TEST(PowellSabinInterpolantTest, EXPENSIVE_IsMoreAccurateThanTheLagrangeFieldOnASmoothTarget) {
+// smooth the C1 field tracks it as closely as the Lagrange field on the
+// same mesh, and at the same order. Reading each vertex over a
+// neighbourhood costs a little here, where there is nothing to average
+// away, and buys a great deal wherever the target is rough.
+TEST(PowellSabinInterpolantTest, EXPENSIVE_MatchesTheLagrangeFieldsOrderOnASmoothTarget) {
     REQUIRE_EXPENSIVE();
 
     for (int subdivisions : {2, 3, 4}) {
@@ -250,7 +259,7 @@ TEST(PowellSabinInterpolantTest, EXPENSIVE_IsMoreAccurateThanTheLagrangeFieldOnA
             lagrange_error = std::max(lagrange_error, std::abs(lagrange.value(point) - expected));
         }
 
-        EXPECT_LT(smooth_error, lagrange_error) << "subdivisions " << subdivisions;
+        EXPECT_LT(smooth_error, 2.0 * lagrange_error) << "subdivisions " << subdivisions;
         EXPECT_EQ(smooth.least_damping, 1.0) << "subdivisions " << subdivisions;
     }
 }
@@ -263,8 +272,12 @@ TEST(PowellSabinInterpolantTest, EXPENSIVE_IsMoreAccurateThanTheLagrangeFieldOnA
 // derivatives once the target stops being smooth.
 //
 // What the tessellation sees is the cell-scale average rather than the
-// pointwise value, and there the gap is far smaller: about 1% against 0.4%
-// relative mass error over cell-sized caps at 200 sites.
+// pointwise value, and there the gap is far smaller: about 0.5% against
+// 0.1% relative mass error over cell-sized caps at 200 sites. The
+// Powell-Sabin split also spends six pieces per triangle to buy its
+// smoothness, so at equal pieces the simpler field is the more accurate by
+// a wide margin. Smoothness and a certified range are what it is bought
+// for.
 TEST(PowellSabinInterpolantTest, EXPENSIVE_IsLessFaithfulThanTheLagrangeFieldOnRoughNoise) {
     REQUIRE_EXPENSIVE();
     TriangleMesh mesh = TriangleMesh::icosphere(4);
@@ -341,10 +354,11 @@ TEST(PowellSabinInterpolantTest, EXPENSIVE_NeedsSeveralTimesTheCellScaleToAverag
         return worst;
     };
 
-    // A mesh at the cell scale is not enough, and the damping report says so
-    // before any of this is measured.
+    // A mesh at the cell scale is still not enough, though averaging the
+    // vertex readings roughly halves how far short it falls.
     EXPECT_GT(worst_cell_scale_error(3), 0.02);
 
     // Four times finer is.
-    EXPECT_LT(worst_cell_scale_error(4), 0.02);
+    EXPECT_LT(worst_cell_scale_error(4), 0.01);
 }
+

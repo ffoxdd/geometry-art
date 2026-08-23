@@ -32,35 +32,29 @@ bisectors. Both are geometry-portable in the way the sweep rate is.
 *Verified by:* the analytic curvature matching the finite-difference
 one to the difference error, and matching its iteration counts.
 
-### 2. Average onto the mesh instead of sampling onto it
-Both representations choose their coefficients by evaluating the field at
-points: the Lagrange one at six points per triangle, the C1 one at each
-vertex's value and gradient. Whatever the field does between those points
-is aliased into the result rather than averaged away -- and an average
-over a cell is exactly what the tessellation reads.
+### 2. Project onto the space rather than fitting each vertex separately
+Vertex readings now come from a least-squares quadratic fit over a
+neighbourhood the size of the mesh rather than from samples at the vertex
+(`LocalQuadraticFit`). Structure finer than the mesh lands in the residual
+instead of being aliased into the result, and no gradient is ever read as
+a difference quotient. Measured on the noise at 200 sites, worst relative
+mass error over cell-sized caps, and the certified lower bound:
 
-Measured on the noise at 200 sites, worst relative mass error over
-cell-sized caps:
-
-| mesh | C1 | Lagrange |
+| mesh | cell-scale error | lower bound |
 |---|---|---|
-| level 3, about the cell scale | 5.8% | 1.5% |
-| level 4, a quarter of it | 0.97% | 0.13% |
+| level 3, about the cell scale | 5.8% -> 3.9% | 0.039 -> 0.145 |
+| level 4, a quarter of it | 0.97% -> 0.46% | 0.066 -> 0.198 |
 
-So a mesh matched to the cell scale, which is what the bandwidth rule
-naively suggests, is several percent wrong about the very quantity that
-matters; resolving several times finer is what currently buys accuracy,
-and that is the cost sizing the mesh was meant to save. Sampling a
-gradient at a point aliases harder than sampling values, which is why the
-C1 field is the worse of the two here.
+The lower bound matters as much as the error: the field now keeps the 0.2
+floor it was given, where before it dipped to a third of that and so posed
+a harder capacity problem than the one asked for. Gradient damping no
+longer triggers at any resolution.
 
-The fix is the approximation operator rather than the mesh: fit each
-vertex's value and gradient by least squares over a mesh-scale stencil,
-onto the same space the pieces live in. That averages sub-mesh structure
-instead of aliasing it, is stable on rough inputs because no derivative is
-ever read at a point, and still reproduces anything already in the space.
-The care needed is conditioning: the six homogeneous quadratics are nearly
-degenerate over a small cap.
+What remains is that each vertex is still fitted on its own. The best
+approximation in the space is its L2 projection, which is one sparse
+symmetric solve over the whole mesh rather than a fit per vertex, and it
+would close the rest of the gap to the Lagrange field. Positivity would
+then need the damping backstop that currently never fires.
 
 *Verified by:* cell-scale mass error at a mesh matched to the cell scale
 falling to the level a mesh four times finer reaches today.
