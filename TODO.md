@@ -32,19 +32,23 @@ bisectors. Both are geometry-portable in the way the sweep rate is.
 *Verified by:* the analytic curvature matching the finite-difference
 one to the difference error, and matching its iteration counts.
 
-### 2. C¹ elements
-Spherical Powell-Sabin elements in Bernstein-Bézier form: C¹ quadratics
-on a six-way split of each mesh triangle, determined by value and
-gradient at the vertices, sampled from any callable. Positivity is a
-sign check on the coefficients; mesh resolution comes from the site
-count, not the field. Needed so the constraint curvature above is
-continuous, which is what lets the second-order rate hold on piecewise
-fields; today Newton needs about twice the inner iterations on the
-piecewise noise field that it needs on a polynomial one.
+### 2. Choose the representation from the site count
+The C1 elements exist (`-f noise-smooth`), and measuring them moved the
+problem rather than solving it. They are exact on smooth targets, more
+accurate there than the Lagrange field, and certify their own
+positivity. On the noise field they are less faithful, because the noise
+is rough at the mesh scale and this scheme reads one gradient per vertex
+where the Lagrange field also samples the edge midpoints. At cell scale
+the gap is about 1% against 0.4% relative mass error.
 
-*Verified by:* C¹ across every seam, exact reproduction of quadratics,
-positivity on a floored input, and noise-field inner iteration counts
-matching the polynomial fields'.
+What that says is that the mesh should follow the site count rather than
+being fixed: a field is only ever needed to cell accuracy, and both
+representations reach it at a resolution nobody currently chooses. The
+Powell-Sabin split costs six pieces per triangle, so the choice is worth
+making rather than guessing.
+
+*Verified by:* cell-scale mass error meeting a requested tolerance with
+the caller naming neither a subdivision level nor a degree.
 
 ### 3. Accuracy as the input
 Take a requested accuracy and choose the representation to meet it,

@@ -255,11 +255,17 @@ TEST(PowellSabinInterpolantTest, EXPENSIVE_IsMoreAccurateThanTheLagrangeFieldOnA
     }
 }
 
-// The noise field is floored by a hard clamp, so the target itself has
-// kinks along the contour where the clamp bites. A C1 spline cannot follow
-// a kink, and this is the cost of that: the accuracy limit here belongs to
-// the input, not to the representation.
-TEST(PowellSabinInterpolantTest, EXPENSIVE_IsLimitedByTheClampInTheNoiseField) {
+// On the noise field the ordering reverses, and not because of the clamp:
+// where the noise is floored the target is constant and the spline is exact
+// there. It is that the noise is rough at the mesh scale, and this scheme
+// reads each vertex's gradient at a point while the Lagrange field samples
+// values at the edge midpoints too. Sampling more places beats sampling
+// derivatives once the target stops being smooth.
+//
+// What the tessellation sees is the cell-scale average rather than the
+// pointwise value, and there the gap is far smaller: about 1% against 0.4%
+// relative mass error over cell-sized caps at 200 sites.
+TEST(PowellSabinInterpolantTest, EXPENSIVE_IsLessFaithfulThanTheLagrangeFieldOnRoughNoise) {
     REQUIRE_EXPENSIVE();
     TriangleMesh mesh = TriangleMesh::icosphere(4);
 
@@ -283,4 +289,5 @@ TEST(PowellSabinInterpolantTest, EXPENSIVE_IsLimitedByTheClampInTheNoiseField) {
     EXPECT_GT(smooth_error, lagrange_error);
     EXPECT_LT(smooth_error, 10.0 * lagrange_error);
 }
+
 

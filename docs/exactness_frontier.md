@@ -77,7 +77,16 @@ the cost shows up as iteration count, with Newton needing roughly
 twice the inner iterations it needs on a polynomial field. Restoring
 C² means making the density C¹ — C¹ elements.
 
-**Positivity — real, and it is what rules out the global fit.** Least
+**Positivity — real, and now certified rather than sampled for.** The
+Bernstein-Bezier form bounds a piece below by its coefficients, so
+`PowellSabinInterpolant` reports a lower bound on the density it built
+and no search over the sphere can miss a dip. Where the mesh is too
+coarse to carry the sampled gradients the interpolant would overshoot
+below zero; damping the gradients per vertex pulls it back and keeps the
+field C1, and the damping is reported because it measures whether the
+mesh resolves the field.
+
+**Positivity of a global fit — real, and it is what rules out the global fit.** Least
 squares constrains no value, so fitting a function with a floor
 overshoots below it: the degree-8 fit of the floored noise reaches
 -0.047 against a floor of 0.2, with an RMS residual of 0.12 on a field
