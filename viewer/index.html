@@ -108,6 +108,7 @@
     opacity: 0.85;
   }
   #log:empty { display: none; }
+  #preview { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.55; }
   #drop {
     margin-top: 12px;
     padding: 12px;
@@ -126,6 +127,7 @@
   <div class="row"><span>cells</span><span id="cells">—</span></div>
   <div class="row"><span>capacity rms</span><span id="rms">—</span></div>
   <div class="row"><span>mass spread</span><span id="spread">—</span></div>
+  <div class="row"><span id="preview"></span></div>
   <label>colour
     <select id="colouring">
       <option value="metal">metal</option>
@@ -272,15 +274,40 @@ function greatCircle(from, to, steps) {
   return points;
 }
 
-// One merged geometry per rebuild, and the previous one disposed: the scene
-// is redrawn continuously while a run is live, so anything not freed here
-// accumulates on the GPU until the context is lost.
-let built = [];
+// The whole view is addressable, so a particular reading of a particular
+// run can be linked rather than described.
+const query = new URLSearchParams(location.search);
 
-function build() {
+// The studio: present only when the page is served by viewer/server.py,
+// which runs generate_globe on request. A run's snapshot is rewritten while
+// it is in flight, so polling its version is enough to watch it evolve.
+const studio = {
+  fields: ['points', 'density_field', 'seed', 'capacity_tolerance', 'warm_start', 'lloyd_passes',
+           'inner_solver', 'max_outer_iterations', 'max_inner_iterations', 'newton_iterations'],
+  selected: query.get('run'),
+  version: null,
+  runs: [],
+  live: false,
+};
+
+// Rebuilds are the expensive part and they happen every time a live run
+// writes a snapshot, so each one disposes what it replaces, merges into a
+// single geometry, and drops to lines while a large run is still moving.
+const PREVIEW_CELLS = 400;
+
+let built = [];
+let building = false;
+let buildMilliseconds = 0;
+
+function dispose() {
   for (const resource of built) resource.dispose();
   built = [];
   group.clear();
+}
+
+function build() {
+  const started = performance.now();
+  dispose();
 
   if (!snapshot) return;
 
@@ -314,6 +341,46 @@ function build() {
     return new THREE.Color(0xd9d2c5);
   };
 
+  const edges = uniqueEdges(cells);
+  const preview = studio.live && cells.length > PREVIEW_CELLS;
+
+  document.getElementById('preview').textContent = preview ? 'outline while running' : '';
+
+  if (preview) {
+    buildLines(edges, shade);
+  } else {
+    buildTubes(edges, cells, shade, mode, radius);
+  }
+
+  buildMilliseconds = performance.now() - started;
+}
+
+// Two vertices per segment, one buffer, one draw call: cheap enough to
+// rebuild every time a running solver reports a new tessellation.
+function buildLines(edges, shade) {
+  const positions = [];
+  const colours = [];
+
+  for (const [from, to, cell] of edges) {
+    const points = greatCircle(from, to, 4);
+    const colour = shade(cell);
+
+    for (let i = 0; i < points.length - 1; i++) {
+      positions.push(points[i].x, points[i].y, points[i].z, points[i + 1].x, points[i + 1].y, points[i + 1].z);
+      colours.push(colour.r, colour.g, colour.b, colour.r, colour.g, colour.b);
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
+
+  const material = new THREE.LineBasicMaterial({ vertexColors: true });
+  group.add(new THREE.LineSegments(geometry, material));
+  built = [geometry, material];
+}
+
+function buildTubes(edges, cells, shade, mode, radius) {
   const material = mode === 'metal'
     ? new THREE.MeshPhysicalMaterial({ color: 0xd9d2c5, metalness: 1, roughness: 0.24 })
     : new THREE.MeshPhysicalMaterial({ vertexColors: true, metalness: 0.45, roughness: 0.4 });
@@ -321,25 +388,22 @@ function build() {
   const radial = cells.length > 400 ? 5 : 8;
   const tubes = [];
 
-  for (const [from, to, cell] of uniqueEdges(cells)) {
+  for (const [from, to, cell] of edges) {
     const curve = new THREE.CatmullRomCurve3(greatCircle(from, to, 6));
     const tube = new THREE.TubeGeometry(curve, 6, radius, radial, false);
     tube.deleteAttribute('uv');
 
-    if (mode !== 'metal') {
-      const colour = shade(cell);
-      const count = tube.attributes.position.count;
-      const colours = new Float32Array(count * 3);
+    const colour = shade(cell);
+    const count = tube.attributes.position.count;
+    const colours = new Float32Array(count * 3);
 
-      for (let i = 0; i < count; i++) {
-        colours[i * 3] = colour.r;
-        colours[i * 3 + 1] = colour.g;
-        colours[i * 3 + 2] = colour.b;
-      }
-
-      tube.setAttribute('color', new THREE.BufferAttribute(colours, 3));
+    for (let i = 0; i < count; i++) {
+      colours[i * 3] = colour.r;
+      colours[i * 3 + 1] = colour.g;
+      colours[i * 3 + 2] = colour.b;
     }
 
+    tube.setAttribute('color', new THREE.BufferAttribute(colours, 3));
     tubes.push(tube);
   }
 
@@ -362,7 +426,9 @@ function build() {
   joints.count = index;
   group.add(joints);
 
-  built = [merged, joint, material];
+  // The instanced mesh owns a GPU buffer of its own, separate from the
+  // geometry it draws, and it is not freed by removing it from the scene.
+  built = [merged, joint, material, joints];
 }
 
 // Slider drags and poll ticks request rebuilds faster than they are worth
@@ -407,10 +473,6 @@ document.addEventListener('drop', event => {
   event.dataTransfer.files[0].text().then(load);
 });
 
-// The whole view is addressable, so a particular reading of a particular
-// run can be linked rather than described.
-const query = new URLSearchParams(location.search);
-
 for (const [parameter, id] of [['colour', 'colouring'], ['weight', 'weight']]) {
   const value = query.get(parameter);
   if (value) document.getElementById(id).value = value;
@@ -420,17 +482,6 @@ const requested = query.get('snapshot');
 if (requested) {
   fetch(requested).then(response => response.text()).then(load).catch(() => {});
 }
-
-// The studio: present only when the page is served by viewer/server.py,
-// which runs generate_globe on request. A run's snapshot is rewritten while
-// it is in flight, so polling its version is enough to watch it evolve.
-const studio = {
-  fields: ['points', 'density_field', 'seed', 'capacity_tolerance', 'warm_start', 'lloyd_passes',
-           'inner_solver', 'max_outer_iterations', 'max_inner_iterations', 'newton_iterations'],
-  selected: query.get('run'),
-  version: null,
-  runs: [],
-};
 
 async function api(path, options) {
   const response = await fetch(path, options);
@@ -513,10 +564,28 @@ async function poll() {
   const run = await api(`/api/runs/${studio.selected}`);
   document.getElementById('log').textContent = run.log.slice(-12).join('\n');
 
-  if (run.snapshot && run.snapshot_version !== studio.version) {
-    studio.version = run.snapshot_version;
-    const text = await (await fetch(`${run.snapshot}?v=${run.snapshot_version}`)).text();
-    load(text);
+  const live = run.status === 'running' || run.status === 'queued';
+  const settled = studio.live && !live;
+  studio.live = live;
+
+  // A rebuild can take longer than the poll interval on a large run, so a
+  // new snapshot is only fetched once the previous one has been drawn.
+  const changed = run.snapshot && run.snapshot_version !== studio.version;
+
+  if (!building && (changed || settled)) {
+    building = true;
+
+    try {
+      if (changed) {
+        studio.version = run.snapshot_version;
+        const text = await (await fetch(`${run.snapshot}?v=${run.snapshot_version}`)).text();
+        snapshot = JSON.parse(text);
+      }
+
+      build();
+    } finally {
+      building = false;
+    }
   }
 
   const index = studio.runs.findIndex(r => r.id === run.id);
@@ -544,10 +613,19 @@ api('/api/runs').then(runs => {
   document.getElementById('run').addEventListener('click', startRun);
   renderRuns();
   if (studio.selected) poll();
-  setInterval(() => {
-    poll().catch(() => {});
-    if (studio.runs.some(r => r.status === 'running' || r.status === 'queued')) refreshRuns().catch(() => {});
-  }, 1000);
+  // Polling never costs more than a fraction of the time spent drawing, so
+  // a run whose tessellation is expensive to draw simply updates less often.
+  const tick = async () => {
+    await poll().catch(() => {});
+
+    if (studio.runs.some(r => r.status === 'running' || r.status === 'queued')) {
+      await refreshRuns().catch(() => {});
+    }
+
+    setTimeout(tick, Math.min(8000, Math.max(1000, 4 * buildMilliseconds)));
+  };
+
+  tick();
 }).catch(() => {});
 
 function frame() {
