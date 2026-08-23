@@ -77,6 +77,20 @@ the cost shows up as iteration count, with Newton needing roughly
 twice the inner iterations it needs on a polynomial field. Restoring
 C² means making the density C¹ — C¹ elements.
 
+**Positivity — real, and it is what rules out the global fit.** Least
+squares constrains no value, so fitting a function with a floor
+overshoots below it: the degree-8 fit of the floored noise reaches
+-0.047 against a floor of 0.2, with an RMS residual of 0.12 on a field
+whose range is 0.8. A density that reaches zero cannot be balanced
+against the others and one that goes negative is not a density, so the
+tessellation distorts around those regions. The fitter reports its
+lowest value and the factory warns when it is not positive.
+`test/field_positivity_test.cpp` pins both halves: the piecewise field
+holds its floor, the global fit does not. A Bernstein-Bezier
+representation makes positivity a sign check on the coefficients, which
+is the durable fix and another reason the piecewise path is the one
+that generalises.
+
 **Conditioning — real, and it is what caps degree.** The homogeneous
 `(d, d−1)` basis has exactly `(d+1)²` functions, which is the true
 dimension of polynomials restricted to the sphere, so nothing is

@@ -26,6 +26,13 @@ class PolynomialFieldFitter {
     struct Fit {
         PolynomialField field;
         double root_mean_square_residual;
+
+        // Least squares constrains no value, so a fit of a function with a
+        // floor overshoots below it. A density that reaches zero cannot be
+        // balanced against the others and one that goes negative is not a
+        // density at all, so the lowest value the fit takes is part of the
+        // result rather than something the caller has to go looking for.
+        double lowest_sampled_value;
     };
 
     PolynomialFieldFitter(int degree, size_t sample_count, PointGeneratorType point_generator);
@@ -79,7 +86,9 @@ PolynomialFieldFitter<PointGeneratorType>::fit(ScalarFieldType& scalar_field) {
         polynomial.set_coefficient(basis[i], coefficients[static_cast<Eigen::Index>(i)]);
     }
 
-    return Fit{PolynomialField(std::move(polynomial)), residual};
+    Eigen::VectorXd fitted = design * coefficients;
+
+    return Fit{PolynomialField(std::move(polynomial)), residual, fitted.minCoeff()};
 }
 
 template<generators::spherical::PointGenerator PointGeneratorType>

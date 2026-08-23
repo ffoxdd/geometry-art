@@ -228,7 +228,13 @@ inline PolynomialField Factory::fit_noise_field() {
     auto fit = fitter.fit(noise_field);
 
     std::cout << "Fitted noise to degree " << NOISE_FIT_DEGREE <<
-        " polynomial, RMS residual " << fit.root_mean_square_residual << std::endl;
+        " polynomial, RMS residual " << fit.root_mean_square_residual <<
+        ", lowest value " << fit.lowest_sampled_value << std::endl;
+
+    if (fit.lowest_sampled_value <= 0.0) {
+        std::cout << "  WARNING: the fit is not a density -- it reaches " << fit.lowest_sampled_value <<
+            ". Cells there have no mass to balance, so the tessellation will be distorted around them." << std::endl;
+    }
 
     return fit.field;
 }
