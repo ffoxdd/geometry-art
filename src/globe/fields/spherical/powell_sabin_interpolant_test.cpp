@@ -291,3 +291,60 @@ TEST(PowellSabinInterpolantTest, EXPENSIVE_IsLessFaithfulThanTheLagrangeFieldOnR
 }
 
 
+
+
+// What the tessellation actually reads is the density's average over a
+// cell, so that is the error worth bounding. It bounds badly at the
+// resolutions a naive reading of the bandwidth rule would choose: matching
+// the mesh to the cell scale leaves several percent, because sampling at
+// points aliases whatever is finer than the mesh into the represented field
+// rather than averaging it away, and an average is exactly what is being
+// corrupted. Resolving several times finer than a cell is what it currently
+// takes, and reading each vertex's gradient at a point aliases harder than
+// reading values does.
+TEST(PowellSabinInterpolantTest, EXPENSIVE_NeedsSeveralTimesTheCellScaleToAverageWell) {
+    REQUIRE_EXPENSIVE();
+    constexpr int SITES = 200;
+    const double cap_radius = 2.0 / std::sqrt(static_cast<double>(SITES));
+
+    auto directions = generators::spherical::FibonacciPointGenerator().generate(400000);
+    auto centers = generators::spherical::FibonacciPointGenerator().generate(200);
+
+    auto worst_cell_scale_error = [&](int subdivisions) {
+        TriangleMesh mesh = TriangleMesh::icosphere(subdivisions);
+        NoiseField target(Interval(0.2, 1.0));
+        PowellSabinInterpolant interpolant;
+        auto result = interpolant.interpolate(mesh, target);
+        NoiseField reference(Interval(0.2, 1.0));
+        double worst = 0.0;
+
+        for (const VectorS2& center : centers) {
+            double expected = 0.0;
+            double actual = 0.0;
+            int count = 0;
+
+            for (const VectorS2& direction : directions) {
+                if (direction.dot(center) < std::cos(cap_radius)) {
+                    continue;
+                }
+
+                expected += reference.value(direction);
+                actual += result.field.value(direction);
+                ++count;
+            }
+
+            if (count >= 40) {
+                worst = std::max(worst, std::abs(actual - expected) / expected);
+            }
+        }
+
+        return worst;
+    };
+
+    // A mesh at the cell scale is not enough, and the damping report says so
+    // before any of this is measured.
+    EXPECT_GT(worst_cell_scale_error(3), 0.02);
+
+    // Four times finer is.
+    EXPECT_LT(worst_cell_scale_error(4), 0.02);
+}
