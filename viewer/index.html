@@ -189,6 +189,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -271,7 +272,14 @@ function greatCircle(from, to, steps) {
   return points;
 }
 
+// One merged geometry per rebuild, and the previous one disposed: the scene
+// is redrawn continuously while a run is live, so anything not freed here
+// accumulates on the GPU until the context is lost.
+let built = [];
+
 function build() {
+  for (const resource of built) resource.dispose();
+  built = [];
   group.clear();
 
   if (!snapshot) return;
@@ -310,11 +318,13 @@ function build() {
     ? new THREE.MeshPhysicalMaterial({ color: 0xd9d2c5, metalness: 1, roughness: 0.24 })
     : new THREE.MeshPhysicalMaterial({ vertexColors: true, metalness: 0.45, roughness: 0.4 });
 
-  const geometries = [];
+  const radial = cells.length > 400 ? 5 : 8;
+  const tubes = [];
 
   for (const [from, to, cell] of uniqueEdges(cells)) {
     const curve = new THREE.CatmullRomCurve3(greatCircle(from, to, 6));
-    const tube = new THREE.TubeGeometry(curve, 6, radius, 8, false);
+    const tube = new THREE.TubeGeometry(curve, 6, radius, radial, false);
+    tube.deleteAttribute('uv');
 
     if (mode !== 'metal') {
       const colour = shade(cell);
@@ -330,21 +340,20 @@ function build() {
       tube.setAttribute('color', new THREE.BufferAttribute(colours, 3));
     }
 
-    geometries.push(tube);
+    tubes.push(tube);
   }
 
-  for (const geometry of geometries) {
-    group.add(new THREE.Mesh(geometry, material));
-  }
+  const merged = mergeGeometries(tubes);
+  for (const tube of tubes) tube.dispose();
+  group.add(new THREE.Mesh(merged, material));
 
-  const joint = new THREE.SphereGeometry(radius, 8, 8);
-  const joints = new THREE.InstancedMesh(joint, material, cells.length * 8);
+  const joint = new THREE.SphereGeometry(radius, radial, radial);
+  const joints = new THREE.InstancedMesh(joint, material, cells.reduce((n, c) => n + c.boundary.length, 0));
   let index = 0;
   const matrix = new THREE.Matrix4();
 
   for (const cell of cells) {
     for (const point of cell.boundary) {
-      if (index >= joints.count) break;
       matrix.setPosition(...point);
       joints.setMatrixAt(index++, matrix);
     }
@@ -352,6 +361,21 @@ function build() {
 
   joints.count = index;
   group.add(joints);
+
+  built = [merged, joint, material];
+}
+
+// Slider drags and poll ticks request rebuilds faster than they are worth
+// doing; coalesce to one per frame.
+let buildQueued = false;
+
+function requestBuild() {
+  if (buildQueued) return;
+  buildQueued = true;
+  requestAnimationFrame(() => {
+    buildQueued = false;
+    build();
+  });
 }
 
 function load(text) {
@@ -360,7 +384,7 @@ function load(text) {
 }
 
 for (const id of ['colouring', 'weight']) {
-  document.getElementById(id).addEventListener('input', build);
+  document.getElementById(id).addEventListener('input', requestBuild);
 }
 
 const drop = document.getElementById('drop');

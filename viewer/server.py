@@ -10,6 +10,7 @@ is in progress, so the viewer can redraw the tessellation as it evolves.
 """
 
 import argparse
+import atexit
 import http.server
 import json
 import os
@@ -55,6 +56,7 @@ class Runs:
         self.worker = threading.Thread(target=self.drain, daemon=True)
         self.worker.start()
         self.mark_interrupted()
+        atexit.register(self.shutdown)
 
     def start(self, requested):
         parameters = validate(requested)
@@ -129,6 +131,15 @@ class Runs:
             record["exit_code"] = code
 
         write_json(folder / "run.json", record)
+
+    # The solver dies with the server rather than being orphaned mid-run.
+    def shutdown(self):
+        with self.lock:
+            self.queue.clear()
+            processes = list(self.processes.values())
+
+        for process in processes:
+            process.terminate()
 
     def cancel(self, run_id):
         folder = self.directory / run_id
