@@ -26,6 +26,12 @@ struct ConstantScalarField {
     double value(const VectorS2&) const { return constant; }
 };
 
+struct SmoothAnalyticField {
+    double value(const VectorS2& point) const {
+        return 0.6 + 0.3 * std::sin(3.0 * point.x()) * std::cos(2.0 * point.y()) + 0.1 * point.z() * point.z();
+    }
+};
+
 struct QuadraticScalarField {
     PolynomialField reference;
     double value(const VectorS2& point) const { return reference.value(point); }
@@ -216,5 +222,65 @@ TEST(PowellSabinInterpolantTest, EXPENSIVE_ApproachesTheSampledFieldWithRefineme
     }
 
     EXPECT_LT(fine_error, coarse_error / 2.0);
+}
+
+
+// Smoothness is not bought with accuracy: on a target that is itself
+// smooth, the C1 field tracks it more closely than the Lagrange field on
+// the same mesh, and at the same order.
+TEST(PowellSabinInterpolantTest, EXPENSIVE_IsMoreAccurateThanTheLagrangeFieldOnASmoothTarget) {
+    REQUIRE_EXPENSIVE();
+
+    for (int subdivisions : {2, 3, 4}) {
+        TriangleMesh mesh = TriangleMesh::icosphere(subdivisions);
+
+        SmoothAnalyticField target;
+        PowellSabinInterpolant interpolant;
+        auto smooth = interpolant.interpolate(mesh, target);
+
+        SmoothAnalyticField sampled;
+        PiecewisePolynomialField lagrange = PiecewisePolynomialField::sample(mesh, 2, sampled);
+
+        double smooth_error = 0.0;
+        double lagrange_error = 0.0;
+
+        for (const VectorS2& point : generators::spherical::FibonacciPointGenerator().generate(50000)) {
+            double expected = target.value(point);
+            smooth_error = std::max(smooth_error, std::abs(smooth.field.value(point) - expected));
+            lagrange_error = std::max(lagrange_error, std::abs(lagrange.value(point) - expected));
+        }
+
+        EXPECT_LT(smooth_error, lagrange_error) << "subdivisions " << subdivisions;
+        EXPECT_EQ(smooth.least_damping, 1.0) << "subdivisions " << subdivisions;
+    }
+}
+
+// The noise field is floored by a hard clamp, so the target itself has
+// kinks along the contour where the clamp bites. A C1 spline cannot follow
+// a kink, and this is the cost of that: the accuracy limit here belongs to
+// the input, not to the representation.
+TEST(PowellSabinInterpolantTest, EXPENSIVE_IsLimitedByTheClampInTheNoiseField) {
+    REQUIRE_EXPENSIVE();
+    TriangleMesh mesh = TriangleMesh::icosphere(4);
+
+    NoiseField smooth_noise(Interval(0.2, 1.0));
+    PowellSabinInterpolant interpolant;
+    auto smooth = interpolant.interpolate(mesh, smooth_noise);
+
+    NoiseField lagrange_noise(Interval(0.2, 1.0));
+    PiecewisePolynomialField lagrange = PiecewisePolynomialField::sample(mesh, 2, lagrange_noise);
+
+    NoiseField reference(Interval(0.2, 1.0));
+    double smooth_error = 0.0;
+    double lagrange_error = 0.0;
+
+    for (const VectorS2& point : generators::spherical::FibonacciPointGenerator().generate(50000)) {
+        double expected = reference.value(point);
+        smooth_error = std::max(smooth_error, std::abs(smooth.field.value(point) - expected));
+        lagrange_error = std::max(lagrange_error, std::abs(lagrange.value(point) - expected));
+    }
+
+    EXPECT_GT(smooth_error, lagrange_error);
+    EXPECT_LT(smooth_error, 10.0 * lagrange_error);
 }
 
