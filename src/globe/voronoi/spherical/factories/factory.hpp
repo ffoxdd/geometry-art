@@ -97,6 +97,7 @@ class Factory {
     [[nodiscard]] std::unique_ptr<Sphere> optimize(std::unique_ptr<Sphere> sphere, const FieldType& field) const;
 
     [[nodiscard]] static PiecewisePolynomialField sample_noise_field();
+    [[nodiscard]] PiecewisePolynomialField sample_quadratic_field() const;
     [[nodiscard]] static PolynomialField fit_noise_field();
 };
 
@@ -123,6 +124,10 @@ inline Factory::Factory(
 inline std::unique_ptr<Sphere> Factory::build() {
     if (_density_field == "noise") {
         return build_with(sample_noise_field());
+    }
+
+    if (_density_field == "quadratic-piecewise") {
+        return build_with(sample_quadratic_field());
     }
 
     return build_with(create_polynomial_field());
@@ -168,6 +173,13 @@ inline PiecewisePolynomialField Factory::sample_noise_field() {
         field.mesh().triangles.size() << " triangles" << std::endl;
 
     return field;
+}
+
+// The quadratic field represented on the noise mesh: the same function, so
+// any difference in behaviour is the representation's, not the field's.
+inline PiecewisePolynomialField Factory::sample_quadratic_field() const {
+    PolynomialField quadratic = create_polynomial_field();
+    return PiecewisePolynomialField::sample(TriangleMesh::icosphere(NOISE_MESH_SUBDIVISIONS), NOISE_MESH_DEGREE, quadratic);
 }
 
 inline PolynomialField Factory::fit_noise_field() {

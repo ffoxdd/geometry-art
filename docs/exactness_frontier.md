@@ -46,18 +46,36 @@ not well posed, so no method recovers that detail and none should.
 
 ## Which limits are real
 
-**Arithmetic floor — not worth chasing.** The 1e-9 relative capacity
+**Arithmetic floor — not worth chasing.** The 1e-8 relative capacity
 RMS is `sqrt(eps)`, the signature of cancellation in the Stokes
 differences. Compensated summation or double-double would move it, and
-1e-9 relative area is already sub-micron on a metre globe.
+1e-8 relative area is already sub-micron on a metre globe.
+
+**Geometric tolerances — real, and the first thing to rule out.** Any
+"close enough counts as equal" rule in the geometry is a discontinuity
+in the objective of that size, and a trust region aiming at 1e-8
+cannot tell a 1e-6 jump from a lying model. Tolerances stay at rounding
+scale, and geometry that is known exactly — the great circle an arc
+lies on, the bisector normal from two sites, the clip circle that
+closes a clipped polygon — is carried rather than rederived from
+rounded points, so near-degenerate pieces contribute in proportion to
+their length and nothing else. The diagnostic that separates a
+representation fault from a smoothness one is to store a smooth
+polynomial piecewise and compare every cell and edge integral against
+the global field; `test/piecewise_precision_test.cpp` holds that to
+1e-11.
 
 **Smoothness — real, and it is a rate limit rather than a correctness
 one.** Degree-`d` Lagrange elements share nodes, so the piecewise
-density is C⁰; integrating a C⁰ density over a moving cell gives an
-energy that is C¹ but not C². The gradient is continuous everywhere,
-so the piecewise stall near 1e-6 is L-BFGS losing curvature
-information at the kinks, not a broken derivative. Restoring C² means
-making the density C¹ — a global smooth basis, or C¹ elements.
+density is C⁰. The CVT energy's slope and curvature both see the
+density only through boundary integrals, so they stay continuous; the
+constraints' curvature sees the density's gradient on the bisectors,
+so it jumps wherever a bisector crosses a mesh edge, and the augmented
+Lagrangian is C¹ but not C². With the representation exact, both inner
+solvers converge on the piecewise noise field across the seeds tried;
+the cost shows up as iteration count, with Newton needing roughly
+twice the inner iterations it needs on a polynomial field. Restoring
+C² means making the density C¹ — C¹ elements.
 
 **Conditioning — real, and it is what caps degree.** The homogeneous
 `(d, d−1)` basis has exactly `(d+1)²` functions, which is the true
@@ -90,19 +108,28 @@ KKT solve, and attacks the iteration count directly.
 
 Ordered by leverage per unit of effort. See `TODO.md` for status.
 
-1. C¹ elements, so the piecewise path reaches the same floor as the
-   polynomial one. This moved to the front once the second-order solve
-   landed: on a piecewise field both inner solvers stall on some seeds
-   and the second-order one stalls on more, while neither does on the
-   polynomial ones. That is the C¹ limit above showing up as a
-   measurement, and it caps the solver work until it is lifted.
-2. Move the global path to a spherical-harmonic basis.
+1. Exact constraint curvature. The inner Newton model is Gauss–Newton:
+   it omits the multiplier-weighted curvature of the constraints, which
+   does not vanish at a solution because mass has a price wherever the
+   density varies. Reading the true curvature by finite differences cuts
+   the inner iterations on the noise field by two to three times, so
+   the term is worth deriving; it needs the Voronoi vertex velocities
+   and the density gradient on the bisectors.
+2. C¹ elements, so that curvature is continuous and the second-order
+   rate holds on piecewise fields. Spherical Powell–Sabin in
+   Bernstein–Bézier form: value and gradient sampled at mesh vertices
+   from any callable, positivity by coefficient sign, mesh resolution
+   from the site count.
 3. Make accuracy the input and the discretisation the output: request a
    tolerance, raise degree and refine the mesh until the representation
    error is below what the capacity tolerance needs.
-4. Image densities on a mesh aligned to their discontinuities.
+4. Image densities, sampled onto the C¹ field at the cell scale; a C¹
+   field cannot hold a discontinuity, so alignment to image edges is
+   unnecessary under the bandwidth rule.
 
 Done: per-cell integration runs in parallel; the exact CVT Hessian and
 the constraint Jacobian are assembled and drive both an unconstrained
 trust-region relaxation and a second-order inner solve for the
-constrained problem.
+constrained problem; the piecewise representation agrees with the
+global one to 1e-11 on every cell and edge, and every seed that used to
+stall on it converges.

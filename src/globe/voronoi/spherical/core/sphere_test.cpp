@@ -210,3 +210,23 @@ TEST(SphereTest, ArcsIsEmptyForSinglePoint) {
     EXPECT_EQ(arc_count, 0);
 }
 
+
+TEST(SphereTest, CellEdgeArcsLieOnTheBisectorsOfTheirSites) {
+    Sphere sphere;
+    sphere.insert(cgal::to_point(VectorS2(1, 0.1, 0.2).normalized()));
+    sphere.insert(cgal::to_point(VectorS2(-0.3, 1, 0.1).normalized()));
+    sphere.insert(cgal::to_point(VectorS2(0.2, -0.4, 1).normalized()));
+    sphere.insert(cgal::to_point(VectorS2(-1, -0.6, -0.5).normalized()));
+    sphere.insert(cgal::to_point(VectorS2(0.5, -1, -0.3).normalized()));
+
+    for (size_t k = 0; k < sphere.size(); ++k) {
+        Vector3 site = to_vector3(sphere.site(k));
+
+        for (const auto& edge : sphere.cell_edges(k)) {
+            Vector3 neighbor = to_vector3(sphere.site(edge.neighbor_index));
+            VectorS2 bisector = VectorS2(site - neighbor).normalized();
+            EXPECT_NEAR((edge.arc.normal() - bisector).norm(), 0.0, 1e-12);
+            EXPECT_LT(edge.arc.length(), M_PI);
+        }
+    }
+}

@@ -4,6 +4,7 @@
 #include "capacity_constrained_lagrangian.hpp"
 #include "capacity_constrained_hessian.hpp"
 #include "cvt_hessian.hpp"
+#include "newton_optimizer/finite_difference_hessian.hpp"
 #include "newton_optimizer/newton_optimizer.hpp"
 #include "../../../math/normalization.hpp"
 #include "../../../types.hpp"
@@ -16,6 +17,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -88,6 +90,8 @@ class CapacityConstrainedOptimizer {
     double _initial_penalty = 0.0;
     CapacityConstrainedReport _report;
 
+    static constexpr double FINITE_DIFFERENCE_DISPLACEMENT = 1e-5;
+
     [[nodiscard]] double initial_penalty() const;
     size_t minimize_lagrangian();
     [[nodiscard]] LagrangianEvaluation evaluate() const;
@@ -96,6 +100,19 @@ class CapacityConstrainedOptimizer {
 
     [[nodiscard]] size_t minimize_lagrangian_by_lbfgs();
     [[nodiscard]] size_t minimize_lagrangian_by_newton();
+
+    struct CurvatureOperator {
+        std::function<std::vector<Vector3>(const std::vector<Vector3>&)> apply;
+        [[nodiscard]] std::vector<Vector3> multiply(const std::vector<Vector3>& directions) const { return apply(directions); }
+    };
+
+    [[nodiscard]] CurvatureOperator curvature_operator(
+        const std::vector<Vector3>& points,
+        const SphereState& state,
+        const LagrangianEvaluation& evaluation,
+        const std::vector<Vector3>& gradient
+    ) const;
+    [[nodiscard]] std::vector<Vector3> tangential_gradient_at(const std::vector<Vector3>& points) const;
     [[nodiscard]] std::vector<Vector3> site_points() const;
     void apply_points(const std::vector<Vector3>& points);
 
@@ -209,17 +226,12 @@ size_t CapacityConstrainedOptimizer<FieldType>::minimize_lagrangian_by_newton() 
     // A rejected step leaves the iterate where it was, so the gradient and
     // the curvature there are still the ones just computed.
     std::vector<Vector3> gradient;
-    std::optional<CapacityConstrainedHessian> hessian;
+    std::optional<CurvatureOperator> hessian;
 
     while (iterations < _parameters.max_inner_iterations) {
         if (!hessian.has_value()) {
             gradient = tangential_gradient(evaluation.site_gradients, current);
-            hessian.emplace(
-                _curvature.assemble(*_sphere).through_normalization(current, evaluation.site_gradients),
-                CapacityJacobian(state, current),
-                current,
-                _penalty
-            );
+            hessian.emplace(curvature_operator(current, state, evaluation, gradient));
         }
 
         if (gradient_norm(gradient) <= _parameters.newton.gradient_tolerance) {
@@ -262,6 +274,43 @@ size_t CapacityConstrainedOptimizer<FieldType>::minimize_lagrangian_by_newton() 
     }
 
     return iterations;
+}
+
+template<fields::spherical::Field FieldType>
+typename CapacityConstrainedOptimizer<FieldType>::CurvatureOperator CapacityConstrainedOptimizer<FieldType>::curvature_operator(
+    const std::vector<Vector3>& points,
+    const SphereState& state,
+    const LagrangianEvaluation& evaluation,
+    const std::vector<Vector3>& gradient
+) const {
+    if (_parameters.newton.curvature == "finite-difference") {
+        auto gradient_at = [this](const std::vector<Vector3>& displaced) { return tangential_gradient_at(displaced); };
+        FiniteDifferenceHessian<decltype(gradient_at)> hessian(points, gradient, gradient_at, FINITE_DIFFERENCE_DISPLACEMENT);
+        return {[hessian](const std::vector<Vector3>& directions) { return hessian.multiply(directions); }};
+    }
+
+    CapacityConstrainedHessian hessian(
+        _curvature.assemble(*_sphere).through_normalization(points, evaluation.site_gradients),
+        CapacityJacobian(state, points),
+        points,
+        _penalty
+    );
+
+    return {[hessian](const std::vector<Vector3>& directions) { return hessian.multiply(directions); }};
+}
+
+template<fields::spherical::Field FieldType>
+std::vector<Vector3> CapacityConstrainedOptimizer<FieldType>::tangential_gradient_at(const std::vector<Vector3>& points) const {
+    Sphere sphere;
+
+    for (const Vector3& point : points) {
+        sphere.insert(cgal::to_point(VectorS2(point)));
+    }
+
+    SphereState state = _lagrangian.sphere_state(sphere);
+    LagrangianEvaluation evaluation = _lagrangian.evaluate(sphere, state, _multipliers, _penalty);
+
+    return tangential_gradient(evaluation.site_gradients, points);
 }
 
 template<fields::spherical::Field FieldType>

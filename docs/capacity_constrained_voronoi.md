@@ -133,14 +133,17 @@ by trust-region Newton instead of L-BFGS. It takes two to seven times
 fewer inner iterations across every field, and the penalty stops having
 to climb to compensate for unsolved subproblems.
 
-On a piecewise field neither solver reliably reaches the tolerance,
-and Newton is the more affected of the two: over nine seeds at 200
-sites it stalled on five against L-BFGS's two, though several of those
-stalls land just above the tolerance and it still needs about two and a
-half times fewer iterations where it converges. That energy is C¹ but
-not C², so there is no second derivative for the curvature model to
-trust, which is exactly where a history-based method is the safer
-choice. L-BFGS stays the default for that reason.
+On a piecewise field both solvers reach the tolerance, but Newton's
+advantage shrinks to about two times fewer inner iterations (745–1359
+against 1833–2849 over the seeds tried at 200 sites). Its curvature
+model is Gauss–Newton — exact for the energy, slope-only for the
+penalty — and the omitted multiplier-weighted constraint curvature is
+exactly the part a C⁰ density makes discontinuous.
+`--newton-curvature finite-difference` replaces the model with the true
+curvature read from gradient differences, at one gradient evaluation
+per conjugate-gradient iteration; it is the reference the analytic
+model is measured against, not a production setting. L-BFGS stays the
+default until the analytic curvature is complete.
 
 `NewtonOptimizer` minimises the CVT energy by trust-region Newton,
 solving each step with Steihaug's truncated conjugate gradient so only
@@ -165,10 +168,11 @@ does.
 ## Precision floor
 
 The constraint terms compete with `E_cvt` inside one double-precision
-objective, so the relative RMS capacity error bottoms out around 1e-9;
+objective, so the relative RMS capacity error bottoms out around 1e-8;
 the optimizer reports `stalled` there. The default tolerance is 1e-7.
 
-A piecewise field stalls earlier, around 1e-6. Its elements share
-nodes, so the density is C⁰ and the energy is C¹ but not C²: the
-gradient stays continuous, and it is L-BFGS's curvature model that
-degrades where a cell boundary crosses a mesh edge.
+A stall well above that floor is a geometric tolerance somewhere in
+the integration path, not a property of the field: any rule that
+merges or drops nearly coincident geometry is a jump in the objective
+of that size. `test/piecewise_precision_test.cpp` pins the piecewise
+path to the global one at 1e-11 so such a rule cannot return unnoticed.

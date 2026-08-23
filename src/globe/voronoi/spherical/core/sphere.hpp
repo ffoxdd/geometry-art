@@ -180,7 +180,7 @@ inline std::vector<VoronoiVertex> Sphere::vertices() const {
             Arc arc = dual_arc(Edge(face, i));
 
             if ((arc.target() - position).squaredNorm() < (arc.source() - position).squaredNorm()) {
-                arc = Arc(arc.target(), arc.source());
+                arc = Arc(arc.target(), arc.source(), -arc.normal());
             }
 
             vertex_arcs.push_back(arc);
@@ -272,8 +272,18 @@ inline VectorS2 Sphere::dual_vertex(FaceHandle face) const {
     return (q - p).cross(r - p).normalized();
 }
 
+// A Voronoi edge lies on the bisector of its two sites, whose normal is
+// known exactly; deriving it from the two Voronoi vertices instead loses
+// accuracy in proportion to how short the edge is.
 inline Arc Sphere::dual_arc(const Edge& edge) const {
-    return Arc(dual_vertex(edge.first), dual_vertex(edge.first->neighbor(edge.second)));
+    VectorS2 source = dual_vertex(edge.first);
+    VectorS2 target = dual_vertex(edge.first->neighbor(edge.second));
+    Vector3 first_site = to_vector3(_triangulation->point(edge.first->vertex((edge.second + 1) % 3)));
+    Vector3 second_site = to_vector3(_triangulation->point(edge.first->vertex((edge.second + 2) % 3)));
+    VectorS2 bisector_normal = VectorS2(first_site - second_site).normalized();
+    Arc arc(source, target, bisector_normal);
+
+    return arc.length() <= M_PI ? arc : Arc(source, target, -bisector_normal);
 }
 
 }

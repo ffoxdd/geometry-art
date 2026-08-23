@@ -218,8 +218,14 @@ inline bool Polygon::contains(const VectorS2& point) const {
     return true;
 }
 
+// Sutherland-Hodgman against one hemisphere. Every surviving arc keeps the
+// great circle it already lies on, and the arcs closing the polygon along
+// the clip circle take that circle's normal, so no normal is ever rederived
+// from two nearby points.
 inline std::optional<Polygon> Polygon::clipped_by(const VectorS2& half_space_normal) const {
-    std::vector<VectorS2> kept;
+    std::vector<Arc> kept;
+    std::optional<VectorS2> last_exit;
+    std::optional<VectorS2> first_entry;
     bool all_inside = true;
 
     for (const Arc& arc : _arcs) {
@@ -227,33 +233,57 @@ inline std::optional<Polygon> Polygon::clipped_by(const VectorS2& half_space_nor
         bool target_inside = half_space_normal.dot(arc.target()) >= -GEOMETRIC_EPSILON;
         all_inside = all_inside && source_inside && target_inside;
 
-        if (target_inside) {
-            if (!source_inside) {
-                kept.push_back(arc.crossing_with(half_space_normal));
-            }
-            kept.push_back(arc.target());
-        } else if (source_inside) {
-            kept.push_back(arc.crossing_with(half_space_normal));
+        if (source_inside && target_inside) {
+            kept.push_back(arc);
+            continue;
         }
+
+        if (!source_inside && !target_inside) {
+            continue;
+        }
+
+        VectorS2 crossing = arc.crossing_with(half_space_normal);
+
+        if (source_inside) {
+            kept.emplace_back(arc.source(), crossing, arc.normal());
+            last_exit = crossing;
+            continue;
+        }
+
+        if (last_exit) {
+            kept.emplace_back(*last_exit, crossing, half_space_normal);
+        } else {
+            first_entry = crossing;
+        }
+
+        kept.emplace_back(crossing, arc.target(), arc.normal());
     }
 
     if (all_inside) {
         return *this;
     }
 
-    return from_points(kept);
+    if (last_exit && first_entry) {
+        kept.emplace_back(*last_exit, *first_entry, half_space_normal);
+    }
+
+    if (kept.size() < 2) {
+        return std::nullopt;
+    }
+
+    return Polygon(std::move(kept));
 }
 
 inline std::optional<Polygon> Polygon::from_points(const std::vector<VectorS2>& points) {
     std::vector<VectorS2> distinct;
 
     for (const VectorS2& point : points) {
-        if (distinct.empty() || (point - distinct.back()).squaredNorm() > GEOMETRIC_EPSILON) {
+        if (distinct.empty() || (point - distinct.back()).squaredNorm() > GEOMETRIC_EPSILON * GEOMETRIC_EPSILON) {
             distinct.push_back(point);
         }
     }
 
-    while (distinct.size() > 1 && (distinct.front() - distinct.back()).squaredNorm() <= GEOMETRIC_EPSILON) {
+    while (distinct.size() > 1 && (distinct.front() - distinct.back()).squaredNorm() <= GEOMETRIC_EPSILON * GEOMETRIC_EPSILON) {
         distinct.pop_back();
     }
 

@@ -1,0 +1,450 @@
+<title>How the Solver Thinks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+:root {
+  --paper: #eef1f5;
+  --surface: #ffffff;
+  --ink: #16212e;
+  --muted: #5b6776;
+  --brass: #9a6612;
+  --brass-soft: #f4e9d3;
+  --rule: #d5dbe3;
+  --code-bg: #e6eaf0;
+  --display: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --body: "Literata", "Iowan Old Style", Georgia, serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0e141b;
+    --surface: #151d26;
+    --ink: #e4e9ef;
+    --muted: #98a4b2;
+    --brass: #d9a84e;
+    --brass-soft: #2b2416;
+    --rule: #2a3643;
+    --code-bg: #1c2631;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0e141b;
+  --surface: #151d26;
+  --ink: #e4e9ef;
+  --muted: #98a4b2;
+  --brass: #d9a84e;
+  --brass-soft: #2b2416;
+  --rule: #2a3643;
+  --code-bg: #1c2631;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  margin: 0;
+}
+
+.page {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2.5rem;
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 3rem 1.25rem 6rem;
+}
+@media (min-width: 1100px) {
+  .page { grid-template-columns: 15rem minmax(0, 1fr); }
+}
+
+nav.contents {
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+@media (min-width: 1100px) {
+  nav.contents { position: sticky; top: 2rem; align-self: start; }
+}
+nav.contents .label {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.75rem;
+}
+nav.contents ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+nav.contents a {
+  color: var(--muted);
+  text-decoration: none;
+  display: grid;
+  grid-template-columns: 1.5rem 1fr;
+  gap: 0.35rem;
+}
+nav.contents a:hover, nav.contents a:focus-visible { color: var(--brass); }
+nav.contents a span { font-family: var(--mono); font-size: 0.78rem; padding-top: 0.1rem; }
+
+main { max-width: 66ch; }
+
+header h1 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: clamp(2.2rem, 4vw, 3rem);
+  line-height: 1.1;
+  margin: 0 0 1rem;
+  text-wrap: balance;
+}
+header p.standfirst {
+  font-size: 1.15rem;
+  color: var(--muted);
+  margin: 0 0 0.75rem;
+}
+header p { margin: 0.5rem 0; }
+
+section { margin-top: 3.5rem; }
+h2 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 1.7rem;
+  line-height: 1.2;
+  margin: 0 0 1rem;
+  text-wrap: balance;
+  display: grid;
+  grid-template-columns: 2.2rem 1fr;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+h2 .number {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--brass);
+  letter-spacing: 0.04em;
+}
+p { margin: 0 0 1rem; }
+strong { font-weight: 600; }
+em { font-style: italic; }
+
+ul, ol.steps { padding-left: 1.3rem; margin: 0 0 1rem; }
+li { margin-bottom: 0.5rem; }
+li::marker { color: var(--brass); }
+
+code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  background: var(--code-bg);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
+
+figure.plate {
+  margin: 1.5rem 0 1.5rem;
+  padding: 1.1rem 1.25rem 0.9rem;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  overflow-x: auto;
+}
+figure.plate math[display="block"] {
+  font-size: 1.2rem;
+  margin: 0.25rem 0 0.75rem;
+}
+figure.plate figcaption {
+  font-size: 0.92rem;
+  color: var(--muted);
+  border-top: 1px solid var(--rule);
+  padding-top: 0.6rem;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+figure.plate figcaption .tag {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brass);
+}
+figure.plate figcaption p { margin: 0; }
+math { font-size: 1.05em; }
+
+aside.note {
+  margin: 1.5rem 0;
+  padding: 0.9rem 1.1rem;
+  background: var(--brass-soft);
+  border-left: 3px solid var(--brass);
+  border-radius: 0 4px 4px 0;
+  font-size: 0.97rem;
+}
+aside.note p:last-child { margin-bottom: 0; }
+
+.table-wrap { overflow-x: auto; margin: 1.5rem 0; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.97rem;
+  background: var(--surface);
+}
+th, td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--rule);
+}
+th {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 400;
+}
+tr.emphasis td { background: var(--brass-soft); }
+
+dl.glossary {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.9rem 2rem;
+  margin: 1.5rem 0 0;
+}
+@media (min-width: 760px) {
+  dl.glossary { grid-template-columns: 1fr 1fr; }
+}
+dl.glossary div { break-inside: avoid; }
+dl.glossary dt {
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+dl.glossary dd {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+a { color: var(--brass); }
+a:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+</style>
+
+<div class="page">
+<nav class="contents" aria-label="Contents">
+  <div class="label">Contents</div>
+  <ol>
+    <li><a href="#cast"><span>1</span>The cast</a></li>
+    <li><a href="#landscape"><span>2</span>The landscape</a></li>
+    <li><a href="#curvature"><span>3</span>Slope versus curvature</a></li>
+    <li><a href="#constraint"><span>4</span>Staying on the road</a></li>
+    <li><a href="#precision"><span>5</span>Precision is the first enemy</a></li>
+    <li><a href="#smoothness"><span>6</span>Smoothness</a></li>
+    <li><a href="#chain"><span>7</span>Density to landscape</a></li>
+    <li><a href="#dropped"><span>8</span>The term we leave out</a></li>
+    <li><a href="#tiles"><span>9</span>Why tiles, and which</a></li>
+    <li><a href="#glossary"><span>10</span>Glossary</a></li>
+  </ol>
+</nav>
+
+<main>
+<header>
+  <h1>How the Solver Thinks</h1>
+  <p class="standfirst">A plain-language tour of the mathematics behind the capacity-constrained tessellation.</p>
+  <p>Written for someone who follows the ideas but does not want to push symbols around. Each section introduces one idea and says what it buys us. Every formula is restated in words directly beneath it. Read it top to bottom once; afterwards it works as a reference, and the glossary at the end is the lookup table.</p>
+</header>
+
+<section id="cast">
+<h2><span class="number">1</span>The cast</h2>
+<p><strong>Sites</strong> are the points we move. <strong>Cells</strong> are their Voronoi regions: every point of the sphere belongs to the nearest site. <strong>Density</strong> <math><mi>ρ</mi></math> is a function on the sphere that says how “heavy” each patch of surface is. A cell’s <strong>capacity</strong> (or mass) is the integral of the density over it — how much weight it holds.</p>
+<p>We want two things at once:</p>
+<ul>
+  <li><strong>Centroidal</strong>: each site sits at the weighted centre of its own cell. This is what makes cells look compact and honest rather than skewed.</li>
+  <li><strong>Equal capacity</strong>: every cell holds the same mass. With a density that varies, that means small cells where it is heavy and large cells where it is light. That is where the pattern comes from.</li>
+</ul>
+<p>Everything below is about getting both, fast, for any density you care to hand us.</p>
+</section>
+
+<section id="landscape">
+<h2><span class="number">2</span>The landscape</h2>
+<p>Imagine one enormous space where a single point represents <em>all</em> site positions at once (<math><mi>N</mi></math> sites, three coordinates each, so <math><mn>3</mn><mi>N</mi></math> coordinates). Over that space we define a height, the <strong>energy</strong>:</p>
+<figure class="plate">
+<math display="block">
+  <mi>E</mi><mo>=</mo>
+  <munder><mo>∑</mo><mi>k</mi></munder>
+  <msub><mo>∫</mo><msub><mi>V</mi><mi>k</mi></msub></msub>
+  <mi>ρ</mi><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo>
+  <mspace width="0.15em"/>
+  <msup><mrow><mo>‖</mo><mi>x</mi><mo>−</mo><msub><mi>s</mi><mi>k</mi></msub><mo>‖</mo></mrow><mn>2</mn></msup>
+  <mspace width="0.2em"/><mi>d</mi><mi>A</mi>
+</math>
+<figcaption><span class="tag">In words</span><p>For every cell <math><msub><mi>V</mi><mi>k</mi></math>, add up the density-weighted squared distance from each point in the cell to its site <math><msub><mi>s</mi><mi>k</mi></math>. Compact cells with sites in their middles score low; stretched cells or off-centre sites score high.</p></figcaption>
+</figure>
+<p>Minimising <math><mi>E</mi></math> is walking downhill on this landscape. The one fact that makes this tractable: the slope of <math><mi>E</mi></math> with respect to a single site is simply</p>
+<figure class="plate">
+<math display="block">
+  <msub><mo>∇</mo><msub><mi>s</mi><mi>k</mi></msub></msub><mi>E</mi>
+  <mo>=</mo>
+  <mn>2</mn><mspace width="0.1em"/><msub><mi>m</mi><mi>k</mi></msub>
+  <mo stretchy="false">(</mo><msub><mi>s</mi><mi>k</mi></msub><mo>−</mo><msub><mi>c</mi><mi>k</mi></msub><mo stretchy="false">)</mo>
+</math>
+<figcaption><span class="tag">In words</span><p>Twice the cell’s mass <math><msub><mi>m</mi><mi>k</mi></math> times the vector from the cell’s weighted centroid <math><msub><mi>c</mi><mi>k</mi></math> to the site. The downhill direction points at the centroid, and the slope is zero exactly when every site <em>is</em> its centroid.</p></figcaption>
+</figure>
+<p>So the centroidal condition is “you are at a valley floor of <math><mi>E</mi></math>”. Lloyd’s method — move every site to its centroid, repeat — is just walking downhill in big, unmeasured steps.</p>
+<aside class="note"><p>The moving-a-site-moves-the-boundary terms, which look like they should appear in that slope, cancel out. That cancellation is the reason the landscape is as friendly as it is.</p></aside>
+</section>
+
+<section id="curvature">
+<h2><span class="number">3</span>Slope versus curvature</h2>
+<p>The <strong>gradient</strong> is the slope: which way is downhill, and how steeply. A method that uses only the gradient (gradient descent, and to a large extent L-BFGS, which builds a rough memory of curvature from past slopes) has to guess how far to step. In a long narrow valley it zig-zags.</p>
+<p>The <strong>Hessian</strong> is the curvature: how the slope <em>changes</em> as you move. Knowing the curvature lets you do what Newton’s method does in one dimension — fit a parabola to where you stand and jump to its bottom:</p>
+<figure class="plate">
+<math display="block">
+  <msub><mi>x</mi><mtext>new</mtext></msub><mo>=</mo><mi>x</mi><mo>−</mo>
+  <mfrac><mrow><msup><mi>f</mi><mo>′</mo></msup><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo></mrow>
+         <mrow><msup><mi>f</mi><mo>″</mo></msup><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo></mrow></mfrac>
+</math>
+<figcaption><span class="tag">In words</span><p>Step by slope divided by curvature. Steep and flat-bottomed: take a big step. Steep and sharply curved: the bottom is close, take a small one. Near the valley floor this lands almost exactly, which is why Newton needs a handful of steps where slope-only methods need hundreds.</p></figcaption>
+</figure>
+<p>Two practical notes about how we use it:</p>
+<ul>
+  <li>The Hessian for <math><mi>N</mi></math> sites is a <math><mn>3</mn><mi>N</mi><mo>×</mo><mn>3</mn><mi>N</mi></math> table, but we never build it. We only ever need to answer “what is the curvature <em>along this particular direction</em>?”, which is a Hessian-times-vector product, and the conjugate-gradient solver inside each Newton step only ever asks that question. That is what lets it scale.</li>
+  <li>We do not trust the parabola blindly. A <strong>trust region</strong> is a radius within which we believe the quadratic sketch. Take the best step inside it; if the landscape dropped about as much as the sketch predicted, widen the radius; if it did not, shrink it and try again. A radius shrinking to nothing is the “stalled” outcome in the logs: the sketch keeps disagreeing with reality even for tiny steps.</li>
+</ul>
+<p>The curvature of <math><mi>E</mi></math> turns out to have a clean form: it is built entirely from <strong>line integrals of the density along cell boundaries</strong> (the bisectors between neighbouring sites). File that fact away; it matters below.</p>
+</section>
+
+<section id="constraint">
+<h2><span class="number">4</span>Staying on the road: the constraint</h2>
+<p>Equal capacity is a <strong>constraint</strong>: <math><mi>N</mi></math> equations, one per cell, saying its mass error is zero:</p>
+<figure class="plate">
+<math display="block">
+  <msub><mi>c</mi><mi>k</mi></msub><mo>=</mo><msub><mi>m</mi><mi>k</mi></msub><mo>−</mo>
+  <mfrac><mi>M</mi><mi>N</mi></mfrac><mo>=</mo><mn>0</mn>
+</math>
+<figcaption><span class="tag">In words</span><p>Cell <math><mi>k</mi></math>’s mass minus its fair share of the total mass <math><mi>M</mi></math>. We are not free to walk anywhere downhill; we must end on the surface where all of these hold.</p></figcaption>
+</figure>
+<p>The standard tool is the <strong>augmented Lagrangian</strong>, which turns the constrained problem into a sequence of unconstrained ones by modifying the landscape in two ways:</p>
+<figure class="plate">
+<math display="block">
+  <mi>L</mi><mo>=</mo><mi>E</mi>
+  <mo>−</mo><munder><mo>∑</mo><mi>k</mi></munder><msub><mi>λ</mi><mi>k</mi></msub><msub><mi>c</mi><mi>k</mi></msub>
+  <mo>+</mo><mfrac><mi>μ</mi><mn>2</mn></mfrac>
+  <munder><mo>∑</mo><mi>k</mi></munder><msubsup><mi>c</mi><mi>k</mi><mn>2</mn></msubsup>
+</math>
+<figcaption><span class="tag">In words</span><p>Energy, minus prices times violations, plus a spring on the violations.</p></figcaption>
+</figure>
+<ul>
+  <li>The <strong>penalty</strong> <math><mfrac><mi>μ</mi><mn>2</mn></mfrac><mo>∑</mo><msubsup><mi>c</mi><mi>k</mi><mn>2</mn></msubsup></math> is a spring: violate the constraint and the landscape rises around you. <math><mi>μ</mi></math> is the spring stiffness. A spring alone never quite reaches the road, and a very stiff spring makes the valley so narrow that slope-only methods crawl. That narrowing is the ill-conditioning that made L-BFGS need thousands of inner iterations; Newton sees the narrowness as curvature and is unbothered by it.</li>
+  <li>The <strong>multipliers</strong> <math><msub><mi>λ</mi><mi>k</mi></msub></math> are prices. <math><msub><mi>λ</mi><mi>k</mi></msub></math> is the exchange rate between energy and mass for cell <math><mi>k</mi></math>: how much <math><mi>E</mi></math> would improve if that cell were allowed slightly more mass than its share. With the right prices in place, the unconstrained minimum of <math><mi>L</mi></math> lands exactly on the road, no infinite stiffness required.</li>
+</ul>
+<p>So the algorithm is two loops. The <strong>inner loop</strong> walks downhill on <math><mi>L</mi></math> with the current prices and stiffness; that is where Newton or L-BFGS lives. The <strong>outer loop</strong> looks at the remaining mass errors, updates the prices,</p>
+<figure class="plate">
+<math display="block">
+  <msub><mi>λ</mi><mi>k</mi></msub><mo>←</mo><msub><mi>λ</mi><mi>k</mi></msub><mo>−</mo><mi>μ</mi><mspace width="0.1em"/><msub><mi>c</mi><mi>k</mi></msub>
+</math>
+<figcaption><span class="tag">In words</span><p>Charge more for what is still over target; stiffen the spring if progress was poor; go again.</p></figcaption>
+</figure>
+<p>The outer loop prints one line per pass; the inner iteration counts in those lines are what the Newton work cut by two to three times.</p>
+</section>
+
+<section id="precision">
+<h2><span class="number">5</span>Precision is the first enemy</h2>
+<p>Before smoothness or curvature can matter, the landscape has to be <em>evaluated</em> consistently. Newton compares “how much did <math><mi>L</mi></math> actually drop” against “how much did the parabola predict”, and near a solution those drops are tiny — around <math><msup><mn>10</mn><mrow><mo>−</mo><mn>10</mn></mrow></msup></math> on a landscape whose height is of order one. Any inconsistency in how <math><mi>L</mi></math> is computed that is larger than that reads as the landscape lying, and the trust region collapses.</p>
+<p>The dangerous kind of inconsistency is not random rounding, which averages out, but a <strong>geometric tolerance</strong>: a rule like “treat two points closer than <math><mi>ε</mi></math> as the same point”. Such a rule is a discontinuity. As sites move, a configuration crosses the threshold and a sliver of a cell silently appears or disappears, and the objective jumps by an amount proportional to <math><mi>ε</mi></math>. A jump of <math><msup><mn>10</mn><mrow><mo>−</mo><mn>6</mn></mrow></msup></math> is invisible to the eye and fatal to a solver aiming at <math><msup><mn>10</mn><mrow><mo>−</mo><mn>8</mn></mrow></msup></math>.</p>
+<p>The principle that keeps this out: <strong>never rederive geometry from rounded points when the exact geometry is already known</strong>. An arc that is part of a bisector lies on a great circle whose normal is known exactly from the two sites; a clipped piece of it lies on the same circle; the piece that closes a clipped polygon lies on the clipping circle. Carry those normals through instead of recomputing them from endpoints, and near-degenerate pieces become harmless — their contribution scales with their length, and the only tolerances left are at the level of machine rounding.</p>
+<p>The working test for this is direct: represent a smooth density two ways (one global polynomial, the same function stored as tiles) and check that every cell and every edge integrates to the same answer to around <math><msup><mn>10</mn><mrow><mo>−</mo><mn>12</mn></mrow></msup></math>. If that holds, the representation is out of the way and what remains is genuinely about the mathematics.</p>
+</section>
+
+<section id="smoothness">
+<h2><span class="number">6</span>Smoothness, and why it matters</h2>
+<p>A function is <strong>C⁰</strong> if it has no gaps, <strong>C¹</strong> if it also has no kinks (its slope is continuous), <strong>C²</strong> if its curvature is continuous as well. The absolute value <math><mrow><mo>|</mo><mi>x</mi><mo>|</mo></mrow></math> is C⁰ but not C¹: there is a corner at zero. The function <math><mi>x</mi><mrow><mo>|</mo><mi>x</mi><mo>|</mo></mrow></math> is C¹ but not C²: smooth to look at, but its curvature jumps from negative to positive at zero.</p>
+<p>Newton’s method steers by curvature. Where curvature jumps, the parabola fitted on one side of the jump is wrong about the other side, so the predicted drop disagrees with the real one, the trust region shrinks, and you stall. Newton’s textbook guarantee — fast convergence near the solution — assumes the curvature varies continuously, with no jumps. L-BFGS is more tolerant because it only measures slopes, but a kinked curvature still misleads its memory.</p>
+<p>So the question is: <strong>how smooth is our landscape, and what decides that?</strong></p>
+</section>
+
+<section id="chain">
+<h2><span class="number">7</span>How the density’s smoothness becomes the landscape’s</h2>
+<p>Moving a site moves its bisectors. The change in anything integrated over a cell is, to first order, an integral <em>along the moving boundary</em>. So each time we differentiate with respect to the sites, a cell integral becomes a boundary integral, and a boundary integral — because the boundary is now moving through the density — picks up the density’s own derivative. One level of differentiation costs one level of depth into <math><mi>ρ</mi></math>:</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Quantity</th><th>Depends on</th></tr></thead>
+<tbody>
+<tr><td><math><mi>E</mi></math>, the mass errors <math><msub><mi>c</mi><mi>k</mi></msub></math></td><td><math><mi>ρ</mi></math> integrated over cells</td></tr>
+<tr><td>slope of <math><mi>E</mi></math>, slope of <math><msub><mi>c</mi><mi>k</mi></msub></math></td><td><math><mi>ρ</mi></math> integrated along bisectors</td></tr>
+<tr><td>curvature of <math><mi>E</mi></math></td><td><math><mi>ρ</mi></math> integrated along bisectors</td></tr>
+<tr class="emphasis"><td>curvature of <math><msub><mi>c</mi><mi>k</mi></msub></math></td><td>the <strong>gradient of <math><mi>ρ</mi></math></strong> along bisectors, plus how the cell corners move</td></tr>
+</tbody>
+</table>
+</div>
+<p>The curvature of <math><mi>E</mi></math> gets a free pass — it stays at “<math><mi>ρ</mi></math> on bisectors” because of the same cancellation that made its slope so simple.</p>
+<p>Read the last row again. The curvature of the constraints involves the <em>gradient</em> of the density on the bisectors. If the density has kinks — continuous values but jumping slopes — then the constraint curvature jumps wherever a bisector crosses a kink, and the landscape <math><mi>L</mi></math> is C¹ but not C². That is exactly the situation with a density stored as polynomial tiles on a triangle mesh that match values at tile edges but not slopes.</p>
+<p>And now the fix reads off the table: <strong>make the density C¹</strong> — tiles that match slopes as well as values — and the constraint curvature is continuous, so <math><mi>L</mi></math> is C². Better still, a piecewise polynomial with a continuous gradient has a gradient that cannot change faster than some fixed rate (it is Lipschitz, in the jargon), which is precisely the condition Newton’s fast-convergence theorem asks for. We do <em>not</em> need C² tiles. C¹ is the whole ask.</p>
+</section>
+
+<section id="dropped">
+<h2><span class="number">8</span>The term we leave out</h2>
+<p>One more honest complication. The curvature handed to Newton is not the full curvature of <math><mi>L</mi></math>. Differentiating <math><mi>L</mi></math> twice gives four terms:</p>
+<figure class="plate">
+<math display="block">
+  <msup><mo>∇</mo><mn>2</mn></msup><mi>L</mi><mo>=</mo>
+  <msup><mo>∇</mo><mn>2</mn></msup><mi>E</mi>
+  <mo>−</mo><munder><mo>∑</mo><mi>k</mi></munder><msub><mi>λ</mi><mi>k</mi></msub><msup><mo>∇</mo><mn>2</mn></msup><msub><mi>c</mi><mi>k</mi></msub>
+  <mo>+</mo><mi>μ</mi><munder><mo>∑</mo><mi>k</mi></munder><mo>∇</mo><msub><mi>c</mi><mi>k</mi></msub><mo>∇</mo><msubsup><mi>c</mi><mi>k</mi><mi>⊤</mi></msubsup>
+  <mo>+</mo><mi>μ</mi><munder><mo>∑</mo><mi>k</mi></munder><msub><mi>c</mi><mi>k</mi></msub><msup><mo>∇</mo><mn>2</mn></msup><msub><mi>c</mi><mi>k</mi></msub>
+</math>
+<figcaption><span class="tag">In words</span><p>Curvature of the energy; minus prices times curvature of the constraints; plus the spring’s curvature built from constraint slopes; plus the spring times violations times constraint curvature.</p></figcaption>
+</figure>
+<p>The Gauss–Newton model keeps the first and third. The third is cheap, built from slopes we already have, and it is the term that grows with <math><mi>μ</mi></math> and governs conditioning. The two terms containing <math><msup><mo>∇</mo><mn>2</mn></msup><msub><mi>c</mi><mi>k</mi></msub></math> are the expensive ones: per the table, they need the gradient of <math><mi>ρ</mi></math> on bisectors <em>and</em> the velocities of the Voronoi corners as sites move.</p>
+<p>Near a solution the <strong>fourth</strong> term dies on its own: the mass errors <math><msub><mi>c</mi><mi>k</mi></msub></math> go to zero. The <strong>second</strong> does not. The prices <math><msub><mi>λ</mi><mi>k</mi></msub></math> settle to nonzero values — mass genuinely has a price when the density varies — so the Gauss–Newton model is permanently off by <math><mo>∑</mo><msub><mi>λ</mi><mi>k</mi></msub><msup><mo>∇</mo><mn>2</mn></msup><msub><mi>c</mi><mi>k</mi></msub></math>. That alone makes it a good quasi-Newton method rather than a true one: it still converges, but linearly rather than quadratically, and on a kinked density the missing term is exactly the one that jumps. The test for how much this costs is to feed the trust-region step the true curvature measured by finite differences — nudge the sites along a direction, re-evaluate the slope, divide by the nudge — and count iterations. When that halves the count, the term is worth deriving.</p>
+</section>
+
+<section id="tiles">
+<h2><span class="number">9</span>Why tiles at all, and which tiles</h2>
+<p>A reminder of the contract that makes everything exact. A polynomial density integrated over a region bounded by <strong>great-circle arcs</strong> has a closed-form answer (Stokes’ theorem, applied recursively). Voronoi cells on the sphere are bounded by great-circle arcs. So as long as the density is polynomial — or polynomial on tiles whose <em>own</em> edges are great-circle arcs, so that a cell clipped to a tile is again such a region — every integral the solver needs is exact. No quadrature, no sampling error, no mesh of the <em>space</em>. What we discretise instead is the <em>function</em>: we replace the density you hand us with the nearest member of a family we can integrate exactly.</p>
+<p>The simplest family is “polynomial per triangle, values agree at edges”. The family we want is “polynomial per triangle, values <strong>and slopes</strong> agree at edges” — a C¹ spline on the sphere. The standard way to build one from quadratic pieces is the <strong>Powell–Sabin</strong> split: cut each triangle into six, then the nine numbers “value and slope at each corner” determine a quadratic on every sixth with matching slopes across all seams. Sampling value and slope at mesh vertices is something we can do for any density you give us — function, noise, image. The <strong>Bézier form</strong> writes each piece in terms of a few control values; if all the control values are positive the density is positive, which is how “no negative density, ever” becomes a check on a list of numbers rather than a hope. Because each sixth is still a polynomial on a great-circle triangle, the integration path does not change at all: a C¹ field is just a piecewise field built more carefully.</p>
+<p>How fine should the mesh be? Not “as fine as the density’s detail”. Cells have a size — roughly</p>
+<figure class="plate">
+<math display="block">
+  <mi>h</mi><mo>≈</mo><mfrac><mn>2</mn><msqrt><mi>N</mi></msqrt></mfrac>
+</math>
+<figcaption><span class="tag">In words</span><p>About two over root-<math><mi>N</mi></math> radians across — and structure in the density finer than a cell cannot change where the cells go, except through its local average.</p></figcaption>
+</figure>
+<p>So the mesh resolution follows from <math><mi>N</mi></math>, and the finer detail is averaged out on purpose. That is the bandwidth rule, and it is what makes “any crazy function” a finite amount of work.</p>
+</section>
+
+<section id="glossary">
+<h2><span class="number">10</span>Glossary</h2>
+<dl class="glossary">
+<div><dt>Gradient / slope</dt><dd>The direction and rate of steepest increase. We step against it.</dd></div>
+<div><dt>Hessian / curvature</dt><dd>How the slope changes as you move; a matrix, but we only ever use it as “curvature along a direction”.</dd></div>
+<div><dt>Newton’s method</dt><dd>Fit a parabola using slope and curvature, jump to its bottom. Few steps, each more expensive.</dd></div>
+<div><dt>L-BFGS</dt><dd>Walk downhill using slopes and a short memory of past slopes to approximate curvature. Cheap steps, many of them.</dd></div>
+<div><dt>Trust region</dt><dd>The radius within which we believe the parabola; widened or shrunk by comparing predicted and actual drop.</dd></div>
+<div><dt>Conjugate gradient</dt><dd>The inner linear solver that finds the Newton step using only curvature-along-direction questions.</dd></div>
+<div><dt>Constraint</dt><dd>An equation the answer must satisfy — here, each cell’s mass equals its share.</dd></div>
+<div><dt>Penalty, <math><mi>μ</mi></math></dt><dd>A spring that raises the landscape where the constraints are violated; <math><mi>μ</mi></math> is its stiffness.</dd></div>
+<div><dt>Multiplier, <math><msub><mi>λ</mi><mi>k</mi></msub></math></dt><dd>The price of mass in cell <math><mi>k</mi></math>; the exchange rate between energy and that cell’s capacity.</dd></div>
+<div><dt>Augmented Lagrangian</dt><dd>The modified landscape “energy − prices × violations + spring”, minimised in an inner loop while an outer loop updates prices and stiffness.</dd></div>
+<div><dt>Gauss–Newton</dt><dd>Keeping only the part of the spring’s curvature built from constraint slopes; drops the constraints’ own curvature.</dd></div>
+<div><dt>C⁰ / C¹ / C²</dt><dd>No gaps / no kinks / no jumps in curvature.</dd></div>
+<div><dt>Lipschitz gradient</dt><dd>The slope cannot change faster than some fixed rate; the precise thing Newton’s convergence theorem needs, and what a C¹ piecewise polynomial gives for free.</dd></div>
+<div><dt>Bisector</dt><dd>The great-circle arc separating two neighbouring cells.</dd></div>
+<div><dt>Sweep rate</dt><dd>How fast a bisector moves when one of its sites moves; the building block of every constraint slope.</dd></div>
+<div><dt>Geometric tolerance</dt><dd>A “close enough counts as equal” rule; each one is a small discontinuity in the objective, so they must stay at rounding scale and never stand in for known exact geometry.</dd></div>
+<div><dt>Piecewise polynomial field</dt><dd>A density stored as one polynomial per triangle of a spherical mesh.</dd></div>
+<div><dt>Powell–Sabin spline</dt><dd>C¹ quadratic pieces on a six-way split of each triangle, determined by value and slope at the vertices.</dd></div>
+<div><dt>Bézier / Bernstein form</dt><dd>Writing a polynomial piece in terms of control values; nonnegative control values give a nonnegative piece.</dd></div>
+<div><dt>Closure invariant</dt><dd>Exactness survives only if the density is polynomial on tiles bounded by the same curves the cells are made of — great circles on the sphere.</dd></div>
+<div><dt>Bandwidth rule</dt><dd>Density detail finer than a cell only matters through its local average; choose mesh resolution from <math><mi>N</mi></math>.</dd></div>
+</dl>
+</section>
+</main>
+</div>

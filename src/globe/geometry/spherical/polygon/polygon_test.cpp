@@ -656,6 +656,48 @@ TEST(PolygonTest, ClippedPiecesPartitionMomentsOfTheOriginal) {
     }
 }
 
+TEST(PolygonTest, ClippedArcsKeepTheirGreatCirclesAndTheClosingArcTakesThePlanes) {
+    Polygon polygon = octant();
+    VectorS2 normal = VectorS2(1, -1, 0).normalized();
+    auto clipped = polygon.clipped_by(normal);
+    ASSERT_TRUE(clipped.has_value());
+
+    size_t closing_arcs = 0;
+
+    for (const Arc& arc : clipped->arcs()) {
+        bool on_plane = (arc.normal() - normal).norm() < 1e-12;
+        bool on_original = false;
+
+        for (const Arc& original : polygon.arcs()) {
+            on_original = on_original || (arc.normal() - original.normal()).norm() < 1e-12;
+        }
+
+        closing_arcs += on_plane;
+        EXPECT_TRUE(on_plane || on_original);
+    }
+
+    EXPECT_EQ(closing_arcs, 1u);
+}
+
+TEST(PolygonTest, ClippingThroughAVertexNeighbourhoodIsContinuous) {
+    Polygon polygon = octant();
+    VectorS2 vertex(0, 0, 1);
+    VectorS2 direction = VectorS2(1, -1, 0).normalized();
+    std::vector<double> masses;
+
+    for (double offset : {-1e-7, -1e-9, 0.0, 1e-9, 1e-7}) {
+        VectorS2 normal = (direction + offset * vertex).normalized();
+        auto clipped = polygon.clipped_by(normal);
+        masses.push_back(clipped ? clipped->moments(0).at(0, 0, 0) : 0.0);
+    }
+
+    for (size_t i = 1; i < masses.size(); ++i) {
+        EXPECT_NEAR(masses[i], masses[i - 1], 1e-6);
+    }
+
+    EXPECT_NEAR(masses[2], polygon.moments(0).at(0, 0, 0) / 2.0, 1e-9);
+}
+
 TEST(PolygonTest, ClippingIsIdempotent) {
     Polygon polygon = irregular_quadrilateral();
     VectorS2 normal = VectorS2(0.2, -0.7, 0.4).normalized();

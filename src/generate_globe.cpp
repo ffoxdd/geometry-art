@@ -39,6 +39,7 @@ struct Config {
     int max_inner_iterations;
     double capacity_tolerance = 1e-7;
     std::string inner_solver;
+    std::string newton_curvature;
     std::optional<unsigned int> seed;
     std::string output_dir;
     std::string snapshot_path;
@@ -104,6 +105,7 @@ int main(int argc, char *argv[]) {
     optimizer_parameters.max_inner_iterations = static_cast<size_t>(config.max_inner_iterations);
     optimizer_parameters.relative_capacity_tolerance = config.capacity_tolerance;
     optimizer_parameters.inner_solver = config.inner_solver;
+    optimizer_parameters.newton.curvature = config.newton_curvature;
 
     Factory factory(
         config.points_count,
@@ -166,7 +168,7 @@ Config parse_arguments(int argc, char *argv[]) {
 
     app.add_option("--density-field,-f", config.density_field)
         ->description("Density field type")
-        ->check(CLI::IsMember({"constant", "linear", "quadratic", "noise", "noise-fit"}))
+        ->check(CLI::IsMember({"constant", "linear", "quadratic", "quadratic-piecewise", "noise", "noise-fit"}))
         ->default_val("quadratic");
 
     app.add_option("--render", config.perform_render)
@@ -212,6 +214,11 @@ Config parse_arguments(int argc, char *argv[]) {
         ->description("Inner minimiser for each augmented Lagrangian subproblem")
         ->check(CLI::IsMember({"lbfgs", "newton"}))
         ->default_val("lbfgs");
+
+    app.add_option("--newton-curvature", config.newton_curvature)
+        ->description("Curvature model for the newton inner solver")
+        ->check(CLI::IsMember({"gauss-newton", "finite-difference"}))
+        ->default_val("gauss-newton");
 
     app.add_option("--seed", config.seed)
         ->description("Seed for the initial random points; omit for a random seed");
