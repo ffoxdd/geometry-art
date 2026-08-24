@@ -107,6 +107,14 @@ treatments decouple from the domain:
 - **Conformed.** The frame is the wall. Every cell, border cells
   included, is a complete equal-capacity cell pressed flat against
   the edge, and the piece reads as a self-contained object.
+- **Scalloped.** Keep only the cells lying wholly inside the frame,
+  so the silhouette is the cells' own walls: an organic edge, and
+  nothing but a filter on which cells to draw.
+- **Closed cut.** Slice the border cells and seal them along the
+  frame line, so every visible cell reads as complete with one flat
+  side. This imitates the conformed edge, except the sealed cells
+  hold less than a full capacity; only the true conformed edge needs
+  the optimizer to know the wall.
 - **Fade.** The density ramps down toward the edge, inside a wall,
   so cells swell and the pattern dissolves as it approaches the
   border. The ramp bottoms out at a positive floor, never zero: the
@@ -114,6 +122,11 @@ treatments decouple from the domain:
   positivity certification is precisely a proof the density has a
   floor. The ramp must also be at least a cell wide, or the
   bandwidth rule says the tessellation cannot read it.
+
+The renderer owns each frame edge independently, so the treatments
+mix per edge -- a cylinder cut at the top and scalloped at the
+bottom -- and every look except conformed and fade comes from the
+torus at render time.
 
 One caution for margins: a straight wall nucleates rows of cells
 aligned parallel to it, the way crystallization starts at the flat
