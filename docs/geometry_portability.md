@@ -97,9 +97,10 @@ it rather than precede it.
 The edge of a finished piece is a separate, artistic choice, and the
 treatments decouple from the domain:
 
-- **Cut.** Clip the tessellation at the frame at render time. Border
-  cells are sliced mid-cell, and the piece reads as a window onto a
-  pattern that continues past the edge. From the torus this is free;
+- **Cut.** The default. Clip the tessellation at the frame at render
+  time. Border cells are sliced mid-cell -- partial cells are part of
+  the look -- and the piece reads as a window onto a pattern that
+  continues past the edge. From the torus this is free;
   from a walled domain it needs a margin between wall and frame. A
   cylinder whose axial period equals the frame height wastes nothing:
   each cell's clipped top fragment reappears as its bottom fragment,
