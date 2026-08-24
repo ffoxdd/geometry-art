@@ -3,6 +3,7 @@
 #include "../core/torus.hpp"
 #include "../../hessian_blocks.hpp"
 #include "../../../fields/flat/constant_field.hpp"
+#include "../../../testing/flat_scatter.hpp"
 #include "../../../testing/macros.hpp"
 #include <gtest/gtest.h>
 #include <cmath>
@@ -13,34 +14,14 @@
 using namespace globe;
 using namespace globe::voronoi;
 using namespace globe::voronoi::flat;
+using globe::testing::flat_scatter;
+using globe::testing::scattered_torus;
+using globe::testing::torus_of;
 using fields::flat::ConstantField;
 
 namespace {
 
 constexpr double DISPLACEMENT = 1e-6;
-
-std::vector<Vector2> scattered_sites(size_t count, double width, double height) {
-    std::vector<Vector2> sites;
-    double golden = 0.6180339887498949;
-
-    for (size_t k = 0; k < count; ++k) {
-        double x = std::fmod(0.13 + golden * static_cast<double>(k), 1.0) * width;
-        double y = (static_cast<double>(k) + 0.5) / static_cast<double>(count) * height;
-        sites.emplace_back(x, y);
-    }
-
-    return sites;
-}
-
-std::unique_ptr<Torus> torus_of(const std::vector<Vector2>& sites, double width, double height) {
-    auto torus = std::make_unique<Torus>(width, height);
-
-    for (const Vector2& site : sites) {
-        torus->insert(site);
-    }
-
-    return torus;
-}
 
 std::vector<Vector3> cvt_gradient(
     const ConstantField& field,
@@ -60,7 +41,7 @@ std::vector<Vector3> cvt_gradient(
 
 void expect_matches_finite_differences(size_t count, double width, double height) {
     ConstantField field(1.0, width, height);
-    std::vector<Vector2> sites = scattered_sites(count, width, height);
+    std::vector<Vector2> sites = flat_scatter(count, width, height);
     auto torus = torus_of(sites, width, height);
 
     HessianBlocks blocks = CvtHessian<ConstantField>(field).assemble(*torus);
@@ -111,7 +92,7 @@ TEST(FlatCvtHessianTest, MatchesFiniteDifferencesOnAnElongatedTorus) {
 
 TEST(FlatCvtHessianTest, IsSymmetric) {
     ConstantField field(1.0, 1.0, 1.0);
-    std::vector<Vector2> sites = scattered_sites(12, 1.0, 1.0);
+    std::vector<Vector2> sites = flat_scatter(12, 1.0, 1.0);
     auto torus = torus_of(sites, 1.0, 1.0);
 
     HessianBlocks blocks = CvtHessian<ConstantField>(field).assemble(*torus);

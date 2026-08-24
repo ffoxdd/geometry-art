@@ -2,11 +2,13 @@
 #include "globe/voronoi/spherical/factories/factory.hpp"
 #include "globe/voronoi/spherical/core/callback.hpp"
 #include "globe/io/qt/application.hpp"
+#include "globe/io/qt/flat_drawer.hpp"
 #include "globe/io/qt/voronoi_sphere_drawer.hpp"
 #include "globe/io/snapshot/flat_svg_writer.hpp"
 #include "globe/io/snapshot/json_writer.hpp"
 #include "globe/io/snapshot/svg_writer.hpp"
 #include "globe/io/text/sphere_repository.hpp"
+#include "globe/io/text/torus_repository.hpp"
 #include <CLI/CLI.hpp>
 #include <chrono>
 #include <ctime>
@@ -56,13 +58,13 @@ struct Config {
 Config parse_arguments(int argc, char *argv[]);
 void write_snapshot(const globe::io::snapshot::Snapshot& snapshot, const std::string& path);
 
-int run_flat(const Config& config);
+int run_flat(const Config& config, int argc, char *argv[]);
 
 int main(int argc, char *argv[]) {
     Config config = parse_arguments(argc, argv);
 
     if (config.geometry != "sphere") {
-        return run_flat(config);
+        return run_flat(config, argc, argv);
     }
 
     std::cout <<
@@ -190,16 +192,55 @@ void write_snapshot(const globe::io::snapshot::Snapshot& snapshot, const std::st
 
 // The flat pipeline: same options, a rectangle of periods instead of a
 // sphere, and the frame cut from the torus at render time.
-int run_flat(const Config& config) {
+int run_flat(const Config& config, int argc, char *argv[]) {
     std::cout <<
         "Configuration:" << std::endl <<
         "  Geometry: " << config.geometry << " (" << config.width << " x " << config.height << ")" << std::endl <<
         "  Points: " << config.points_count << std::endl <<
         "  Density: " << config.density_field << std::endl <<
+        "  Render: " << (config.perform_render ? "yes" : "no") << std::endl <<
+        "  Warm start: " << config.warm_start << std::endl <<
         "  Lloyd passes: " << config.lloyd_passes << std::endl <<
         "  Capacity tolerance: " << config.capacity_tolerance << std::endl <<
         "  Seed: " << (config.seed.has_value() ? std::to_string(*config.seed) : "random") << std::endl <<
         std::endl;
+
+    std::unique_ptr<Application> application;
+    std::unique_ptr<globe::io::qt::FlatDrawer> drawer;
+    globe::voronoi::flat::Callback callback = globe::voronoi::flat::noop_callback();
+
+    if (config.perform_render) {
+        application = std::make_unique<Application>(argc, argv);
+
+        io::qt::RenderMode render_mode = io::qt::RenderMode::Wireframe;
+        if (config.render_mode == "solid") {
+            render_mode = io::qt::RenderMode::Solid;
+        } else if (config.render_mode == "minimal") {
+            render_mode = io::qt::RenderMode::Minimal;
+        }
+
+        drawer = std::make_unique<globe::io::qt::FlatDrawer>(
+            config.geometry == "cylinder" ? "Cylinder" : "Torus",
+            render_mode,
+            config.geometry == "cylinder" ? io::qt::FlatEmbedding::Cylinder : io::qt::FlatEmbedding::Torus
+        );
+        drawer->show();
+        application->process_events();
+
+        using namespace std::chrono_literals;
+        auto last_render = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
+
+        callback = [&application, &drawer, last_render](const globe::voronoi::flat::Torus& torus) {
+            application->process_events();
+
+            auto now = std::chrono::steady_clock::now();
+
+            if (now - *last_render >= 100ms) {
+                drawer->update(torus);
+                *last_render = now;
+            }
+        };
+    }
 
     globe::voronoi::CapacityConstrainedParameters optimizer_parameters;
     optimizer_parameters.max_outer_iterations = static_cast<size_t>(config.max_outer_iterations);
@@ -212,22 +253,43 @@ int run_flat(const Config& config) {
         config.points_count,
         config.density_field,
         static_cast<size_t>(config.lloyd_passes),
+        config.warm_start,
+        static_cast<size_t>(config.newton_iterations),
         optimizer_parameters,
         config.seed,
         config.width,
         config.height,
         config.image_path,
         config.geometry,
-        globe::voronoi::flat::noop_callback(),
+        callback,
         [&](const globe::io::snapshot::Snapshot& snapshot) { write_snapshot(snapshot, config.snapshot_path); },
-        std::chrono::milliseconds(static_cast<long long>(config.snapshot_interval * 1000.0))
+        std::chrono::milliseconds(static_cast<long long>(config.snapshot_interval * 1000.0)),
+        config.density_tolerance
     );
 
-    factory.build();
+    auto torus = factory.build();
 
     if (!config.snapshot_path.empty()) {
         write_snapshot(factory.snapshot(), config.snapshot_path);
         std::cout << "Snapshot: " << config.snapshot_path << ".json and " << config.snapshot_path << ".svg" << std::endl;
+    }
+
+    std::filesystem::create_directories(config.output_dir);
+
+    auto time = std::time(nullptr);
+    std::ostringstream filename;
+    filename << config.output_dir << "/" << config.geometry << "_" <<
+        config.points_count << "_" <<
+        config.density_field << "_" <<
+        std::put_time(std::localtime(&time), "%Y%m%d_%H%M%S") <<
+        ".txt";
+
+    globe::io::text::TorusRepository::save(*torus, filename.str());
+    std::cout << "Saved: " << filename.str() << std::endl;
+
+    if (config.perform_render) {
+        drawer->show(*torus);
+        return application->run();
     }
 
     return 0;

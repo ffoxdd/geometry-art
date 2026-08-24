@@ -4,6 +4,7 @@
 #include "../../../fields/flat/noise_field.hpp"
 #include "../../../fields/flat/piecewise_polynomial_field.hpp"
 #include "../../../math/interval.hpp"
+#include "../../../testing/flat_scatter.hpp"
 #include "../../../testing/macros.hpp"
 #include <gtest/gtest.h>
 #include <cmath>
@@ -13,24 +14,14 @@
 using namespace globe;
 using namespace globe::voronoi;
 using namespace globe::voronoi::flat;
+using globe::testing::flat_scatter;
+using globe::testing::scattered_torus;
+using globe::testing::torus_of;
 using fields::flat::NoiseField;
 using fields::flat::PiecewisePolynomialField;
 using globe::math::Interval;
 
 namespace {
-
-std::unique_ptr<Torus> scattered_torus(size_t count, double width, double height) {
-    auto torus = std::make_unique<Torus>(width, height);
-    double golden = 0.6180339887498949;
-
-    for (size_t k = 0; k < count; ++k) {
-        double x = std::fmod(0.13 + golden * static_cast<double>(k), 1.0) * width;
-        double y = (static_cast<double>(k) + 0.5) / static_cast<double>(count) * height;
-        torus->insert(Vector2(x, y));
-    }
-
-    return torus;
-}
 
 } // namespace
 

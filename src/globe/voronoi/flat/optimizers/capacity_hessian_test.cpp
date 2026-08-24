@@ -7,6 +7,7 @@
 #include "../../../fields/flat/noise_field.hpp"
 #include "../../../fields/flat/piecewise_polynomial_field.hpp"
 #include "../../../math/interval.hpp"
+#include "../../../testing/flat_scatter.hpp"
 #include "../../../testing/macros.hpp"
 #include <gtest/gtest.h>
 #include <cmath>
@@ -17,6 +18,9 @@
 using namespace globe;
 using namespace globe::voronoi;
 using namespace globe::voronoi::flat;
+using globe::testing::flat_scatter;
+using globe::testing::scattered_torus;
+using globe::testing::torus_of;
 using fields::flat::ConstantField;
 using fields::flat::NoiseField;
 using fields::flat::PiecewisePolynomialField;
@@ -25,31 +29,6 @@ using globe::math::Interval;
 namespace {
 
 constexpr double DISPLACEMENT = 1e-6;
-
-// A two-dimensional low-discrepancy scatter. Rows of sites make nearly
-// striped cells whose capacities are close to linear in the sites, which
-// starves a curvature test of its subject.
-std::vector<Vector2> scattered_sites(size_t count, double width, double height) {
-    std::vector<Vector2> sites;
-
-    for (size_t k = 0; k < count; ++k) {
-        double x = std::fmod(0.13 + 0.7548776662466927 * static_cast<double>(k), 1.0) * width;
-        double y = std::fmod(0.41 + 0.5698402909980532 * static_cast<double>(k), 1.0) * height;
-        sites.emplace_back(x, y);
-    }
-
-    return sites;
-}
-
-std::unique_ptr<Torus> torus_of(const std::vector<Vector2>& sites, double width, double height) {
-    auto torus = std::make_unique<Torus>(width, height);
-
-    for (const Vector2& site : sites) {
-        torus->insert(site);
-    }
-
-    return torus;
-}
 
 std::vector<double> arbitrary_weights(size_t count) {
     std::vector<double> weights(count);
@@ -83,7 +62,7 @@ void expect_matches_finite_differences(
     double height,
     double tolerance
 ) {
-    std::vector<Vector2> sites = scattered_sites(count, width, height);
+    std::vector<Vector2> sites = flat_scatter(count, width, height);
     std::vector<double> weights = arbitrary_weights(count);
     auto torus = torus_of(sites, width, height);
 
@@ -147,7 +126,7 @@ TEST(FlatCapacityHessianTest, EXPENSIVE_MatchesFiniteDifferencesOnNoise) {
 
 TEST(FlatCapacityHessianTest, IsSymmetric) {
     ConstantField field(1.0, 1.0, 1.0);
-    std::vector<Vector2> sites = scattered_sites(13, 1.0, 1.0);
+    std::vector<Vector2> sites = flat_scatter(13, 1.0, 1.0);
     auto torus = torus_of(sites, 1.0, 1.0);
     std::vector<double> weights = arbitrary_weights(13);
 

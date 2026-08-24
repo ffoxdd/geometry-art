@@ -1,4 +1,5 @@
 #include "torus.hpp"
+#include "../../../testing/flat_scatter.hpp"
 #include "../../../testing/macros.hpp"
 #include <gtest/gtest.h>
 #include <cmath>
@@ -8,33 +9,13 @@
 
 using namespace globe;
 using namespace globe::voronoi::flat;
+using globe::testing::flat_scatter;
+using globe::testing::scattered_torus;
+using globe::testing::torus_of;
 
 namespace {
 
 // Low-discrepancy sites covering the rectangle, so no cell is degenerate.
-std::vector<Vector2> scattered_sites(size_t count, double width, double height) {
-    std::vector<Vector2> sites;
-    double golden = 0.6180339887498949;
-
-    for (size_t k = 0; k < count; ++k) {
-        double x = std::fmod(0.13 + golden * static_cast<double>(k), 1.0) * width;
-        double y = (static_cast<double>(k) + 0.5) / static_cast<double>(count) * height;
-        sites.emplace_back(x, y);
-    }
-
-    return sites;
-}
-
-Torus scattered_torus(size_t count, double width, double height) {
-    Torus torus(width, height);
-
-    for (const Vector2& site : scattered_sites(count, width, height)) {
-        torus.insert(site);
-    }
-
-    return torus;
-}
-
 } // namespace
 
 TEST(TorusTest, CanonicalWrapsIntoTheRectangle) {
@@ -63,24 +44,24 @@ TEST(TorusTest, GridSitesGiveRectangularCellsOfEqualArea) {
 }
 
 TEST(TorusTest, CellAreasPartitionTheRectangle) {
-    Torus torus = scattered_torus(17, 2.0, 1.0);
+    auto torus = scattered_torus(17, 2.0, 1.0);
     double total = 0.0;
 
-    for (size_t index = 0; index < torus.size(); ++index) {
-        total += torus.cell(index).area();
+    for (size_t index = 0; index < torus->size(); ++index) {
+        total += torus->cell(index).area();
     }
 
-    EXPECT_NEAR(total, torus.area(), 1e-9);
+    EXPECT_NEAR(total, torus->area(), 1e-9);
 }
 
 TEST(TorusTest, NeighborsAreSymmetric) {
-    Torus torus = scattered_torus(13, 1.5, 1.0);
+    auto torus = scattered_torus(13, 1.5, 1.0);
 
-    for (size_t index = 0; index < torus.size(); ++index) {
-        for (const CellEdgeInfo& edge : torus.cell_edges(index)) {
+    for (size_t index = 0; index < torus->size(); ++index) {
+        for (const CellEdgeInfo& edge : torus->cell_edges(index)) {
             bool found = false;
 
-            for (const CellEdgeInfo& back : torus.cell_edges(edge.neighbor_index)) {
+            for (const CellEdgeInfo& back : torus->cell_edges(edge.neighbor_index)) {
                 found = found || back.neighbor_index == index;
             }
 
@@ -92,14 +73,14 @@ TEST(TorusTest, NeighborsAreSymmetric) {
 // The neighbor's position is reported in the cell's own chart: exactly one
 // period image of the neighbor's canonical site, and the closer one.
 TEST(TorusTest, NeighborPositionsAreChartConsistent) {
-    Torus torus = scattered_torus(13, 1.5, 1.0);
+    auto torus = scattered_torus(13, 1.5, 1.0);
 
-    for (size_t index = 0; index < torus.size(); ++index) {
-        for (const CellEdgeInfo& edge : torus.cell_edges(index)) {
-            Vector2 canonical = torus.site(edge.neighbor_index);
+    for (size_t index = 0; index < torus->size(); ++index) {
+        for (const CellEdgeInfo& edge : torus->cell_edges(index)) {
+            Vector2 canonical = torus->site(edge.neighbor_index);
             Vector2 offset = edge.neighbor_position - canonical;
-            double x_periods = offset.x() / torus.width();
-            double y_periods = offset.y() / torus.height();
+            double x_periods = offset.x() / torus->width();
+            double y_periods = offset.y() / torus->height();
 
             EXPECT_NEAR(x_periods, std::round(x_periods), 1e-9);
             EXPECT_NEAR(y_periods, std::round(y_periods), 1e-9);
@@ -110,12 +91,12 @@ TEST(TorusTest, NeighborPositionsAreChartConsistent) {
 // A bisector's endpoints are equidistant from the two sites, in the chart
 // where all three were reported.
 TEST(TorusTest, BoundariesAreEquidistantFromBothSites) {
-    Torus torus = scattered_torus(11, 1.0, 1.0);
+    auto torus = scattered_torus(11, 1.0, 1.0);
 
-    for (size_t index = 0; index < torus.size(); ++index) {
-        Vector2 own = torus.site(index);
+    for (size_t index = 0; index < torus->size(); ++index) {
+        Vector2 own = torus->site(index);
 
-        for (const CellEdgeInfo& edge : torus.cell_edges(index)) {
+        for (const CellEdgeInfo& edge : torus->cell_edges(index)) {
             for (const Vector2& endpoint : {edge.boundary.source(), edge.boundary.target()}) {
                 double to_own = (endpoint - own).norm();
                 double to_neighbor = (endpoint - edge.neighbor_position).norm();
@@ -151,18 +132,18 @@ TEST(TorusTest, ACellCanBorderItselfAcrossTheSeam) {
 }
 
 TEST(TorusTest, RebuiltPreservesSitesUpToWrapping) {
-    Torus torus = scattered_torus(9, 2.0, 1.0);
+    auto torus = scattered_torus(9, 2.0, 1.0);
     std::vector<Vector3> moved;
 
-    for (size_t index = 0; index < torus.size(); ++index) {
-        moved.push_back(torus.site_vector(index) + Vector3(2.0, -1.0, 0.0));
+    for (size_t index = 0; index < torus->size(); ++index) {
+        moved.push_back(torus->site_vector(index) + Vector3(2.0, -1.0, 0.0));
     }
 
-    auto rebuilt = torus.rebuilt(moved);
+    auto rebuilt = torus->rebuilt(moved);
 
-    ASSERT_EQ(rebuilt->size(), torus.size());
+    ASSERT_EQ(rebuilt->size(), torus->size());
 
-    for (size_t index = 0; index < torus.size(); ++index) {
-        EXPECT_NEAR((rebuilt->site(index) - torus.site(index)).norm(), 0.0, 1e-12);
+    for (size_t index = 0; index < torus->size(); ++index) {
+        EXPECT_NEAR((rebuilt->site(index) - torus->site(index)).norm(), 0.0, 1e-12);
     }
 }
