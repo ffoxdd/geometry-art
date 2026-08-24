@@ -1,10 +1,10 @@
 # Portability across geometries
 
 The target is capacity-constrained tessellation on any domain: the
-sphere, the plane, a flat torus, an arbitrary mesh. The sphere is the
-instance that exists. This note records what already carries over, what
-does not, and how to use that as a tiebreak when two pieces of work
-look equally valuable.
+sphere, the plane, a flat torus, an arbitrary mesh. The sphere and the
+flat torus are the instances that exist, sharing one optimizer stack.
+This note records what carries over, what does not, and how to use
+that as a tiebreak when two pieces of work look equally valuable.
 
 ## What is already general
 
@@ -20,11 +20,19 @@ the same expression. `CapacityJacobian`, the Lagrangian's site
 gradient, and the block structure of the Hessian are therefore already
 written in a form that holds on the plane and the flat torus as well.
 
-**The optimizer stack.** `TrustRegionStep`, `CapacityJacobian` and
-`CapacityConstrainedHessian` name no region or boundary type at all,
-and the two trust-region loops name one spherical vector each. Whatever
-produces the per-cell and per-bisector integrals is the boundary; above
-it, nothing is spherical except the vector type.
+**The optimizer stack.** The trust-region Newton descent, the
+augmented Lagrangian outer loop, `TrustRegionStep`, `CapacityJacobian`
+and the Hessian block structure exist once, in `globe::voronoi`, and
+drive both geometries through small model classes. The diagram state
+is stored in chart-invariant relative moments -- each bisector's
+moments about its two sites, with the separation -- so one bisector
+serves cells whose charts sit a period apart, and the Jacobian needs
+no site coordinates at all.
+
+**The contracts.** `testing/contracts` states the laws any diagram and
+any assembled state must satisfy -- partition of the domain, neighbor
+symmetry, equidistance, the separation identity on relative moments --
+and both geometries instantiate the same typed suites.
 
 ## What is not
 
@@ -168,16 +176,23 @@ implementations are well understood.
   picture, so the closure invariant in `exactness_frontier.md` may not
   hold; that geometry likely needs its own answer.
 
-## The open sequencing question
+## What the second instance taught
 
-Abstracting a `Geometry` concept from the sphere alone risks putting
-the seams in the wrong places. The plane is the cheapest second
-instance — easier moments, a mature triangulation, an identity site
-manifold — and adding it before extracting anything would let the
-abstraction come from two instances rather than one. Against that, it
-delays the piecewise and image work on the sphere, and C¹ elements are
-what that work is waiting on.
+The flat torus was built against the sphere and the seams settled
+where the two instances agreed:
 
-Both orders are defensible. The planar region types now exist, which
-settles nothing about the order but makes the second instance cheaper
-to reach.
+- The energy formula unified: the CVT energy reads the squared-norm
+  moment, which on the unit sphere is the mass itself, so one formula
+  serves both. The gradient's position term stayed per geometry -- the
+  sphere's tangent projection discards what the flat domain keeps.
+- The diagram is the geometry object: it owns construction, charts,
+  rebuild-with-retraction, and the per-edge opposite-site data the
+  exact curvature needs.
+- Curvature blocks stayed per geometry, as they should: rotation of
+  great circles against a spherical constraint on one side, straight
+  lines with planar equidistance systems on the other, both held to
+  the same finite-difference referee and both handing the shared
+  loops the same block structure.
+- Wrapped domains name bisectors by site pair AND period offset: the
+  same two sites can share two bisectors, and a cell can border
+  itself, in which case its two edge appearances cancel exactly.

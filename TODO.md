@@ -15,22 +15,20 @@ records what already does. That consideration retired the
 spherical-harmonic basis: it addressed conditioning in high-degree
 global fits, and the global path is the one that does not generalise.
 
-### 1. The flat family
-Plane, cylinder and torus are one implementation: each direction of
-the domain is either wrapped or walled, and the three are the three
-settings of that switch. The second instance, and the one that lets a
-`Geometry` abstraction be extracted from two cases rather than one.
+### 1. Flat C1 elements
+The flat densities are C0: quadratics through samples on a periodic
+grid, refined to a requested tolerance by probing. The planar
+Powell-Sabin element is the textbook case and the projection
+machinery is already structured for it, so the sphere's certified,
+least-squares C1 path has a direct flat analogue waiting.
 
-The torus comes first: both directions wrapped, so no boundary
-mathematics at all -- a periodic Delaunay diagram, an identity site
-manifold that will expose wherever the spherical one is silently
-load-bearing, and `Field::integrals` taking the region by concept
-rather than by the spherical type. `geometry/planar` already has the
-region types with divergence-theorem moments, so the polynomial layer
-is shared. Cylinder and plane pieces are crops of the torus, their
-edge looks made in the density and the renderer, so walls -- the
-bounded domain and its terms in the exact Hessian -- are deferred
-until a piece demands the one look a crop cannot imitate; the design
-is in `docs/geometry_portability.md`.
+*Verified by:* a certified positive floor and a telescoped residual
+on a flat density, as on the sphere.
 
-*Verified by:* the optimizer stack driving the torus unchanged.
+### 2. Walls
+Deferred by design: every edge look except the true conformed one
+comes from cropping the torus, so the bounded domain and its terms in
+the exact Hessian wait until a piece demands what a cut cannot give.
+The design is in `docs/geometry_portability.md`.
+
+*Verified by:* a walled rectangle driving the shared optimizer stack.
