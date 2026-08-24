@@ -7,6 +7,7 @@
 #include "../../geometry/planar/segment.hpp"
 #include "../../math/polynomial/moments.hpp"
 #include <CGAL/assertions.h>
+#include <array>
 
 namespace globe::fields::flat {
 
@@ -28,6 +29,13 @@ class ConstantField {
     [[nodiscard]] RegionIntegrals integrals(const Segment& segment) const;
     [[nodiscard]] double squared_norm_moment(const Polygon& polygon) const;
     [[nodiscard]] Matrix3 second_moment(const Segment& segment) const;
+
+    [[nodiscard]] Vector3 gradient_masses(const Segment&) const { return Vector3::Zero(); }
+    [[nodiscard]] Matrix3 gradient_first_moments(const Segment&) const { return Matrix3::Zero(); }
+
+    [[nodiscard]] std::array<Matrix3, 3> gradient_second_moments(const Segment&) const {
+        return {Matrix3::Zero(), Matrix3::Zero(), Matrix3::Zero()};
+    }
 
  private:
     double _density;

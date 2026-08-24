@@ -3,6 +3,7 @@
 
 #include "../region_integrals.hpp"
 #include "../../types.hpp"
+#include <array>
 #include "../../geometry/planar/polygon.hpp"
 #include "../../geometry/planar/segment.hpp"
 #include <concepts>
@@ -23,6 +24,9 @@ concept Field = requires(const T& field, const Vector2& point, const Polygon& po
     { field.integrals(segment) } -> std::convertible_to<RegionIntegrals>;
     { field.squared_norm_moment(polygon) } -> std::convertible_to<double>;
     { field.second_moment(segment) } -> std::convertible_to<Matrix3>;
+    { field.gradient_masses(segment) } -> std::convertible_to<Vector3>;
+    { field.gradient_first_moments(segment) } -> std::convertible_to<Matrix3>;
+    { field.gradient_second_moments(segment) } -> std::convertible_to<std::array<Matrix3, 3>>;
     { field.total_mass() } -> std::convertible_to<double>;
 };
 

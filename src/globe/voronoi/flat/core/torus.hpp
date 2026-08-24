@@ -30,6 +30,8 @@ struct CellEdgeInfo {
     size_t source_opposite_index;
     size_t target_opposite_index;
     Vector2 neighbor_position;
+    Vector2 source_opposite_position;
+    Vector2 target_opposite_position;
     Segment boundary;
 };
 
@@ -170,12 +172,16 @@ inline std::vector<CellEdgeInfo> Torus::cell_edges(size_t index) const {
         assert_covering_is_sufficient(face);
 
         auto neighbor_point = _triangulation->point(neighbor);
+        auto source_opposite_point = _triangulation->point(face->vertex(position));
+        auto target_opposite_point = _triangulation->point(target_face->vertex(target_face->index(face)));
 
         result.push_back(CellEdgeInfo{
             neighbor->info(),
             face->vertex(position)->info(),
             target_face->vertex(target_face->index(face))->info(),
             Vector2(neighbor_point.x(), neighbor_point.y()),
+            Vector2(source_opposite_point.x(), source_opposite_point.y()),
+            Vector2(target_opposite_point.x(), target_opposite_point.y()),
             Segment(dual_vertex(face), dual_vertex(target_face))
         });
     }

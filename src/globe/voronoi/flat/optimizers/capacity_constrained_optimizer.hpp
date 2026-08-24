@@ -2,6 +2,7 @@
 #define GLOBEART_SRC_GLOBE_VORONOI_FLAT_OPTIMIZERS_CAPACITY_CONSTRAINED_OPTIMIZER_HPP_
 
 #include "capacity_constrained_lagrangian.hpp"
+#include "capacity_hessian.hpp"
 #include "cvt_hessian.hpp"
 #include "lloyd_optimizer.hpp"
 #include "../core/torus.hpp"
@@ -28,10 +29,10 @@
 namespace globe::voronoi::flat {
 
 // The augmented Lagrangian loop on the flat torus, with a trust-region
-// Newton inner solver. The curvature is exact for the energy and
-// Gauss-Newton for the penalty; the constraints' own second derivatives
-// are not yet derived on flat domains, so the exact model the sphere
-// offers is not available here.
+// Newton inner solver. The curvature model matches the sphere's: exact for
+// the energy, Gauss-Newton for the penalty, and -- by default -- the
+// constraints' own second derivatives weighted by multiplier and violation,
+// which do not vanish at a solution wherever the density varies.
 template<fields::flat::Field FieldType>
 class CapacityConstrainedOptimizer {
  public:
@@ -57,6 +58,7 @@ class CapacityConstrainedOptimizer {
     std::unique_ptr<Torus> _torus;
     CapacityConstrainedLagrangian<FieldType> _lagrangian;
     CvtHessian<FieldType> _curvature;
+    CapacityHessian<FieldType> _constraint_curvature;
     CapacityConstrainedParameters _parameters;
     Callback _callback;
     std::vector<double> _multipliers;
@@ -88,6 +90,7 @@ CapacityConstrainedOptimizer<FieldType>::CapacityConstrainedOptimizer(
     _torus(std::move(torus)),
     _lagrangian(field, field.total_mass() / static_cast<double>(_torus->size())),
     _curvature(field),
+    _constraint_curvature(field),
     _parameters(parameters),
     _callback(std::move(callback)),
     _multipliers(_torus->size(), 0.0) {
@@ -169,11 +172,19 @@ size_t CapacityConstrainedOptimizer<FieldType>::minimize_lagrangian() {
 
     while (iterations < _parameters.max_inner_iterations) {
         if (!hessian.has_value()) {
-            hessian.emplace(CurvatureOperator{
-                _curvature.assemble(*_torus),
-                CapacityJacobian(state),
-                _penalty
-            });
+            HessianBlocks blocks = _curvature.assemble(*_torus);
+
+            if (_parameters.newton.curvature == "exact") {
+                std::vector<double> weights(_torus->size());
+
+                for (size_t k = 0; k < weights.size(); ++k) {
+                    weights[k] = _multipliers[k] + _penalty * evaluation.capacity_errors[k];
+                }
+
+                blocks = blocks.plus(_constraint_curvature.assemble(*_torus, weights));
+            }
+
+            hessian.emplace(CurvatureOperator{std::move(blocks), CapacityJacobian(state), _penalty});
         }
 
         if (gradient_norm(evaluation.site_gradients) <= _parameters.newton.gradient_tolerance) {

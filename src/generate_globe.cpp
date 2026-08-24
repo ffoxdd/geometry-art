@@ -206,6 +206,7 @@ int run_flat(const Config& config) {
     optimizer_parameters.max_inner_iterations = static_cast<size_t>(config.max_inner_iterations);
     optimizer_parameters.relative_capacity_tolerance = config.capacity_tolerance;
     optimizer_parameters.inner_solver = "newton";
+    optimizer_parameters.newton.curvature = config.newton_curvature;
 
     globe::voronoi::flat::Factory factory(
         config.points_count,

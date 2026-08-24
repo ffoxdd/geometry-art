@@ -59,6 +59,9 @@ class PiecewisePolynomialField {
     [[nodiscard]] RegionIntegrals integrals(const Segment& segment) const;
     [[nodiscard]] double squared_norm_moment(const Polygon& polygon) const;
     [[nodiscard]] Matrix3 second_moment(const Segment& segment) const;
+    [[nodiscard]] Vector3 gradient_masses(const Segment& segment) const;
+    [[nodiscard]] Matrix3 gradient_first_moments(const Segment& segment) const;
+    [[nodiscard]] std::array<Matrix3, 3> gradient_second_moments(const Segment& segment) const;
 
  private:
     static constexpr int DEGREE = 2;
@@ -74,6 +77,9 @@ class PiecewisePolynomialField {
     std::vector<std::array<Polynomial, 2>> _pieces_times_coordinate;
     std::vector<Polynomial> _pieces_times_squared_norm;
     std::vector<std::array<Polynomial, 3>> _pieces_times_coordinate_pair;
+    std::vector<std::array<Polynomial, 2>> _piece_derivatives;
+    std::vector<std::array<std::array<Polynomial, 2>, 2>> _piece_derivatives_times_coordinate;
+    std::vector<std::array<std::array<Polynomial, 3>, 2>> _piece_derivatives_times_coordinate_pair;
 
     PiecewisePolynomialField(double width, double height, int columns, int rows);
 
@@ -156,6 +162,33 @@ PiecewisePolynomialField PiecewisePolynomialField::sample(
             times_x.times_coordinate(1),
             times_y.times_coordinate(1)
         });
+
+        auto coordinate_products = [](const Polynomial& derivative) {
+            return std::array<Polynomial, 2>{derivative.times_coordinate(0), derivative.times_coordinate(1)};
+        };
+        auto pair_products = [](const std::array<Polynomial, 2>& products) {
+            return std::array<Polynomial, 3>{
+                products[0].times_coordinate(0),
+                products[0].times_coordinate(1),
+                products[1].times_coordinate(1)
+            };
+        };
+
+        std::array<Polynomial, 2> derivatives{
+            density.partial_derivative(0),
+            density.partial_derivative(1)
+        };
+        std::array<std::array<Polynomial, 2>, 2> derivative_coordinates{
+            coordinate_products(derivatives[0]),
+            coordinate_products(derivatives[1])
+        };
+
+        field._piece_derivatives_times_coordinate_pair.push_back({
+            pair_products(derivative_coordinates[0]),
+            pair_products(derivative_coordinates[1])
+        });
+        field._piece_derivatives.push_back(std::move(derivatives));
+        field._piece_derivatives_times_coordinate.push_back(std::move(derivative_coordinates));
 
         std::array<Vector2, 3> corners = field.triangle_corners(piece);
         Moments moments = Polygon(std::vector<Vector2>{corners[0], corners[1], corners[2]}).moments(DEGREE);
@@ -378,6 +411,98 @@ inline Matrix3 PiecewisePolynomialField::second_moment(const Segment& segment) c
         Vector3 shift(offset.x(), offset.y(), 0.0);
         result += mesh + shift * first.transpose() + first * shift.transpose() +
             mass * shift * shift.transpose();
+    });
+
+    return result;
+}
+
+inline Vector3 PiecewisePolynomialField::gradient_masses(const Segment& segment) const {
+    Vector3 result = Vector3::Zero();
+
+    for_each_overlap(segment, [&](size_t piece, const Vector2& offset) {
+        std::optional<Segment> clipped = clipped_to_triangle(
+            Segment(segment.source() - offset, segment.target() - offset),
+            piece
+        );
+
+        if (!clipped.has_value()) {
+            return;
+        }
+
+        Moments moments = clipped->moments(DEGREE + 1);
+
+        for (int axis = 0; axis < 2; ++axis) {
+            result[axis] += _piece_derivatives[piece][axis].integrate(moments);
+        }
+    });
+
+    return result;
+}
+
+inline Matrix3 PiecewisePolynomialField::gradient_first_moments(const Segment& segment) const {
+    Matrix3 result = Matrix3::Zero();
+
+    for_each_overlap(segment, [&](size_t piece, const Vector2& offset) {
+        std::optional<Segment> clipped = clipped_to_triangle(
+            Segment(segment.source() - offset, segment.target() - offset),
+            piece
+        );
+
+        if (!clipped.has_value()) {
+            return;
+        }
+
+        Moments moments = clipped->moments(DEGREE + 1);
+        Vector3 shift(offset.x(), offset.y(), 0.0);
+
+        for (int axis = 0; axis < 2; ++axis) {
+            double mass = _piece_derivatives[piece][axis].integrate(moments);
+            Vector3 first(
+                _piece_derivatives_times_coordinate[piece][axis][0].integrate(moments),
+                _piece_derivatives_times_coordinate[piece][axis][1].integrate(moments),
+                0.0
+            );
+
+            result.col(axis) += first + shift * mass;
+        }
+    });
+
+    return result;
+}
+
+inline std::array<Matrix3, 3> PiecewisePolynomialField::gradient_second_moments(const Segment& segment) const {
+    std::array<Matrix3, 3> result{Matrix3::Zero(), Matrix3::Zero(), Matrix3::Zero()};
+
+    for_each_overlap(segment, [&](size_t piece, const Vector2& offset) {
+        std::optional<Segment> clipped = clipped_to_triangle(
+            Segment(segment.source() - offset, segment.target() - offset),
+            piece
+        );
+
+        if (!clipped.has_value()) {
+            return;
+        }
+
+        Moments moments = clipped->moments(DEGREE + 2);
+        Vector3 shift(offset.x(), offset.y(), 0.0);
+
+        for (int axis = 0; axis < 2; ++axis) {
+            double mass = _piece_derivatives[piece][axis].integrate(moments);
+            Vector3 first(
+                _piece_derivatives_times_coordinate[piece][axis][0].integrate(moments),
+                _piece_derivatives_times_coordinate[piece][axis][1].integrate(moments),
+                0.0
+            );
+
+            Matrix3 mesh = Matrix3::Zero();
+            mesh(0, 0) = _piece_derivatives_times_coordinate_pair[piece][axis][0].integrate(moments);
+            mesh(0, 1) = _piece_derivatives_times_coordinate_pair[piece][axis][1].integrate(moments);
+            mesh(1, 0) = mesh(0, 1);
+            mesh(1, 1) = _piece_derivatives_times_coordinate_pair[piece][axis][2].integrate(moments);
+
+            result[axis] += mesh + shift * first.transpose() + first * shift.transpose() +
+                mass * shift * shift.transpose();
+        }
     });
 
     return result;
