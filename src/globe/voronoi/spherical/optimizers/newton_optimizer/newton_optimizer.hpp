@@ -1,6 +1,8 @@
 #ifndef GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_NEWTON_OPTIMIZER_NEWTON_OPTIMIZER_HPP_
 #define GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_NEWTON_OPTIMIZER_NEWTON_OPTIMIZER_HPP_
 
+#include "../../../hessian_blocks.hpp"
+#include "../../../newton_minimizer.hpp"
 #include "../../../optimizer_parameters.hpp"
 #include "../../../trust_region_step.hpp"
 #include "../capacity_constrained_lagrangian.hpp"
@@ -45,6 +47,35 @@ class NewtonOptimizer {
         std::vector<Vector3> gradient;
     };
 
+    class Model {
+     public:
+        struct Trial {
+            std::unique_ptr<Sphere> sphere;
+            std::vector<Vector3> points;
+            Evaluation evaluation;
+        };
+
+        explicit Model(NewtonOptimizer& optimizer);
+
+        [[nodiscard]] double value() const { return _evaluation.energy; }
+        [[nodiscard]] const std::vector<Vector3>& gradient() const { return _evaluation.gradient; }
+        void refresh_curvature();
+        [[nodiscard]] const HessianBlocks& curvature() const { return *_curvature; }
+        [[nodiscard]] Trial trial(const std::vector<Vector3>& step) const;
+        [[nodiscard]] double trial_value(const Trial& trial) const { return trial.evaluation.energy; }
+        void accept(Trial&& trial);
+
+        [[nodiscard]] const Evaluation& evaluation() const { return _evaluation; }
+        [[nodiscard]] size_t accepted_steps() const { return _accepted_steps; }
+
+     private:
+        NewtonOptimizer& _optimizer;
+        std::vector<Vector3> _points;
+        Evaluation _evaluation;
+        std::optional<HessianBlocks> _curvature;
+        size_t _accepted_steps = 0;
+    };
+
     std::unique_ptr<Sphere> _sphere;
     CapacityConstrainedLagrangian<FieldType> _lagrangian;
     CvtHessian<FieldType> _hessian;
@@ -53,9 +84,7 @@ class NewtonOptimizer {
     NewtonReport _report;
 
     [[nodiscard]] std::vector<Vector3> points() const;
-    void apply(const std::vector<Vector3>& points);
     [[nodiscard]] Evaluation evaluate() const;
-    [[nodiscard]] double trust_radius_after(double radius, double ratio, bool hit_boundary) const;
 
     [[nodiscard]] static double norm(const std::vector<Vector3>& value);
     [[nodiscard]] static std::vector<Vector3> advanced(
@@ -80,78 +109,60 @@ NewtonOptimizer<FieldType>::NewtonOptimizer(
 
 template<fields::spherical::Field FieldType>
 std::unique_ptr<Sphere> NewtonOptimizer<FieldType>::optimize() {
-    TrustRegionStep solver(
-        _parameters.max_conjugate_gradient_iterations,
-        _parameters.conjugate_gradient_tolerance
-    );
+    Model model(*this);
+    _report.iterations = newton_minimize(model, _parameters, _parameters.max_iterations);
+    _report.accepted_steps = model.accepted_steps();
+    _report.cvt_energy = model.evaluation().energy;
 
-    std::vector<Vector3> current = points();
-    Evaluation evaluation = evaluate();
-    double radius = _parameters.initial_trust_radius;
+    double gradient_norm = norm(model.evaluation().gradient);
+    _report.gradient_norm = gradient_norm;
+    _report.converged = gradient_norm <= _parameters.gradient_tolerance;
+    _report.stalled = !_report.converged && _report.iterations < _parameters.max_iterations;
 
-    // A rejected step leaves the iterate where it was, so the curvature
-    // there is still the one just assembled.
-    std::optional<HessianBlocks> blocks;
-
-    while (_report.iterations < _parameters.max_iterations) {
-        _report.gradient_norm = norm(evaluation.gradient);
-
-        if (_report.gradient_norm <= _parameters.gradient_tolerance) {
-            _report.converged = true;
-            break;
-        }
-
-        if (!blocks.has_value()) {
-            blocks = _hessian.assemble(*_sphere).template through_manifold<Normalization>(current, evaluation.site_gradients);
-        }
-
-        TrustRegionStep::Result step = solver.solve(evaluation.gradient, *blocks, radius);
-        ++_report.iterations;
-
-        if (step.predicted_decrease <= 0.0) {
-            _report.stalled = true;
-            break;
-        }
-
-        std::vector<Vector3> trial = advanced(current, step.step);
-        apply(trial);
-        Evaluation trial_evaluation = evaluate();
-        double ratio = (evaluation.energy - trial_evaluation.energy) / step.predicted_decrease;
-        radius = trust_radius_after(radius, ratio, step.hit_boundary);
-
-        if (ratio <= _parameters.acceptance_threshold) {
-            apply(current);
-
-            if (radius < _parameters.minimum_trust_radius) {
-                _report.stalled = true;
-                break;
-            }
-
-            continue;
-        }
-
-        current = std::move(trial);
-        evaluation = std::move(trial_evaluation);
-        blocks.reset();
-        ++_report.accepted_steps;
-        _callback(*_sphere);
-    }
-
-    _report.cvt_energy = evaluation.energy;
     return std::move(_sphere);
 }
 
 template<fields::spherical::Field FieldType>
-double NewtonOptimizer<FieldType>::trust_radius_after(double radius, double ratio, bool hit_boundary) const {
-    if (ratio < 0.25) {
-        return 0.25 * radius;
+NewtonOptimizer<FieldType>::Model::Model(NewtonOptimizer& optimizer) :
+    _optimizer(optimizer),
+    _points(optimizer.points()),
+    _evaluation(optimizer.evaluate()) {
+}
+
+template<fields::spherical::Field FieldType>
+void NewtonOptimizer<FieldType>::Model::refresh_curvature() {
+    _curvature.emplace(
+        _optimizer._hessian.assemble(*_optimizer._sphere)
+            .template through_manifold<Normalization>(_points, _evaluation.site_gradients)
+    );
+}
+
+template<fields::spherical::Field FieldType>
+typename NewtonOptimizer<FieldType>::Model::Trial
+NewtonOptimizer<FieldType>::Model::trial(const std::vector<Vector3>& step) const {
+    Trial trial;
+    trial.points = advanced(_points, step);
+    trial.sphere = std::make_unique<Sphere>();
+
+    for (const Vector3& point : trial.points) {
+        trial.sphere->insert(cgal::to_point(VectorS2(point)));
     }
 
-    if (ratio > 0.75 && hit_boundary) {
-        return std::min(2.0 * radius, _parameters.max_trust_radius);
-    }
+    std::swap(_optimizer._sphere, trial.sphere);
+    trial.evaluation = _optimizer.evaluate();
+    std::swap(_optimizer._sphere, trial.sphere);
 
-    return radius;
+    return trial;
+}
+
+template<fields::spherical::Field FieldType>
+void NewtonOptimizer<FieldType>::Model::accept(Trial&& trial) {
+    _optimizer._sphere = std::move(trial.sphere);
+    _points = std::move(trial.points);
+    _evaluation = std::move(trial.evaluation);
+    _curvature.reset();
+    ++_accepted_steps;
+    _optimizer._callback(*_optimizer._sphere);
 }
 
 template<fields::spherical::Field FieldType>
@@ -164,19 +175,6 @@ std::vector<Vector3> NewtonOptimizer<FieldType>::points() const {
     }
 
     return result;
-}
-
-// Rebuilt rather than updated site by site: bulk insertion is faster, and
-// insertion order is what indexes the cells.
-template<fields::spherical::Field FieldType>
-void NewtonOptimizer<FieldType>::apply(const std::vector<Vector3>& points) {
-    auto sphere = std::make_unique<Sphere>();
-
-    for (const Vector3& point : points) {
-        sphere->insert(cgal::to_point(VectorS2(point.normalized())));
-    }
-
-    _sphere = std::move(sphere);
 }
 
 template<fields::spherical::Field FieldType>

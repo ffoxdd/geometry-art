@@ -1,6 +1,8 @@
 #ifndef GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_CAPACITY_CONSTRAINED_OPTIMIZER_HPP_
 #define GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_CAPACITY_CONSTRAINED_OPTIMIZER_HPP_
 
+#include "../../augmented_lagrangian_loop.hpp"
+#include "../../newton_minimizer.hpp"
 #include "../../optimizer_parameters.hpp"
 #include "capacity_constrained_lagrangian.hpp"
 #include "capacity_constrained_hessian.hpp"
@@ -44,6 +46,15 @@ class CapacityConstrainedOptimizer {
     std::unique_ptr<Sphere> optimize();
     [[nodiscard]] const CapacityConstrainedReport& report() const { return _report; }
 
+    // The ConstrainedProblem interface the shared outer loop drives.
+    [[nodiscard]] size_t minimize(const std::vector<double>& multipliers, double penalty);
+    [[nodiscard]] LagrangianEvaluation evaluate(
+        const std::vector<double>& multipliers,
+        double penalty
+    ) const;
+    [[nodiscard]] double target_mass() const { return _lagrangian.target_mass(); }
+    [[nodiscard]] size_t site_count() const { return _sphere->size(); }
+
  private:
     class Objective {
      public:
@@ -73,11 +84,8 @@ class CapacityConstrainedOptimizer {
 
     static constexpr double FINITE_DIFFERENCE_DISPLACEMENT = 1e-5;
 
-    [[nodiscard]] double initial_penalty() const;
     size_t minimize_lagrangian();
     [[nodiscard]] LagrangianEvaluation evaluate() const;
-    void update_multipliers(const LagrangianEvaluation& evaluation, double previous_violation);
-    void print_progress(size_t outer_iteration, size_t inner_iterations, const LagrangianEvaluation& evaluation) const;
 
     [[nodiscard]] size_t minimize_lagrangian_by_lbfgs();
     [[nodiscard]] size_t minimize_lagrangian_by_newton();
@@ -85,6 +93,34 @@ class CapacityConstrainedOptimizer {
     struct CurvatureOperator {
         std::function<std::vector<Vector3>(const std::vector<Vector3>&)> apply;
         [[nodiscard]] std::vector<Vector3> multiply(const std::vector<Vector3>& directions) const { return apply(directions); }
+    };
+
+    class NewtonLagrangianModel {
+     public:
+        struct Trial {
+            std::unique_ptr<Sphere> sphere;
+            std::vector<Vector3> points;
+            DiagramState state;
+            LagrangianEvaluation evaluation;
+        };
+
+        explicit NewtonLagrangianModel(CapacityConstrainedOptimizer& optimizer);
+
+        [[nodiscard]] double value() const { return _evaluation.value; }
+        [[nodiscard]] const std::vector<Vector3>& gradient() const { return _gradient; }
+        void refresh_curvature();
+        [[nodiscard]] const CurvatureOperator& curvature() const { return *_curvature; }
+        [[nodiscard]] Trial trial(const std::vector<Vector3>& step) const;
+        [[nodiscard]] double trial_value(const Trial& trial) const { return trial.evaluation.value; }
+        void accept(Trial&& trial);
+
+     private:
+        CapacityConstrainedOptimizer& _optimizer;
+        std::vector<Vector3> _points;
+        DiagramState _state;
+        LagrangianEvaluation _evaluation;
+        std::vector<Vector3> _gradient;
+        std::optional<CurvatureOperator> _curvature;
     };
 
     [[nodiscard]] CurvatureOperator curvature_operator(
@@ -129,54 +165,26 @@ CapacityConstrainedOptimizer<FieldType>::CapacityConstrainedOptimizer(
 
 template<fields::spherical::Field FieldType>
 std::unique_ptr<Sphere> CapacityConstrainedOptimizer<FieldType>::optimize() {
-    _initial_penalty = initial_penalty();
-    _penalty = _initial_penalty;
-    double previous_violation = std::numeric_limits<double>::infinity();
-    size_t stalled_iterations = 0;
-    _report = CapacityConstrainedReport{};
-
-    for (size_t outer = 0; outer < _parameters.max_outer_iterations; ++outer) {
-        size_t inner_iterations = minimize_lagrangian();
-        LagrangianEvaluation evaluation = evaluate();
-
-        _report.outer_iterations = outer + 1;
-        _report.inner_iterations += inner_iterations;
-        _report.cvt_energy = evaluation.cvt_energy;
-        _report.relative_rms_capacity_error = evaluation.root_mean_square_capacity_error() / _lagrangian.target_mass();
-        print_progress(outer + 1, inner_iterations, evaluation);
-
-        if (_report.relative_rms_capacity_error < _parameters.relative_capacity_tolerance) {
-            _report.converged = true;
-            break;
-        }
-
-        double violation = evaluation.max_absolute_capacity_error();
-        stalled_iterations = violation < previous_violation ? 0 : stalled_iterations + 1;
-
-        if (stalled_iterations >= _parameters.max_stalled_outer_iterations) {
-            _report.stalled = true;
-            break;
-        }
-
-        update_multipliers(evaluation, previous_violation);
-        previous_violation = violation;
-    }
-
+    _report = augmented_lagrangian_loop(*this, _parameters, _parameters.inner_solver);
     return std::move(_sphere);
 }
 
 template<fields::spherical::Field FieldType>
-double CapacityConstrainedOptimizer<FieldType>::initial_penalty() const {
-    LagrangianEvaluation evaluation = evaluate();
-    double squared_violation = 0.0;
+size_t CapacityConstrainedOptimizer<FieldType>::minimize(
+    const std::vector<double>& multipliers,
+    double penalty
+) {
+    _multipliers = multipliers;
+    _penalty = penalty;
+    return minimize_lagrangian();
+}
 
-    for (double error : evaluation.capacity_errors) {
-        squared_violation += error * error;
-    }
-
-    double target = _lagrangian.target_mass();
-    double floor = static_cast<double>(_sphere->size()) * std::pow(_parameters.relative_capacity_tolerance * target, 2);
-    return 2.0 * std::max(evaluation.cvt_energy, std::numeric_limits<double>::min()) / std::max(squared_violation, floor);
+template<fields::spherical::Field FieldType>
+LagrangianEvaluation CapacityConstrainedOptimizer<FieldType>::evaluate(
+    const std::vector<double>& multipliers,
+    double penalty
+) const {
+    return _lagrangian.evaluate(*_sphere, multipliers, penalty);
 }
 
 template<fields::spherical::Field FieldType>
@@ -188,74 +196,64 @@ size_t CapacityConstrainedOptimizer<FieldType>::minimize_lagrangian() {
     return minimize_lagrangian_by_lbfgs();
 }
 
-// Trust-region Newton on the augmented Lagrangian, sharing the step solver
-// with the unconstrained relaxation. The curvature is exact for the energy
-// and Gauss-Newton for the penalty, which is the term the growing penalty
-// makes ill-conditioned for a history-based method.
+// Trust-region Newton on the augmented Lagrangian through the shared
+// descent loop; this model supplies the sphere -- tangential gradients,
+// curvature through the normalization, and renormalising rebuilds. The
+// curvature is exact for the energy and, by default, for the constraints;
+// Gauss-Newton for the penalty.
 template<fields::spherical::Field FieldType>
 size_t CapacityConstrainedOptimizer<FieldType>::minimize_lagrangian_by_newton() {
-    TrustRegionStep solver(
-        _parameters.newton.max_conjugate_gradient_iterations,
-        _parameters.newton.conjugate_gradient_tolerance
-    );
+    NewtonLagrangianModel model(*this);
+    return newton_minimize(model, _parameters.newton, _parameters.max_inner_iterations);
+}
 
-    std::vector<Vector3> current = site_points();
-    DiagramState state = _lagrangian.sphere_state(*_sphere);
-    LagrangianEvaluation evaluation = _lagrangian.evaluate(*_sphere, state, _multipliers, _penalty);
-    double radius = _parameters.newton.initial_trust_radius;
-    size_t iterations = 0;
+template<fields::spherical::Field FieldType>
+CapacityConstrainedOptimizer<FieldType>::NewtonLagrangianModel::NewtonLagrangianModel(
+    CapacityConstrainedOptimizer& optimizer
+) :
+    _optimizer(optimizer),
+    _points(optimizer.site_points()),
+    _state(optimizer._lagrangian.sphere_state(*optimizer._sphere)),
+    _evaluation(optimizer._lagrangian.evaluate(*optimizer._sphere, _state, optimizer._multipliers, optimizer._penalty)),
+    _gradient(tangential_gradient(_evaluation.site_gradients, _points)) {
+}
 
-    // A rejected step leaves the iterate where it was, so the gradient and
-    // the curvature there are still the ones just computed.
-    std::vector<Vector3> gradient;
-    std::optional<CurvatureOperator> hessian;
+template<fields::spherical::Field FieldType>
+void CapacityConstrainedOptimizer<FieldType>::NewtonLagrangianModel::refresh_curvature() {
+    _curvature.emplace(_optimizer.curvature_operator(_points, _state, _evaluation, _gradient));
+}
 
-    while (iterations < _parameters.max_inner_iterations) {
-        if (!hessian.has_value()) {
-            gradient = tangential_gradient(evaluation.site_gradients, current);
-            hessian.emplace(curvature_operator(current, state, evaluation, gradient));
-        }
+template<fields::spherical::Field FieldType>
+typename CapacityConstrainedOptimizer<FieldType>::NewtonLagrangianModel::Trial
+CapacityConstrainedOptimizer<FieldType>::NewtonLagrangianModel::trial(const std::vector<Vector3>& step) const {
+    Trial trial;
+    trial.points = stepped(_points, step);
+    trial.sphere = std::make_unique<Sphere>();
 
-        if (gradient_norm(gradient) <= _parameters.newton.gradient_tolerance) {
-            break;
-        }
-
-        TrustRegionStep::Result step = solver.solve(gradient, *hessian, radius);
-        ++iterations;
-
-        if (step.predicted_decrease <= 0.0) {
-            break;
-        }
-
-        std::vector<Vector3> trial = stepped(current, step.step);
-        apply_points(trial);
-        DiagramState trial_state = _lagrangian.sphere_state(*_sphere);
-        LagrangianEvaluation trial_evaluation = _lagrangian.evaluate(*_sphere, trial_state, _multipliers, _penalty);
-        double ratio = (evaluation.value - trial_evaluation.value) / step.predicted_decrease;
-
-        if (ratio < 0.25) {
-            radius *= 0.25;
-        } else if (ratio > 0.75 && step.hit_boundary) {
-            radius = std::min(2.0 * radius, _parameters.newton.max_trust_radius);
-        }
-
-        if (ratio <= _parameters.newton.acceptance_threshold) {
-            apply_points(current);
-
-            if (radius < _parameters.newton.minimum_trust_radius) {
-                break;
-            }
-
-            continue;
-        }
-
-        current = std::move(trial);
-        state = std::move(trial_state);
-        evaluation = std::move(trial_evaluation);
-        hessian.reset();
+    for (const Vector3& point : trial.points) {
+        trial.sphere->insert(cgal::to_point(VectorS2(point)));
     }
 
-    return iterations;
+    trial.state = _optimizer._lagrangian.sphere_state(*trial.sphere);
+    trial.evaluation = _optimizer._lagrangian.evaluate(
+        *trial.sphere,
+        trial.state,
+        _optimizer._multipliers,
+        _optimizer._penalty
+    );
+
+    return trial;
+}
+
+template<fields::spherical::Field FieldType>
+void CapacityConstrainedOptimizer<FieldType>::NewtonLagrangianModel::accept(Trial&& trial) {
+    _optimizer._sphere = std::move(trial.sphere);
+    _points = std::move(trial.points);
+    _state = std::move(trial.state);
+    _evaluation = std::move(trial.evaluation);
+    _gradient = tangential_gradient(_evaluation.site_gradients, _points);
+    _curvature.reset();
+    _optimizer._callback(*_optimizer._sphere);
 }
 
 template<fields::spherical::Field FieldType>
@@ -400,38 +398,6 @@ size_t CapacityConstrainedOptimizer<FieldType>::minimize_lagrangian_by_lbfgs() {
 template<fields::spherical::Field FieldType>
 LagrangianEvaluation CapacityConstrainedOptimizer<FieldType>::evaluate() const {
     return _lagrangian.evaluate(*_sphere, _multipliers, _penalty);
-}
-
-template<fields::spherical::Field FieldType>
-void CapacityConstrainedOptimizer<FieldType>::update_multipliers(
-    const LagrangianEvaluation& evaluation,
-    double previous_violation
-) {
-    for (size_t i = 0; i < _multipliers.size(); ++i) {
-        _multipliers[i] += _penalty * evaluation.capacity_errors[i];
-    }
-
-    bool insufficient_decrease =
-        evaluation.max_absolute_capacity_error() > _parameters.required_violation_decrease * previous_violation;
-    bool below_cap = _penalty * _parameters.penalty_growth <= _initial_penalty * _parameters.max_penalty_growth_factor;
-
-    if (insufficient_decrease && below_cap) {
-        _penalty *= _parameters.penalty_growth;
-    }
-}
-
-template<fields::spherical::Field FieldType>
-void CapacityConstrainedOptimizer<FieldType>::print_progress(
-    size_t outer_iteration,
-    size_t inner_iterations,
-    const LagrangianEvaluation& evaluation
-) const {
-    std::cout << "  " << std::setw(8) << std::left << "CCVT" << std::right <<
-        std::setw(3) << outer_iteration << " (" << std::setw(4) << inner_iterations << " " << _parameters.inner_solver << ")" <<
-        ": CVT energy " << std::scientific << std::setprecision(6) << evaluation.cvt_energy <<
-        ", capacity RMS " << std::setprecision(3) << _report.relative_rms_capacity_error <<
-        ", penalty " << std::setprecision(2) << _penalty <<
-        std::defaultfloat << std::endl;
 }
 
 template<fields::spherical::Field FieldType>
