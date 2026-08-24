@@ -77,28 +77,29 @@ the cost shows up as iteration count, with Newton needing roughly
 twice the inner iterations it needs on a polynomial field. Restoring
 C² means making the density C¹ — C¹ elements.
 
-**Aliasing — real, and it is what limits how coarse the mesh can be.**
-Choosing a representation's coefficients by evaluating the field at points
-puts whatever the field does between those points into the result as
-though it were structure at the mesh's scale. What that corrupts is the
-local average, which is the one thing a tessellation reads, so the
-bandwidth rule's licence to stop at cell scale is not usable with a
-sampling operator: at 200 sites a mesh matched to the cell scale is
-several percent wrong about cell masses. Reading a gradient at a point is
-the worst case, since a difference quotient on a rough field reports the
-roughness rather than the trend. `LocalQuadraticFit` reads each vertex by
-least squares over a mesh-scale neighbourhood instead, which halves the
-cell-scale error and, more usefully, keeps the represented field inside
-the range of the field it came from.
+**Aliasing — dissolved by projecting instead of sampling.** Choosing a
+representation's coefficients by evaluating the field at points puts
+whatever the field does between those points into the result as though it
+were structure at the mesh's scale. What that corrupts is the local
+average, which is the one thing a tessellation reads, so the bandwidth
+rule's licence to stop at cell scale is not usable with a sampling
+operator: at 200 sites a mesh matched to the cell scale is several
+percent wrong about cell masses. The L2 projection has no such failure
+mode by construction — structure finer than the mesh lands in the
+residual, which is orthogonal to the space, so the represented averages
+are as faithful as the mesh allows. `PowellSabinProjection` computes it
+as one sparse symmetric solve, and with it the cell-scale mesh the
+bandwidth rule promises is enough: under half a percent of cell mass at
+200 sites, where sampling operators left several percent.
 
 **Positivity — real, and now certified rather than sampled for.** The
 Bernstein-Bezier form bounds a piece below by its coefficients, so
-`PowellSabinInterpolant` reports a lower bound on the density it built
-and no search over the sphere can miss a dip. Where the mesh is too
-coarse to carry the sampled gradients the interpolant would overshoot
-below zero; damping the gradients per vertex pulls it back and keeps the
-field C1, and the damping is reported because it measures whether the
-mesh resolves the field.
+`PowellSabinProjection` reports a lower bound on the density it built
+and no search over the sphere can miss a dip. A projection is optimal in
+the mean square, not bounded by its target, so on a mesh far too coarse
+for the field it can dip below zero; damping the gradients per vertex
+pulls it back and keeps the field C1, and the damping is reported
+because it measures whether the mesh resolves the field.
 
 **Positivity of a global fit — real, and it is what rules out the global fit.** Least
 squares constrains no value, so fitting a function with a floor

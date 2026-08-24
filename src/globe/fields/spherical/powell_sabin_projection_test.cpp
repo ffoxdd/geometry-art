@@ -1,4 +1,4 @@
-#include "powell_sabin_interpolant.hpp"
+#include "powell_sabin_projection.hpp"
 #include "piecewise_polynomial_field.hpp"
 #include "polynomial_field.hpp"
 #include "../scalar/noise_field.hpp"
@@ -14,7 +14,7 @@
 using namespace globe;
 using fields::spherical::PiecewisePolynomialField;
 using fields::spherical::PolynomialField;
-using fields::spherical::PowellSabinInterpolant;
+using fields::spherical::PowellSabinProjection;
 using fields::scalar::NoiseField;
 using geometry::spherical::PowellSabinRefinement;
 using geometry::spherical::TriangleMesh;
@@ -87,10 +87,10 @@ double worst_kink(const FieldType& field, const TriangleMesh& mesh, double step)
 // A piece is a quadratic that is homogeneous in space, so the space it lives
 // in holds the constants and the quadratics but not the linear functions: on
 // the sphere a linear function is a different harmonic degree entirely.
-TEST(PowellSabinInterpolantTest, ReproducesAConstantExactly) {
+TEST(PowellSabinProjectionTest, ReproducesAConstantExactly) {
     ConstantScalarField constant{0.7};
-    PowellSabinInterpolant interpolant;
-    auto result = interpolant.interpolate(TriangleMesh::icosphere(1), constant);
+    PowellSabinProjection projection;
+    auto result = projection.project(TriangleMesh::icosphere(1), constant);
 
     for (const VectorS2& point : generators::spherical::FibonacciPointGenerator().generate(500)) {
         EXPECT_NEAR(result.field.value(point), 0.7, 1e-12);
@@ -102,21 +102,21 @@ TEST(PowellSabinInterpolantTest, ReproducesAConstantExactly) {
     EXPECT_LE(result.lowest_coefficient, 0.7 + 1e-12);
 }
 
-// A global quadratic is itself a C1 quadratic on the split, so the unique
-// interpolant of its value and gradient must be the quadratic back again.
+// A global quadratic is itself a C1 quadratic on the split, so the
+// projection has a zero-residual candidate and must return it exactly.
 // This is the strongest available check that the smoothness conditions and
 // the corner conditions are the right ones.
-TEST(PowellSabinInterpolantTest, ReproducesAGlobalQuadraticFieldExactly) {
+TEST(PowellSabinProjectionTest, ReproducesAGlobalQuadraticFieldExactly) {
     QuadraticScalarField quadratic{tilted_quadratic()};
-    PowellSabinInterpolant interpolant;
-    auto result = interpolant.interpolate(TriangleMesh::icosphere(1), quadratic);
+    PowellSabinProjection projection;
+    auto result = projection.project(TriangleMesh::icosphere(1), quadratic);
 
     for (const VectorS2& point : generators::spherical::FibonacciPointGenerator().generate(500)) {
         EXPECT_NEAR(result.field.value(point), quadratic.value(point), 1e-9);
     }
 }
 
-TEST(PowellSabinInterpolantTest, SplitPointsLieInsideTheEdgesTheySplit) {
+TEST(PowellSabinProjectionTest, SplitPointsLieInsideTheEdgesTheySplit) {
     PowellSabinRefinement refinement(TriangleMesh::icosphere(2));
 
     for (const auto& cell : refinement.cells()) {
@@ -130,7 +130,7 @@ TEST(PowellSabinInterpolantTest, SplitPointsLieInsideTheEdgesTheySplit) {
     }
 }
 
-TEST(PowellSabinInterpolantTest, RefinementGivesSixTrianglesPerTriangle) {
+TEST(PowellSabinProjectionTest, RefinementGivesSixTrianglesPerTriangle) {
     TriangleMesh mesh = TriangleMesh::icosphere(2);
     PowellSabinRefinement refinement(mesh);
 
@@ -142,13 +142,13 @@ TEST(PowellSabinInterpolantTest, RefinementGivesSixTrianglesPerTriangle) {
 // pieces meet. The Lagrange field on the same mesh is the control -- it is
 // continuous but kinked, and the kink is what makes the constraint curvature
 // discontinuous for the optimizer.
-TEST(PowellSabinInterpolantTest, EXPENSIVE_HasNoKinksWhereTheLagrangeFieldDoes) {
+TEST(PowellSabinProjectionTest, EXPENSIVE_HasNoKinksWhereTheLagrangeFieldDoes) {
     REQUIRE_EXPENSIVE();
     NoiseField noise(Interval(0.2, 1.0));
     TriangleMesh mesh = TriangleMesh::icosphere(2);
 
-    PowellSabinInterpolant interpolant;
-    auto smooth = interpolant.interpolate(mesh, noise);
+    PowellSabinProjection projection;
+    auto smooth = projection.project(mesh, noise);
 
     NoiseField same_noise(Interval(0.2, 1.0));
     PiecewisePolynomialField kinked = PiecewisePolynomialField::sample(mesh, 2, same_noise);
@@ -164,15 +164,15 @@ TEST(PowellSabinInterpolantTest, EXPENSIVE_HasNoKinksWhereTheLagrangeFieldDoes) 
 
 // Positivity is a property of the coefficients, so it is certified rather
 // than sampled: no search over the sphere can miss a dip the coefficients
-// already rule out. It holds at every resolution because a mesh too coarse
-// to carry the sampled gradients damps them instead of overshooting.
-TEST(PowellSabinInterpolantTest, EXPENSIVE_CertifiesPositivityAtEveryResolution) {
+// already rule out. It holds at every resolution because a projection that
+// dips below zero has its gradients damped instead of shipped.
+TEST(PowellSabinProjectionTest, EXPENSIVE_CertifiesPositivityAtEveryResolution) {
     REQUIRE_EXPENSIVE();
 
     for (int subdivisions : {1, 2, 3, 4}) {
         NoiseField noise(Interval(0.2, 1.0));
-        PowellSabinInterpolant interpolant;
-        auto result = interpolant.interpolate(TriangleMesh::icosphere(subdivisions), noise);
+        PowellSabinProjection projection;
+        auto result = projection.project(TriangleMesh::icosphere(subdivisions), noise);
 
         EXPECT_GT(result.lowest_coefficient, 0.0) << "subdivisions " << subdivisions;
 
@@ -183,40 +183,39 @@ TEST(PowellSabinInterpolantTest, EXPENSIVE_CertifiesPositivityAtEveryResolution)
 }
 
 // Damping is a fallback, not the normal path: a field the mesh resolves is
-// interpolated as sampled, and the report says so.
-TEST(PowellSabinInterpolantTest, LeavesGradientsAloneWhenTheMeshCarriesThem) {
+// projected as solved, and the report says so.
+TEST(PowellSabinProjectionTest, LeavesGradientsAloneWhenTheMeshCarriesThem) {
     QuadraticScalarField quadratic{tilted_quadratic()};
-    PowellSabinInterpolant interpolant;
-    auto result = interpolant.interpolate(TriangleMesh::icosphere(2), quadratic);
+    PowellSabinProjection projection;
+    auto result = projection.project(TriangleMesh::icosphere(2), quadratic);
 
     EXPECT_EQ(result.least_damping, 1.0);
 }
 
-// Reading each vertex over a neighbourhood rather than at a point keeps
-// the represented field inside the range of the field it came from: the
-// gradients it interpolates are trends rather than local roughness, so it
-// no longer overshoots below the floor and needs no damping to stay
-// positive. That matters beyond positivity -- a density with a lower
-// minimum than it was given poses a harder capacity problem, so a
+// The projection keeps the represented field inside the range of the
+// field it came from once the mesh resolves it: what it cannot follow it
+// averages, so it does not overshoot below the floor and needs no damping
+// to stay positive. That matters beyond positivity -- a density with a
+// lower minimum than it was given poses a harder capacity problem, so a
 // representation that widens the range changes the question being asked.
-TEST(PowellSabinInterpolantTest, EXPENSIVE_KeepsTheFloorItWasGiven) {
+TEST(PowellSabinProjectionTest, EXPENSIVE_KeepsTheFloorItWasGiven) {
     REQUIRE_EXPENSIVE();
     NoiseField noise(Interval(0.2, 1.0));
-    PowellSabinInterpolant interpolant;
-    auto result = interpolant.interpolate(TriangleMesh::icosphere(4), noise);
+    PowellSabinProjection projection;
+    auto result = projection.project(TriangleMesh::icosphere(4), noise);
 
     EXPECT_GT(result.lowest_coefficient, 0.19);
     EXPECT_EQ(result.least_damping, 1.0);
 }
 
-TEST(PowellSabinInterpolantTest, EXPENSIVE_ApproachesTheSampledFieldWithRefinement) {
+TEST(PowellSabinProjectionTest, EXPENSIVE_ApproachesTheSampledFieldWithRefinement) {
     REQUIRE_EXPENSIVE();
     NoiseField noise(Interval(0.2, 1.0));
-    PowellSabinInterpolant interpolant;
+    PowellSabinProjection projection;
 
     NoiseField coarse_noise(Interval(0.2, 1.0));
-    auto coarse = interpolant.interpolate(TriangleMesh::icosphere(2), coarse_noise);
-    auto fine = interpolant.interpolate(TriangleMesh::icosphere(4), noise);
+    auto coarse = projection.project(TriangleMesh::icosphere(2), coarse_noise);
+    auto fine = projection.project(TriangleMesh::icosphere(4), noise);
 
     NoiseField reference(Interval(0.2, 1.0));
     double coarse_error = 0.0;
@@ -234,18 +233,16 @@ TEST(PowellSabinInterpolantTest, EXPENSIVE_ApproachesTheSampledFieldWithRefineme
 
 // Smoothness is not bought with accuracy: on a target that is itself
 // smooth the C1 field tracks it as closely as the Lagrange field on the
-// same mesh, and at the same order. Reading each vertex over a
-// neighbourhood costs a little here, where there is nothing to average
-// away, and buys a great deal wherever the target is rough.
-TEST(PowellSabinInterpolantTest, EXPENSIVE_MatchesTheLagrangeFieldsOrderOnASmoothTarget) {
+// same mesh, and at the same order.
+TEST(PowellSabinProjectionTest, EXPENSIVE_MatchesTheLagrangeFieldsOrderOnASmoothTarget) {
     REQUIRE_EXPENSIVE();
 
     for (int subdivisions : {2, 3, 4}) {
         TriangleMesh mesh = TriangleMesh::icosphere(subdivisions);
 
         SmoothAnalyticField target;
-        PowellSabinInterpolant interpolant;
-        auto smooth = interpolant.interpolate(mesh, target);
+        PowellSabinProjection projection;
+        auto smooth = projection.project(mesh, target);
 
         SmoothAnalyticField sampled;
         PiecewisePolynomialField lagrange = PiecewisePolynomialField::sample(mesh, 2, sampled);
@@ -264,27 +261,18 @@ TEST(PowellSabinInterpolantTest, EXPENSIVE_MatchesTheLagrangeFieldsOrderOnASmoot
     }
 }
 
-// On the noise field the ordering reverses, and not because of the clamp:
-// where the noise is floored the target is constant and the spline is exact
-// there. It is that the noise is rough at the mesh scale, and this scheme
-// reads each vertex's gradient at a point while the Lagrange field samples
-// values at the edge midpoints too. Sampling more places beats sampling
-// derivatives once the target stops being smooth.
-//
-// What the tessellation sees is the cell-scale average rather than the
-// pointwise value, and there the gap is far smaller: about 0.5% against
-// 0.1% relative mass error over cell-sized caps at 200 sites. The
-// Powell-Sabin split also spends six pieces per triangle to buy its
-// smoothness, so at equal pieces the simpler field is the more accurate by
-// a wide margin. Smoothness and a certified range are what it is bought
-// for.
-TEST(PowellSabinInterpolantTest, EXPENSIVE_IsLessFaithfulThanTheLagrangeFieldOnRoughNoise) {
+// On rough noise the projection beats the Lagrange field on the same
+// mesh: interpolating point samples commits to whatever the roughness does
+// at the sample points, while the best approximation in the space lets
+// what it cannot follow land in the residual. Smoothness costs nothing
+// here -- the C1 field is the more accurate one as well.
+TEST(PowellSabinProjectionTest, EXPENSIVE_BeatsTheLagrangeFieldOnRoughNoise) {
     REQUIRE_EXPENSIVE();
     TriangleMesh mesh = TriangleMesh::icosphere(4);
 
     NoiseField smooth_noise(Interval(0.2, 1.0));
-    PowellSabinInterpolant interpolant;
-    auto smooth = interpolant.interpolate(mesh, smooth_noise);
+    PowellSabinProjection projection;
+    auto smooth = projection.project(mesh, smooth_noise);
 
     NoiseField lagrange_noise(Interval(0.2, 1.0));
     PiecewisePolynomialField lagrange = PiecewisePolynomialField::sample(mesh, 2, lagrange_noise);
@@ -299,23 +287,19 @@ TEST(PowellSabinInterpolantTest, EXPENSIVE_IsLessFaithfulThanTheLagrangeFieldOnR
         lagrange_error = std::max(lagrange_error, std::abs(lagrange.value(point) - expected));
     }
 
-    EXPECT_GT(smooth_error, lagrange_error);
-    EXPECT_LT(smooth_error, 10.0 * lagrange_error);
+    EXPECT_LT(smooth_error, lagrange_error);
 }
 
 
 
 
 // What the tessellation actually reads is the density's average over a
-// cell, so that is the error worth bounding. It bounds badly at the
-// resolutions a naive reading of the bandwidth rule would choose: matching
-// the mesh to the cell scale leaves several percent, because sampling at
-// points aliases whatever is finer than the mesh into the represented field
-// rather than averaging it away, and an average is exactly what is being
-// corrupted. Resolving several times finer than a cell is what it currently
-// takes, and reading each vertex's gradient at a point aliases harder than
-// reading values does.
-TEST(PowellSabinInterpolantTest, EXPENSIVE_NeedsSeveralTimesTheCellScaleToAverageWell) {
+// cell, so that is the error worth bounding, and it is the error a
+// projection is built to bound: structure finer than the mesh lands in the
+// residual, whose local averages are small, rather than being aliased into
+// the field. A mesh matched to the cell scale -- the coarsest the
+// bandwidth rule permits -- is enough for better than one percent.
+TEST(PowellSabinProjectionTest, EXPENSIVE_AveragesWellAtTheCellScale) {
     REQUIRE_EXPENSIVE();
     constexpr int SITES = 200;
     const double cap_radius = 2.0 / std::sqrt(static_cast<double>(SITES));
@@ -326,8 +310,8 @@ TEST(PowellSabinInterpolantTest, EXPENSIVE_NeedsSeveralTimesTheCellScaleToAverag
     auto worst_cell_scale_error = [&](int subdivisions) {
         TriangleMesh mesh = TriangleMesh::icosphere(subdivisions);
         NoiseField target(Interval(0.2, 1.0));
-        PowellSabinInterpolant interpolant;
-        auto result = interpolant.interpolate(mesh, target);
+        PowellSabinProjection projection;
+        auto result = projection.project(mesh, target);
         NoiseField reference(Interval(0.2, 1.0));
         double worst = 0.0;
 
@@ -354,11 +338,7 @@ TEST(PowellSabinInterpolantTest, EXPENSIVE_NeedsSeveralTimesTheCellScaleToAverag
         return worst;
     };
 
-    // A mesh at the cell scale is still not enough, though averaging the
-    // vertex readings roughly halves how far short it falls.
-    EXPECT_GT(worst_cell_scale_error(3), 0.02);
-
-    // Four times finer is.
-    EXPECT_LT(worst_cell_scale_error(4), 0.01);
+    EXPECT_LT(worst_cell_scale_error(3), 0.01);
+    EXPECT_LT(worst_cell_scale_error(4), 0.002);
 }
 

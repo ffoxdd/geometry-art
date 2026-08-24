@@ -14,7 +14,7 @@
 #include "../../../fields/spherical/piecewise_polynomial_field.hpp"
 #include "../../../fields/spherical/polynomial_field.hpp"
 #include "../../../fields/spherical/polynomial_field_fitter.hpp"
-#include "../../../fields/spherical/powell_sabin_interpolant.hpp"
+#include "../../../fields/spherical/powell_sabin_projection.hpp"
 #include "../../../generators/cartesian/random_point_generator.hpp"
 #include "../../../generators/spherical/fibonacci_point_generator.hpp"
 #include "../../../generators/spherical/random_point_generator.hpp"
@@ -38,7 +38,7 @@ using globe::Interval;
 using fields::spherical::PiecewisePolynomialField;
 using fields::spherical::PolynomialField;
 using fields::spherical::PolynomialFieldFitter;
-using fields::spherical::PowellSabinInterpolant;
+using fields::spherical::PowellSabinProjection;
 using geometry::spherical::TriangleMesh;
 
 using SnapshotCallback = std::function<void(const io::snapshot::Snapshot&)>;
@@ -228,15 +228,15 @@ inline PiecewisePolynomialField Factory::sample_noise_field() {
 // coefficients rather than sampled for.
 inline PiecewisePolynomialField Factory::sample_smooth_noise_field() {
     NoiseField noise_field(Interval(NOISE_DENSITY_FLOOR, 1.0));
-    PowellSabinInterpolant interpolant;
-    auto result = interpolant.interpolate(TriangleMesh::icosphere(SMOOTH_NOISE_SUBDIVISIONS), noise_field);
+    PowellSabinProjection projection;
+    auto result = projection.project(TriangleMesh::icosphere(SMOOTH_NOISE_SUBDIVISIONS), noise_field);
 
-    std::cout << "Interpolated noise onto a C1 quadratic spline with " <<
+    std::cout << "Projected noise onto a C1 quadratic spline with " <<
         result.field.mesh().triangles.size() << " pieces, density at least " <<
         result.lowest_coefficient << std::endl;
 
     if (result.least_damping < 1.0) {
-        std::cout << "  the mesh does not carry the field's gradients; damped to " <<
+        std::cout << "  the projection dipped below zero; gradients damped to " <<
             result.least_damping << " to keep the density positive" << std::endl;
     }
 
