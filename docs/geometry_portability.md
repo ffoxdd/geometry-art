@@ -65,14 +65,64 @@ That collapses the target list. There are three classes, not five:
 
 Two consequences worth carrying:
 
-- The flat family needs a **bounded domain**, which the sphere never
+- Walled directions need a **bounded domain**, which the sphere never
   did because it is compact. The plane needs bounds in both directions,
   a cylinder in one, a torus in neither -- so the torus is structurally
-  the closest of the three to the sphere.
+  the closest of the three to the sphere, and the default domain below.
 - On a cylinder embedded in space, chord distance and geodesic distance
   disagree, unlike the sphere where both order the same way. The
   intrinsic one is both the tessellation people want and the one that
   unrolls, so the flat family means intrinsic throughout.
+
+## Boundaries and edge treatments
+
+The flat family's domain is a per-axis choice: each direction is
+either **wrapped** or **walled**. Plane (walled, walled), cylinder
+(wrapped, walled), torus (wrapped, wrapped). Wrapping is exact
+periodicity in the diagram -- a cylinder's pattern must close
+seamlessly around its circumference, and no margin can fake that.
+A wall clips cells inside the optimizer and contributes its own
+derivative terms: a cell edge on the wall does not sweep when sites
+move, and a Voronoi vertex on the wall is constrained by the wall
+plus one equidistance instead of three-site equidistance -- the slot
+the sphere constraint occupies in the endpoint system holds the wall
+equation instead.
+
+**The torus is the default domain.** It is the only member with no
+boundary mathematics at all, so the optimizer stack ports unchanged;
+it is statistically homogeneous, with no wall anywhere to nucleate
+order; and every cell is usable pattern. The walled members extend
+it rather than precede it.
+
+The edge of a finished piece is a separate, artistic choice, and the
+treatments decouple from the domain:
+
+- **Cut.** Clip the tessellation at the frame at render time. Border
+  cells are sliced mid-cell, and the piece reads as a window onto a
+  pattern that continues past the edge. From the torus this is free;
+  from a walled domain it needs a margin between wall and frame. A
+  cylinder whose axial period equals the frame height wastes nothing:
+  each cell's clipped top fragment reappears as its bottom fragment,
+  so the visible band holds every cell exactly once.
+- **Conformed.** The frame is the wall. Every cell, border cells
+  included, is a complete equal-capacity cell pressed flat against
+  the edge, and the piece reads as a self-contained object.
+- **Fade.** The density ramps down toward the edge, inside a wall,
+  so cells swell and the pattern dissolves as it approaches the
+  border. The ramp bottoms out at a positive floor, never zero: the
+  capacity constraint needs every cell to hold mass, and the
+  positivity certification is precisely a proof the density has a
+  floor. The ramp must also be at least a cell wide, or the
+  bandwidth rule says the tessellation cannot read it.
+
+One caution for margins: a straight wall nucleates rows of cells
+aligned parallel to it, the way crystallization starts at the flat
+side of a container, and the layering can propagate several rows
+deep at near-constant density. A margin is therefore measured in
+cell layers, not length, and its required depth should be measured
+-- count the layers before cell-shape statistics match the interior
+-- rather than assumed. Noise and image densities disrupt the
+alignment naturally.
 
 ## Using it as a tiebreak
 

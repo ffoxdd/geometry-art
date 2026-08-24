@@ -16,19 +16,20 @@ spherical-harmonic basis: it addressed conditioning in high-degree
 global fits, and the global path is the one that does not generalise.
 
 ### 1. The flat family
-Plane, cylinder and torus are one implementation: all three are
-intrinsically flat, differing only in which directions wrap. The
-cheapest second instance, and the one that would let a `Geometry`
-abstraction be extracted from two cases rather than one.
+Plane, cylinder and torus are one implementation: each direction of
+the domain is either wrapped or walled, and the three are the three
+settings of that switch. The second instance, and the one that lets a
+`Geometry` abstraction be extracted from two cases rather than one.
 
-`geometry/planar` now has the region types, with moments by the
-divergence theorem reported in the same table the spherical ones use,
-so the polynomial layer is already shared. What remains: a bounded
-domain, which the sphere never needed; a diagram from
-`Delaunay_triangulation_2`; an identity site manifold, which will
-expose wherever the spherical one is silently load-bearing; and
-`Field::integrals` taking the region by concept rather than by the
-spherical type. Sequencing against C¹ elements is open -- see
-`docs/geometry_portability.md`.
+The torus comes first: both directions wrapped, so no boundary
+mathematics at all -- a periodic Delaunay diagram, an identity site
+manifold that will expose wherever the spherical one is silently
+load-bearing, and `Field::integrals` taking the region by concept
+rather than by the spherical type. `geometry/planar` already has the
+region types with divergence-theorem moments, so the polynomial layer
+is shared. Walls follow, bringing the bounded domain and the wall
+terms in the exact Hessian, and unlocking the cylinder and the plane.
+Edge treatments -- cut, conformed, fade -- are configuration on top;
+the design is in `docs/geometry_portability.md`.
 
-*Verified by:* the optimizer stack driving it unchanged.
+*Verified by:* the optimizer stack driving the torus unchanged.
