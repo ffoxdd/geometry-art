@@ -100,7 +100,7 @@ class Runs:
         if record is None or record["status"] != "queued":
             return
 
-        command = [str(self.binary), "--render", "false", "--snapshot", str(folder / "globe"),
+        command = [str(self.binary), "--render", "false", "--snapshot", str(folder / "snapshot"),
                    "--snapshot-interval", str(SNAPSHOT_INTERVAL_SECONDS)]
 
         for name, value in record["parameters"].items():
@@ -181,8 +181,8 @@ class Runs:
         if record is None:
             return None
 
-        snapshot = folder / "globe.json"
-        record["snapshot"] = f"/runs/{run_id}/globe.json" if snapshot.exists() else None
+        snapshot = snapshot_file(folder)
+        record["snapshot"] = f"/runs/{run_id}/{snapshot.name}" if snapshot.exists() else None
         record["snapshot_version"] = snapshot.stat().st_mtime_ns if snapshot.exists() else None
         record["log"] = tail_lines(folder / "log.txt", tail)
 
@@ -195,7 +195,8 @@ class Runs:
             record = read_json(folder / "run.json")
 
             if record is not None:
-                record["snapshot"] = f"/runs/{folder.name}/globe.json" if (folder / "globe.json").exists() else None
+                snapshot = snapshot_file(folder)
+                record["snapshot"] = f"/runs/{folder.name}/{snapshot.name}" if snapshot.exists() else None
                 records.append(record)
 
         return records
@@ -237,6 +238,15 @@ def validate(requested):
         raise ValueError("the flat family holds constant and noise densities")
 
     return parameters
+
+
+def snapshot_file(folder):
+    current = folder / "snapshot.json"
+
+    if current.exists():
+        return current
+
+    return folder / "globe.json"
 
 
 def final_line(path):

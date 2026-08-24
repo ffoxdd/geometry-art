@@ -1,4 +1,4 @@
-# Viewer and studio
+# Geometry Art studio
 
 `index.html` renders a snapshot (`generate_globe --snapshot <name>` writes
 `<name>.json`) with Three.js. Open it from any static server, drop a
