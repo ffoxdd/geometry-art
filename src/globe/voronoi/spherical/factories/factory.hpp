@@ -21,7 +21,9 @@
 #include "../../../geometry/cartesian/bounding_box_sampler/uniform_bounding_box_sampler.hpp"
 #include "../../../math/interval_sampler/uniform_interval_sampler.hpp"
 #include "../../../geometry/spherical/triangle_mesh.hpp"
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <functional>
 #include <iomanip>
@@ -64,13 +66,16 @@ class Factory {
     // build actually used, which the caller no longer has a handle on.
     [[nodiscard]] const io::snapshot::Snapshot& snapshot() const { return _snapshot; }
 
+    [[nodiscard]] static int smooth_noise_subdivisions(int points_count);
+
  private:
     static constexpr int NOISE_FIT_DEGREE = 8;
     static constexpr size_t NOISE_FIT_SAMPLES = 20000;
     static constexpr int NOISE_MESH_SUBDIVISIONS = 4;
     static constexpr double NOISE_DENSITY_FLOOR = 0.2;
     static constexpr int NOISE_MESH_DEGREE = 2;
-    static constexpr int SMOOTH_NOISE_SUBDIVISIONS = 4;
+    static constexpr int SMOOTH_NOISE_MINIMUM_SUBDIVISIONS = 1;
+    static constexpr int SMOOTH_NOISE_MAXIMUM_SUBDIVISIONS = 6;
 
     using SeededBoundingBoxSampler = globe::UniformBoundingBoxSampler<globe::UniformIntervalSampler>;
     using SeededCartesianGenerator = generators::cartesian::RandomPointGenerator<SeededBoundingBoxSampler>;
@@ -111,7 +116,7 @@ class Factory {
     [[nodiscard]] std::unique_ptr<Sphere> optimize(std::unique_ptr<Sphere> sphere, const FieldType& field, const Callback& callback) const;
 
     [[nodiscard]] static PiecewisePolynomialField sample_noise_field();
-    [[nodiscard]] static PiecewisePolynomialField sample_smooth_noise_field();
+    [[nodiscard]] PiecewisePolynomialField sample_smooth_noise_field() const;
     [[nodiscard]] PiecewisePolynomialField sample_quadratic_field() const;
     [[nodiscard]] static PolynomialField fit_noise_field();
 };
@@ -226,10 +231,11 @@ inline PiecewisePolynomialField Factory::sample_noise_field() {
 // The C1 representation: quadratic pieces on the Powell-Sabin split, whose
 // gradient is continuous and whose positivity is certified by the
 // coefficients rather than sampled for.
-inline PiecewisePolynomialField Factory::sample_smooth_noise_field() {
+inline PiecewisePolynomialField Factory::sample_smooth_noise_field() const {
     NoiseField noise_field(Interval(NOISE_DENSITY_FLOOR, 1.0));
     PowellSabinProjection projection;
-    auto result = projection.project(TriangleMesh::icosphere(SMOOTH_NOISE_SUBDIVISIONS), noise_field);
+    int subdivisions = smooth_noise_subdivisions(_points_count);
+    auto result = projection.project(TriangleMesh::icosphere(subdivisions), noise_field);
 
     std::cout << "Projected noise onto a C1 quadratic spline with " <<
         result.field.mesh().triangles.size() << " pieces, density at least " <<
@@ -241,6 +247,19 @@ inline PiecewisePolynomialField Factory::sample_smooth_noise_field() {
     }
 
     return std::move(result.field);
+}
+
+// The bandwidth rule: density structure finer than a cell cannot affect the
+// tessellation except through its local average, and the projection keeps
+// those averages faithful at any mesh no coarser than the cells. So the
+// mesh is the coarsest icosphere whose edges fit inside a cell, and no one
+// has to name a level.
+inline int Factory::smooth_noise_subdivisions(int points_count) {
+    double cell_radius = 2.0 / std::sqrt(static_cast<double>(points_count));
+    double icosahedron_edge = std::acos(1.0 / std::sqrt(5.0));
+    int level = static_cast<int>(std::ceil(std::log2(icosahedron_edge / cell_radius)));
+
+    return std::clamp(level, SMOOTH_NOISE_MINIMUM_SUBDIVISIONS, SMOOTH_NOISE_MAXIMUM_SUBDIVISIONS);
 }
 
 // The quadratic field represented on the noise mesh: the same function, so

@@ -20,8 +20,13 @@ namespace globe::voronoi::spherical {
 using geometry::spherical::Arc;
 using geometry::spherical::Polygon;
 
+// The arc's endpoints are Voronoi vertices, each equidistant from the two
+// sites of the edge and one more; the opposite indices name that third
+// site, which is what the endpoint's motion depends on.
 struct CellEdgeInfo {
     size_t neighbor_index;
+    size_t source_opposite_index;
+    size_t target_opposite_index;
     Arc arc;
 };
 
@@ -258,7 +263,14 @@ inline std::vector<CellEdgeInfo> Sphere::cell_edges(size_t index) const {
         size_t neighbor_index = vertex_index(neighbor_handle);
 
         if (neighbor_index < size()) {
-            result.push_back({neighbor_index, dual_arc(edge)});
+            FaceHandle target_face = face->neighbor(edge_index);
+
+            result.push_back({
+                neighbor_index,
+                vertex_index(face->vertex(edge_index)),
+                vertex_index(target_face->vertex(target_face->index(face))),
+                dual_arc(edge)
+            });
         }
     }
 

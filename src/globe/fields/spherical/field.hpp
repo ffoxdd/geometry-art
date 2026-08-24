@@ -6,6 +6,7 @@
 #include "../../geometry/spherical/arc.hpp"
 #include "../../geometry/spherical/polygon/polygon.hpp"
 #include "../../math/polynomial/moments.hpp"
+#include <array>
 #include <concepts>
 #include <vector>
 
@@ -30,6 +31,7 @@ concept Field = requires(
     { field.integrals(arc, arc_moments) } -> std::convertible_to<RegionIntegrals>;
     { field.second_moment(arc) } -> std::convertible_to<Matrix3>;
     { field.second_moment(arc, arc_moments) } -> std::convertible_to<Matrix3>;
+    { field.gradient_second_moments(arc) } -> std::convertible_to<std::array<Matrix3, 3>>;
     { field.total_mass() } -> std::convertible_to<double>;
 };
 

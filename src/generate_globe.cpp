@@ -228,7 +228,7 @@ Config parse_arguments(int argc, char *argv[]) {
 
     app.add_option("--newton-curvature", config.newton_curvature)
         ->description("Curvature model for the newton inner solver")
-        ->check(CLI::IsMember({"gauss-newton", "finite-difference"}))
+        ->check(CLI::IsMember({"gauss-newton", "exact", "finite-difference"}))
         ->default_val("gauss-newton");
 
     app.add_option("--seed", config.seed)

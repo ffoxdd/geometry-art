@@ -98,7 +98,7 @@ double pairing(const std::vector<Vector3>& left, const std::vector<Vector3>& rig
 
 TEST(CapacityConstrainedHessianTest, ReducesToTheEnergyCurvatureWithoutPenalty) {
     Fixture fixture = Fixture::build(14);
-    CvtHessianBlocks energy = CvtHessian<PolynomialField>(fixture.field)
+    HessianBlocks energy = CvtHessian<PolynomialField>(fixture.field)
         .assemble(*fixture.sphere)
         .through_normalization(fixture.points, fixture.site_gradients);
 

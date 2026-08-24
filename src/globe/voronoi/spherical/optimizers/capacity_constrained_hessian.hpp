@@ -21,7 +21,7 @@ namespace globe::voronoi::spherical {
 class CapacityConstrainedHessian {
  public:
     CapacityConstrainedHessian(
-        CvtHessianBlocks energy_curvature,
+        HessianBlocks energy_curvature,
         CapacityJacobian jacobian,
         std::vector<Vector3> sites,
         double penalty
@@ -30,7 +30,7 @@ class CapacityConstrainedHessian {
     [[nodiscard]] std::vector<Vector3> multiply(const std::vector<Vector3>& directions) const;
 
  private:
-    CvtHessianBlocks _energy_curvature;
+    HessianBlocks _energy_curvature;
     CapacityJacobian _jacobian;
     std::vector<Vector3> _sites;
     double _penalty;
@@ -39,7 +39,7 @@ class CapacityConstrainedHessian {
 };
 
 inline CapacityConstrainedHessian::CapacityConstrainedHessian(
-    CvtHessianBlocks energy_curvature,
+    HessianBlocks energy_curvature,
     CapacityJacobian jacobian,
     std::vector<Vector3> sites,
     double penalty

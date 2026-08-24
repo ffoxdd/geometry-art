@@ -3,6 +3,7 @@
 
 #include "capacity_constrained_lagrangian.hpp"
 #include "capacity_constrained_hessian.hpp"
+#include "capacity_hessian.hpp"
 #include "cvt_hessian.hpp"
 #include "newton_optimizer/finite_difference_hessian.hpp"
 #include "newton_optimizer/newton_optimizer.hpp"
@@ -83,6 +84,7 @@ class CapacityConstrainedOptimizer {
     std::unique_ptr<Sphere> _sphere;
     CapacityConstrainedLagrangian<FieldType> _lagrangian;
     CvtHessian<FieldType> _curvature;
+    CapacityHessian<FieldType> _constraint_curvature;
     CapacityConstrainedParameters _parameters;
     Callback _callback;
     std::vector<double> _multipliers;
@@ -140,6 +142,7 @@ CapacityConstrainedOptimizer<FieldType>::CapacityConstrainedOptimizer(
     _sphere(std::move(sphere)),
     _lagrangian(field, field.total_mass() / static_cast<double>(_sphere->size())),
     _curvature(field),
+    _constraint_curvature(field),
     _parameters(parameters),
     _callback(std::move(callback)),
     _multipliers(_sphere->size(), 0.0) {
@@ -289,8 +292,20 @@ typename CapacityConstrainedOptimizer<FieldType>::CurvatureOperator CapacityCons
         return {[hessian](const std::vector<Vector3>& directions) { return hessian.multiply(directions); }};
     }
 
+    HessianBlocks blocks = _curvature.assemble(*_sphere);
+
+    if (_parameters.newton.curvature == "exact") {
+        std::vector<double> weights(_sphere->size());
+
+        for (size_t k = 0; k < weights.size(); ++k) {
+            weights[k] = _multipliers[k] + _penalty * evaluation.capacity_errors[k];
+        }
+
+        blocks = blocks.plus(_constraint_curvature.assemble(*_sphere, state, points, weights));
+    }
+
     CapacityConstrainedHessian hessian(
-        _curvature.assemble(*_sphere).through_normalization(points, evaluation.site_gradients),
+        blocks.through_normalization(points, evaluation.site_gradients),
         CapacityJacobian(state, points),
         points,
         _penalty

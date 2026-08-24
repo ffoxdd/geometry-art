@@ -9,6 +9,7 @@
 #include "../../math/polynomial/moments.hpp"
 #include "../../math/polynomial/polynomial.hpp"
 #include <CGAL/assertions.h>
+#include <algorithm>
 #include <array>
 #include <utility>
 #include <vector>
@@ -32,6 +33,7 @@ class PolynomialField {
     [[nodiscard]] RegionIntegrals integrals(const Arc& arc, const Moments& arc_moments) const;
     [[nodiscard]] Matrix3 second_moment(const Arc& arc) const;
     [[nodiscard]] Matrix3 second_moment(const Arc& arc, const Moments& arc_moments) const;
+    [[nodiscard]] std::array<Matrix3, 3> gradient_second_moments(const Arc& arc) const;
     [[nodiscard]] static int second_moment_degree(int density_degree) { return density_degree + 2; }
     [[nodiscard]] double total_mass() const { return _total_mass; }
 
@@ -47,10 +49,12 @@ class PolynomialField {
     Polynomial _density;
     std::array<Polynomial, 3> _density_times_coordinate;
     std::vector<Polynomial> _density_times_coordinate_pair;
+    std::array<std::vector<Polynomial>, 3> _partial_derivative_times_coordinate_pair;
     double _total_mass;
 
     [[nodiscard]] RegionIntegrals integrate(const Moments& moments) const;
     [[nodiscard]] Matrix3 second_moment_from(const Moments& moments) const;
+    [[nodiscard]] static Matrix3 pair_integrals(const std::vector<Polynomial>& products, const Moments& moments);
     [[nodiscard]] static std::vector<Polynomial> coordinate_pair_products(const Polynomial& density);
 };
 
@@ -62,6 +66,11 @@ inline PolynomialField::PolynomialField(Polynomial density) :
         _density.times_coordinate(2)
     },
     _density_times_coordinate_pair(coordinate_pair_products(_density)),
+    _partial_derivative_times_coordinate_pair{
+        coordinate_pair_products(_density.partial_derivative(0)),
+        coordinate_pair_products(_density.partial_derivative(1)),
+        coordinate_pair_products(_density.partial_derivative(2))
+    },
     _total_mass(_density.integrate(Moments::unit_sphere(_density.max_degree()))) {
 }
 
@@ -98,11 +107,29 @@ inline Matrix3 PolynomialField::second_moment(
 }
 
 inline Matrix3 PolynomialField::second_moment_from(const Moments& moments) const {
+    return pair_integrals(_density_times_coordinate_pair, moments);
+}
+
+// The second moments of each partial derivative of the density, which is
+// what the curvature of a mass constraint reads along a bisector: the
+// gradient says how fast mass appears where the boundary sweeps, and the
+// coordinate pair carries the sweep's dependence on the sites.
+inline std::array<Matrix3, 3> PolynomialField::gradient_second_moments(const Arc& arc) const {
+    Moments moments = arc.moments(second_moment_degree(std::max(degree() - 1, 0)));
+
+    return {
+        pair_integrals(_partial_derivative_times_coordinate_pair[0], moments),
+        pair_integrals(_partial_derivative_times_coordinate_pair[1], moments),
+        pair_integrals(_partial_derivative_times_coordinate_pair[2], moments)
+    };
+}
+
+inline Matrix3 PolynomialField::pair_integrals(const std::vector<Polynomial>& products, const Moments& moments) {
     Matrix3 result;
 
     for (int row = 0; row < 3; ++row) {
         for (int column = row; column < 3; ++column) {
-            double value = _density_times_coordinate_pair[row * 3 + column].integrate(moments);
+            double value = products[row * 3 + column].integrate(moments);
             result(row, column) = value;
             result(column, row) = value;
         }

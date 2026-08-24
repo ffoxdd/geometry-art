@@ -41,6 +41,29 @@ TEST(PolynomialTest, TimesCoordinateShiftsExponents) {
     EXPECT_DOUBLE_EQ(shifted.coefficient(MultiIndex{0, 0, 0}), 0.0);
 }
 
+TEST(PolynomialTest, PartialDerivativeOfQuadraticIsItsGradient) {
+    Eigen::Matrix3d form;
+    form << 0.5, 0.2, -0.1,
+            0.2, -0.3, 0.4,
+           -0.1, 0.4, 0.6;
+
+    Polynomial quadratic = Polynomial::quadratic(1.5, Vector3(0.3, -0.7, 0.2), form);
+    Vector3 point(0.4, -0.9, 1.3);
+    Vector3 expected = Vector3(0.3, -0.7, 0.2) + 2.0 * form * point;
+
+    for (int axis = 0; axis < 3; ++axis) {
+        EXPECT_NEAR(quadratic.partial_derivative(axis).value(point), expected[axis], 1e-12);
+    }
+}
+
+TEST(PolynomialTest, PartialDerivativeOfConstantIsZero) {
+    Polynomial constant = Polynomial::constant(4.2);
+
+    for (int axis = 0; axis < 3; ++axis) {
+        EXPECT_EQ(constant.partial_derivative(axis).value(Vector3(1.0, 2.0, 3.0)), 0.0);
+    }
+}
+
 TEST(PolynomialTest, IntegrateAgainstUnitSphereMoments) {
     Eigen::Matrix3d quadratic_form = Eigen::Matrix3d::Zero();
     quadratic_form(2, 2) = -0.9;

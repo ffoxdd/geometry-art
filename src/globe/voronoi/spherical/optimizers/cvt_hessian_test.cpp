@@ -92,7 +92,7 @@ std::vector<Vector3> ambient_points(const std::vector<VectorS2>& sites) {
 
 TEST(CvtHessianTest, RowsSumToZero) {
     auto sphere = build_sphere(fibonacci_sites(12));
-    CvtHessianBlocks blocks = CvtHessian<PolynomialField>(test_field()).assemble(*sphere);
+    HessianBlocks blocks = CvtHessian<PolynomialField>(test_field()).assemble(*sphere);
 
     for (size_t k = 0; k < blocks.diagonal.size(); ++k) {
         Matrix3 row = blocks.diagonal[k];
@@ -107,7 +107,7 @@ TEST(CvtHessianTest, RowsSumToZero) {
 
 TEST(CvtHessianTest, BlocksAreSymmetricAcrossSharedBisectors) {
     auto sphere = build_sphere(fibonacci_sites(12));
-    CvtHessianBlocks blocks = CvtHessian<PolynomialField>(test_field()).assemble(*sphere);
+    HessianBlocks blocks = CvtHessian<PolynomialField>(test_field()).assemble(*sphere);
 
     for (size_t k = 0; k < blocks.neighbors.size(); ++k) {
         for (const NeighborBlock& block : blocks.neighbors[k]) {
@@ -133,7 +133,7 @@ TEST(CvtHessianTest, EXPENSIVE_MatchesFiniteDifferencesOfTheNormalizedGradient) 
     std::vector<Vector3> points = ambient_points(sites);
     auto sphere = build_sphere(sites);
 
-    CvtHessianBlocks blocks = CvtHessian<PolynomialField>(field).assemble(*sphere);
+    HessianBlocks blocks = CvtHessian<PolynomialField>(field).assemble(*sphere);
     std::vector<Vector3> site_gradients = cvt_gradients(*sphere, field);
     std::vector<Normalization> normalizations;
 

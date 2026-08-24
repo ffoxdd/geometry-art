@@ -55,6 +55,7 @@ class PiecewisePolynomialField {
     [[nodiscard]] RegionIntegrals integrals(const Arc& arc, const Moments& arc_moments) const;
     [[nodiscard]] Matrix3 second_moment(const Arc& arc) const;
     [[nodiscard]] Matrix3 second_moment(const Arc& arc, const Moments& arc_moments) const;
+    [[nodiscard]] std::array<Matrix3, 3> gradient_second_moments(const Arc& arc) const;
     [[nodiscard]] double total_mass() const { return _total_mass; }
 
     [[nodiscard]] static std::vector<VectorS2> lagrange_nodes(const std::array<VectorS2, 3>& corners, int degree);
@@ -319,6 +320,34 @@ inline Matrix3 PiecewisePolynomialField::second_moment(
     [[maybe_unused]] const Moments& arc_moments
 ) const {
     return second_moment(arc);
+}
+
+inline std::array<Matrix3, 3> PiecewisePolynomialField::gradient_second_moments(const Arc& arc) const {
+    VectorS2 center = arc.interpolate(0.5);
+    double angular_radius = arc.length() / 2.0;
+    std::array<Matrix3, 3> total = {Matrix3::Zero(), Matrix3::Zero(), Matrix3::Zero()};
+
+    for (size_t index : candidates(center, angular_radius)) {
+        const Triangle& triangle = _triangles[index];
+        std::optional<Arc> piece = arc;
+
+        for (const VectorS2& normal : triangle.inward_normals) {
+            if (!piece) {
+                break;
+            }
+            piece = piece->clipped_by(normal);
+        }
+
+        if (piece) {
+            std::array<Matrix3, 3> contribution = triangle.field.gradient_second_moments(*piece);
+
+            for (int axis = 0; axis < 3; ++axis) {
+                total[axis] += contribution[axis];
+            }
+        }
+    }
+
+    return total;
 }
 
 inline RegionIntegrals PiecewisePolynomialField::integrals(

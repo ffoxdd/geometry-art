@@ -69,6 +69,31 @@ TEST(PolynomialFieldTest, SecondMomentTraceIsTheArcMass) {
     EXPECT_NEAR(moment.trace(), field.integrals(arc).mass, 1e-12);
 }
 
+// For a linear density the gradient is constant, so each partial's second
+// moment is that component times the arc's bare second moment -- a closed
+// form the arc already computes.
+TEST(PolynomialFieldTest, GradientSecondMomentsOfLinearFieldAreClosedForm) {
+    Vector3 gradient(0.4, -0.3, 0.8);
+    PolynomialField field = PolynomialField::linear(1.0, gradient);
+    Arc arc(VectorS2(1, 0, 0), VectorS2(0, 1, 1).normalized());
+
+    std::array<Matrix3, 3> moments = field.gradient_second_moments(arc);
+    Matrix3 bare = arc.second_moment();
+
+    for (int axis = 0; axis < 3; ++axis) {
+        EXPECT_LT((moments[axis] - gradient[axis] * bare).norm(), 1e-12);
+    }
+}
+
+TEST(PolynomialFieldTest, GradientSecondMomentsOfConstantFieldVanish) {
+    PolynomialField field = PolynomialField::constant(2.0);
+    Arc arc(VectorS2(1, 0, 0), VectorS2(0, 0, 1));
+
+    for (const Matrix3& moment : field.gradient_second_moments(arc)) {
+        EXPECT_EQ(moment.norm(), 0.0);
+    }
+}
+
 TEST(PolynomialFieldTest, ConstantFieldValueAndTotalMass) {
     PolynomialField field = PolynomialField::constant(2.0);
 

@@ -66,12 +66,14 @@ inline ExplicitDiagram ExplicitDiagram::hemispheres() {
     std::vector<CellEdgeInfo> northern_edges;
     std::vector<CellEdgeInfo> southern_edges;
 
+    // Two cells leave no third site at any endpoint, so the opposite
+    // indices just name the only neighbour there is.
     for (const Arc& arc : northern) {
-        northern_edges.push_back(CellEdgeInfo{1, arc});
+        northern_edges.push_back(CellEdgeInfo{1, 1, 1, arc});
     }
 
     for (const Arc& arc : southern) {
-        southern_edges.push_back(CellEdgeInfo{0, arc});
+        southern_edges.push_back(CellEdgeInfo{0, 0, 0, arc});
     }
 
     diagram.add(cgal::to_point(VectorS2(0, 0, 1)), Polygon(northern), std::move(northern_edges));

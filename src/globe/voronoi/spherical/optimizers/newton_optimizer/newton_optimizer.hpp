@@ -113,7 +113,7 @@ std::unique_ptr<Sphere> NewtonOptimizer<FieldType>::optimize() {
 
     // A rejected step leaves the iterate where it was, so the curvature
     // there is still the one just assembled.
-    std::optional<CvtHessianBlocks> blocks;
+    std::optional<HessianBlocks> blocks;
 
     while (_report.iterations < _parameters.max_iterations) {
         _report.gradient_norm = norm(evaluation.gradient);

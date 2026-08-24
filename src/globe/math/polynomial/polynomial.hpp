@@ -25,6 +25,7 @@ class Polynomial {
     [[nodiscard]] double value(const Vector3& point) const;
     [[nodiscard]] double integrate(const Moments& moments) const;
     [[nodiscard]] Polynomial times_coordinate(int axis) const;
+    [[nodiscard]] Polynomial partial_derivative(int axis) const;
     [[nodiscard]] Polynomial times_linear_form(const Vector3& form) const;
     [[nodiscard]] Polynomial plus(const Polynomial& other) const;
     [[nodiscard]] Polynomial scaled(double factor) const;
@@ -83,6 +84,25 @@ inline Polynomial Polynomial::times_coordinate(int axis) const {
 
     for (const MultiIndex& index : MultiIndex::all_up_to(max_degree())) {
         result.set_coefficient(index.raised(axis), _coefficients.at(index));
+    }
+
+    return result;
+}
+
+inline Polynomial Polynomial::partial_derivative(int axis) const {
+    Polynomial result(std::max(max_degree() - 1, 0));
+
+    for (const MultiIndex& index : MultiIndex::all_up_to(max_degree())) {
+        if (index[axis] == 0) {
+            continue;
+        }
+
+        MultiIndex lowered{
+            index.x - (axis == 0 ? 1 : 0),
+            index.y - (axis == 1 ? 1 : 0),
+            index.z - (axis == 2 ? 1 : 0)
+        };
+        result.add_coefficient(lowered, _coefficients.at(index) * static_cast<double>(index[axis]));
     }
 
     return result;

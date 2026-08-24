@@ -2,6 +2,7 @@
 #define GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_CVT_HESSIAN_HPP_
 
 #include "../../../types.hpp"
+#include <CGAL/assertions.h>
 #include "../../../fields/spherical/field.hpp"
 #include "../../../fields/spherical/polynomial_field.hpp"
 #include "../../../math/normalization.hpp"
@@ -25,12 +26,13 @@ struct NeighborBlock {
 //
 // through_normalization carries the blocks into the parameterisation the
 // optimizer descends, restricted to each site's tangent plane.
-struct CvtHessianBlocks {
+struct HessianBlocks {
     std::vector<Matrix3> diagonal;
     std::vector<std::vector<NeighborBlock>> neighbors;
 
     [[nodiscard]] std::vector<Vector3> multiply(const std::vector<Vector3>& directions) const;
-    [[nodiscard]] CvtHessianBlocks through_normalization(
+    [[nodiscard]] HessianBlocks plus(const HessianBlocks& other) const;
+    [[nodiscard]] HessianBlocks through_normalization(
         const std::vector<Vector3>& points,
         const std::vector<Vector3>& site_gradients
     ) const;
@@ -41,7 +43,7 @@ class CvtHessian {
  public:
     explicit CvtHessian(FieldType field);
 
-    [[nodiscard]] CvtHessianBlocks assemble(const Sphere& sphere) const;
+    [[nodiscard]] HessianBlocks assemble(const Sphere& sphere) const;
 
  private:
     FieldType _field;
@@ -55,7 +57,7 @@ class CvtHessian {
     [[nodiscard]] static EdgeKey edge_key(size_t a, size_t b);
 };
 
-inline std::vector<Vector3> CvtHessianBlocks::multiply(const std::vector<Vector3>& directions) const {
+inline std::vector<Vector3> HessianBlocks::multiply(const std::vector<Vector3>& directions) const {
     std::vector<Vector3> result(directions.size());
 
     for (size_t k = 0; k < directions.size(); ++k) {
@@ -71,7 +73,29 @@ inline std::vector<Vector3> CvtHessianBlocks::multiply(const std::vector<Vector3
     return result;
 }
 
-inline CvtHessianBlocks CvtHessianBlocks::through_normalization(
+// Both operands must come from the same diagram, so the blocks line up
+// position by position.
+inline HessianBlocks HessianBlocks::plus(const HessianBlocks& other) const {
+    CGAL_precondition(diagonal.size() == other.diagonal.size());
+
+    HessianBlocks result = *this;
+
+    for (size_t k = 0; k < diagonal.size(); ++k) {
+        result.diagonal[k] += other.diagonal[k];
+        CGAL_precondition(neighbors[k].size() == other.neighbors[k].size());
+
+        for (size_t position = 0; position < neighbors[k].size(); ++position) {
+            CGAL_precondition(
+                neighbors[k][position].neighbor_index == other.neighbors[k][position].neighbor_index
+            );
+            result.neighbors[k][position].value += other.neighbors[k][position].value;
+        }
+    }
+
+    return result;
+}
+
+inline HessianBlocks HessianBlocks::through_normalization(
     const std::vector<Vector3>& points,
     const std::vector<Vector3>& site_gradients
 ) const {
@@ -82,7 +106,7 @@ inline CvtHessianBlocks CvtHessianBlocks::through_normalization(
         normalizations.emplace_back(point);
     }
 
-    CvtHessianBlocks result;
+    HessianBlocks result;
     result.diagonal.reserve(points.size());
     result.neighbors.resize(points.size());
 
@@ -107,7 +131,7 @@ CvtHessian<FieldType>::CvtHessian(FieldType field) :
 }
 
 template<fields::spherical::Field FieldType>
-CvtHessianBlocks CvtHessian<FieldType>::assemble(const Sphere& sphere) const {
+HessianBlocks CvtHessian<FieldType>::assemble(const Sphere& sphere) const {
     size_t count = sphere.size();
     std::vector<Vector3> sites(count);
     std::vector<std::vector<CellEdgeInfo>> cell_edges(count);
@@ -120,7 +144,7 @@ CvtHessianBlocks CvtHessian<FieldType>::assemble(const Sphere& sphere) const {
     std::vector<std::vector<size_t>> slots_by_cell;
     std::vector<Matrix3> second_moments = shared_second_moments(cell_edges, slots_by_cell);
 
-    CvtHessianBlocks blocks;
+    HessianBlocks blocks;
     blocks.diagonal.assign(count, Matrix3::Zero());
     blocks.neighbors.resize(count);
 
