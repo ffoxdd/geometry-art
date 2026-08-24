@@ -71,6 +71,11 @@ class PowellSabinProjection {
         // zero somewhere, and some vertex gradients were reduced to keep the
         // density positive.
         double least_damping;
+
+        // The root mean square of what the space could not represent,
+        // against the sphere's area: the measured representation error, and
+        // the number a requested accuracy would be checked against.
+        double root_mean_square_residual;
     };
 
     // Each sub-triangle of the split is sampled on a grid this many rows
@@ -112,8 +117,13 @@ class PowellSabinProjection {
 
     int _sample_side;
 
+    struct Projection {
+        Eigen::VectorXd solution;
+        double root_mean_square_residual;
+    };
+
     template<scalar::Field ScalarFieldType>
-    [[nodiscard]] Eigen::VectorXd solve_projection(
+    [[nodiscard]] Projection solve_projection(
         const PowellSabinRefinement& refinement,
         const std::vector<CoefficientMap>& maps,
         ScalarFieldType& scalar_field
@@ -163,7 +173,8 @@ PowellSabinProjection::Result PowellSabinProjection::project(
         maps.push_back(coefficients_from_corner_data(cell));
     }
 
-    Eigen::VectorXd solution = solve_projection(refinement, maps, scalar_field);
+    Projection projection = solve_projection(refinement, maps, scalar_field);
+    const Eigen::VectorXd& solution = projection.solution;
 
     // By Euler's relation the solved vector at a vertex carries the value in
     // its radial part and the tangential gradient in the rest.
@@ -251,7 +262,8 @@ PowellSabinProjection::Result PowellSabinProjection::project(
     return Result{
         PiecewisePolynomialField(refinement.mesh(), std::move(polynomials)),
         lowest,
-        *std::min_element(damping.begin(), damping.end())
+        *std::min_element(damping.begin(), damping.end()),
+        projection.root_mean_square_residual
     };
 }
 
@@ -260,7 +272,7 @@ PowellSabinProjection::Result PowellSabinProjection::project(
 // projection. Each sample touches only the three vertices of its cell, so
 // the system is sparse, symmetric and positive definite.
 template<scalar::Field ScalarFieldType>
-Eigen::VectorXd PowellSabinProjection::solve_projection(
+typename PowellSabinProjection::Projection PowellSabinProjection::solve_projection(
     const PowellSabinRefinement& refinement,
     const std::vector<CoefficientMap>& maps,
     ScalarFieldType& scalar_field
@@ -278,6 +290,8 @@ Eigen::VectorXd PowellSabinProjection::solve_projection(
     std::vector<Eigen::Triplet<double>> triplets;
     Eigen::VectorXd right_hand_side = Eigen::VectorXd::Zero(unknown_count);
     std::vector<Vector3> samples = barycentric_samples(_sample_side);
+    double squared_target = 0.0;
+    double total_weight = 0.0;
 
     for (size_t index = 0; index < cells.size(); ++index) {
         const PowellSabinRefinement::Cell& cell = cells[index];
@@ -318,6 +332,8 @@ Eigen::VectorXd PowellSabinProjection::solve_projection(
 
             normal_block += weight * design.transpose() * design;
             data_block += weight * design.transpose() * sampled;
+            squared_target += weight * sampled.squaredNorm();
+            total_weight += weight * static_cast<double>(points.size());
         }
 
         for (int row = 0; row < CORNER_DATA_COUNT; ++row) {
@@ -337,8 +353,14 @@ Eigen::VectorXd PowellSabinProjection::solve_projection(
 
     Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver(normal);
     CGAL_postcondition(solver.info() == Eigen::Success);
+    Eigen::VectorXd solution = solver.solve(right_hand_side);
 
-    return solver.solve(right_hand_side);
+    // At the optimum the squared residual telescopes to what the samples
+    // carry minus what the solution reproduces, so the representation error
+    // costs nothing extra to know.
+    double squared_residual = std::max(0.0, squared_target - solution.dot(right_hand_side));
+
+    return Projection{std::move(solution), std::sqrt(squared_residual / total_weight)};
 }
 
 // One small dense solve per cell, mapping the corner vectors to the

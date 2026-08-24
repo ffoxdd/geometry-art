@@ -250,7 +250,8 @@ inline PiecewisePolynomialField Factory::sample_smooth_noise_field() const {
 
     std::cout << "Projected noise onto a C1 quadratic spline with " <<
         result.field.mesh().triangles.size() << " pieces, density at least " <<
-        result.lowest_coefficient << std::endl;
+        result.lowest_coefficient << ", residual RMS " <<
+        result.root_mean_square_residual << std::endl;
 
     if (result.least_damping < 1.0) {
         std::cout << "  the projection dipped below zero; gradients damped to " <<
@@ -269,7 +270,8 @@ inline PiecewisePolynomialField Factory::sample_image_field() const {
     std::cout << "Projected " << image_field.width() << "x" << image_field.height() <<
         " image onto a C1 quadratic spline with " <<
         result.field.mesh().triangles.size() << " pieces, density at least " <<
-        result.lowest_coefficient << std::endl;
+        result.lowest_coefficient << ", residual RMS " <<
+        result.root_mean_square_residual << std::endl;
 
     if (result.least_damping < 1.0) {
         std::cout << "  the projection dipped below zero; gradients damped to " <<

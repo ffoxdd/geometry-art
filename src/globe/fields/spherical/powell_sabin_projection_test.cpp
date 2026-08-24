@@ -116,6 +116,33 @@ TEST(PowellSabinProjectionTest, ReproducesAGlobalQuadraticFieldExactly) {
     }
 }
 
+// The reported residual is the measured representation error: vanishing
+// when the target is in the space, and falling with refinement when it is
+// not. The telescoped formula differences two order-one sums, so its floor
+// is the square root of machine epsilon, far below any tolerance a
+// representation would be held to.
+TEST(PowellSabinProjectionTest, ReportsAVanishingResidualForAnInSpaceTarget) {
+    QuadraticScalarField quadratic{tilted_quadratic()};
+    PowellSabinProjection projection;
+    auto result = projection.project(TriangleMesh::icosphere(1), quadratic);
+
+    EXPECT_LT(result.root_mean_square_residual, 1e-7);
+}
+
+TEST(PowellSabinProjectionTest, EXPENSIVE_ResidualFallsWithRefinement) {
+    REQUIRE_EXPENSIVE();
+
+    NoiseField coarse_noise(Interval(0.2, 1.0));
+    NoiseField fine_noise(Interval(0.2, 1.0));
+    PowellSabinProjection projection;
+
+    auto coarse = projection.project(TriangleMesh::icosphere(2), coarse_noise);
+    auto fine = projection.project(TriangleMesh::icosphere(3), fine_noise);
+
+    EXPECT_GT(coarse.root_mean_square_residual, 0.0);
+    EXPECT_LT(fine.root_mean_square_residual, coarse.root_mean_square_residual / 1.5);
+}
+
 TEST(PowellSabinProjectionTest, SplitPointsLieInsideTheEdgesTheySplit) {
     PowellSabinRefinement refinement(TriangleMesh::icosphere(2));
 

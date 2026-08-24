@@ -19,8 +19,11 @@ global fits, and the global path is the one that does not generalise.
 Take a requested accuracy and choose the representation to meet it,
 rather than taking a mesh level and a degree and reporting what
 accuracy came out. The mesh level already follows the site count by
-the bandwidth rule; what remains is a requested tolerance choosing the
-degree and the level together.
+the bandwidth rule, and the projection now reports its representation
+error for free -- the squared residual telescopes out of the normal
+equations -- so the check a tolerance would drive already exists. What
+remains is the loop: refine, or raise degree, until the reported
+residual is below what the capacity tolerance needs.
 
 *Verified by:* a requested tolerance being met without the caller
 naming a degree or a subdivision level.
