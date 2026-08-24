@@ -8,6 +8,7 @@
 #include "../../../fields/region_integrals.hpp"
 #include "../../../geometry/spherical/polygon/polygon.hpp"
 #include "../../capacity_jacobian.hpp"
+#include "../../lagrangian_evaluation.hpp"
 #include "../../edge_slots.hpp"
 #include "../../state.hpp"
 #include "../../../math/polynomial/moments.hpp"
@@ -23,16 +24,6 @@
 namespace globe::voronoi::spherical {
 
 using globe::math::polynomial::Moments;
-
-struct LagrangianEvaluation {
-    double value;
-    double cvt_energy;
-    std::vector<double> capacity_errors;
-    std::vector<Vector3> site_gradients;
-
-    [[nodiscard]] double root_mean_square_capacity_error() const;
-    [[nodiscard]] double max_absolute_capacity_error() const;
-};
 
 template<fields::spherical::Field FieldType = fields::spherical::PolynomialField>
 class CapacityConstrainedLagrangian {
@@ -82,26 +73,6 @@ class CapacityConstrainedLagrangian {
         const std::vector<double>& weights
     ) const;
 };
-
-inline double LagrangianEvaluation::root_mean_square_capacity_error() const {
-    double sum = 0.0;
-
-    for (double error : capacity_errors) {
-        sum += error * error;
-    }
-
-    return std::sqrt(sum / static_cast<double>(capacity_errors.size()));
-}
-
-inline double LagrangianEvaluation::max_absolute_capacity_error() const {
-    double maximum = 0.0;
-
-    for (double error : capacity_errors) {
-        maximum = std::max(maximum, std::abs(error));
-    }
-
-    return maximum;
-}
 
 template<fields::spherical::Field FieldType>
 CapacityConstrainedLagrangian<FieldType>::CapacityConstrainedLagrangian(FieldType field, double target_mass) :
