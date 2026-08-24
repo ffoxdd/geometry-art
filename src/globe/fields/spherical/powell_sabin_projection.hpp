@@ -76,6 +76,10 @@ class PowellSabinProjection {
         // against the sphere's area: the measured representation error, and
         // the number a requested accuracy would be checked against.
         double root_mean_square_residual;
+
+        // The same error against the target's own root mean square, so a
+        // tolerance can be named without knowing the field's scale.
+        double relative_residual;
     };
 
     // Each sub-triangle of the split is sampled on a grid this many rows
@@ -85,6 +89,14 @@ class PowellSabinProjection {
 
     template<scalar::Field ScalarFieldType>
     [[nodiscard]] Result project(const TriangleMesh& mesh, ScalarFieldType& scalar_field) const;
+
+    template<scalar::Field ScalarFieldType>
+    [[nodiscard]] Result project_to_tolerance(
+        int coarsest_subdivisions,
+        int finest_subdivisions,
+        double relative_tolerance,
+        ScalarFieldType& scalar_field
+    ) const;
 
  private:
     // The domain points of the six quadratics, deduplicated: the seven
@@ -120,6 +132,7 @@ class PowellSabinProjection {
     struct Projection {
         Eigen::VectorXd solution;
         double root_mean_square_residual;
+        double relative_residual;
     };
 
     template<scalar::Field ScalarFieldType>
@@ -263,8 +276,34 @@ PowellSabinProjection::Result PowellSabinProjection::project(
         PiecewisePolynomialField(refinement.mesh(), std::move(polynomials)),
         lowest,
         *std::min_element(damping.begin(), damping.end()),
-        projection.root_mean_square_residual
+        projection.root_mean_square_residual,
+        projection.relative_residual
     };
+}
+
+// Accuracy as the input: the mesh is refined from the coarsest level until
+// the reported representation error meets the requested tolerance, so the
+// caller names an accuracy rather than a level. The degree is fixed by the
+// construction -- the Powell-Sabin split is the coarsest split carrying a
+// C1 quadratic -- so refinement is the only knob.
+template<scalar::Field ScalarFieldType>
+PowellSabinProjection::Result PowellSabinProjection::project_to_tolerance(
+    int coarsest_subdivisions,
+    int finest_subdivisions,
+    double relative_tolerance,
+    ScalarFieldType& scalar_field
+) const {
+    CGAL_precondition(coarsest_subdivisions >= 0);
+    CGAL_precondition(coarsest_subdivisions <= finest_subdivisions);
+    CGAL_precondition(relative_tolerance > 0.0);
+
+    for (int subdivisions = coarsest_subdivisions; ; ++subdivisions) {
+        Result result = project(TriangleMesh::icosphere(subdivisions), scalar_field);
+
+        if (result.relative_residual <= relative_tolerance || subdivisions == finest_subdivisions) {
+            return result;
+        }
+    }
 }
 
 // The normal equations of a least-squares fit over samples spread across
@@ -359,8 +398,13 @@ typename PowellSabinProjection::Projection PowellSabinProjection::solve_projecti
     // carry minus what the solution reproduces, so the representation error
     // costs nothing extra to know.
     double squared_residual = std::max(0.0, squared_target - solution.dot(right_hand_side));
+    double relative_residual = squared_target > 0.0 ? std::sqrt(squared_residual / squared_target) : 0.0;
 
-    return Projection{std::move(solution), std::sqrt(squared_residual / total_weight)};
+    return Projection{
+        std::move(solution),
+        std::sqrt(squared_residual / total_weight),
+        relative_residual
+    };
 }
 
 // One small dense solve per cell, mapping the corner vectors to the

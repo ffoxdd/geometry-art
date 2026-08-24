@@ -127,6 +127,19 @@ TEST(PowellSabinProjectionTest, ReportsAVanishingResidualForAnInSpaceTarget) {
     auto result = projection.project(TriangleMesh::icosphere(1), quadratic);
 
     EXPECT_LT(result.root_mean_square_residual, 1e-7);
+    EXPECT_LT(result.relative_residual, 1e-7);
+}
+
+// Accuracy as the input: the caller names a tolerance and the projection
+// chooses the mesh. A target already in the space is met at the coarsest
+// level, so no refinement is spent on it.
+TEST(PowellSabinProjectionTest, ProjectToToleranceStopsAtTheCoarsestSufficientMesh) {
+    QuadraticScalarField quadratic{tilted_quadratic()};
+    PowellSabinProjection projection;
+    auto result = projection.project_to_tolerance(1, 3, 1e-3, quadratic);
+
+    EXPECT_EQ(result.field.mesh().triangles.size(), TriangleMesh::icosphere(1).triangles.size() * 6);
+    EXPECT_LE(result.relative_residual, 1e-3);
 }
 
 TEST(PowellSabinProjectionTest, EXPENSIVE_ResidualFallsWithRefinement) {
@@ -141,6 +154,23 @@ TEST(PowellSabinProjectionTest, EXPENSIVE_ResidualFallsWithRefinement) {
 
     EXPECT_GT(coarse.root_mean_square_residual, 0.0);
     EXPECT_LT(fine.root_mean_square_residual, coarse.root_mean_square_residual / 1.5);
+}
+
+// The loop refines past the coarsest level exactly when that level cannot
+// meet the tolerance, and stops as soon as one can.
+TEST(PowellSabinProjectionTest, EXPENSIVE_ProjectToToleranceRefinesUntilTheToleranceIsMet) {
+    REQUIRE_EXPENSIVE();
+
+    NoiseField coarse_noise(Interval(0.2, 1.0));
+    NoiseField refined_noise(Interval(0.2, 1.0));
+    PowellSabinProjection projection;
+
+    auto coarse = projection.project(TriangleMesh::icosphere(1), coarse_noise);
+    double tolerance = 0.5 * coarse.relative_residual;
+    auto refined = projection.project_to_tolerance(1, 4, tolerance, refined_noise);
+
+    EXPECT_LE(refined.relative_residual, tolerance);
+    EXPECT_GT(refined.field.mesh().triangles.size(), coarse.field.mesh().triangles.size());
 }
 
 TEST(PowellSabinProjectionTest, SplitPointsLieInsideTheEdgesTheySplit) {

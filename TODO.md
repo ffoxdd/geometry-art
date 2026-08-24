@@ -15,20 +15,7 @@ records what already does. That consideration retired the
 spherical-harmonic basis: it addressed conditioning in high-degree
 global fits, and the global path is the one that does not generalise.
 
-### 1. Accuracy as the input
-Take a requested accuracy and choose the representation to meet it,
-rather than taking a mesh level and a degree and reporting what
-accuracy came out. The mesh level already follows the site count by
-the bandwidth rule, and the projection now reports its representation
-error for free -- the squared residual telescopes out of the normal
-equations -- so the check a tolerance would drive already exists. What
-remains is the loop: refine, or raise degree, until the reported
-residual is below what the capacity tolerance needs.
-
-*Verified by:* a requested tolerance being met without the caller
-naming a degree or a subdivision level.
-
-### 2. The flat family
+### 1. The flat family
 Plane, cylinder and torus are one implementation: all three are
 intrinsically flat, differing only in which directions wrap. The
 cheapest second instance, and the one that would let a `Geometry`

@@ -45,6 +45,7 @@ struct Config {
     std::string snapshot_path;
     double snapshot_interval = 0.0;
     std::string image_path;
+    double density_tolerance = 0.0;
 };
 
 Config parse_arguments(int argc, char *argv[]);
@@ -120,7 +121,8 @@ int main(int argc, char *argv[]) {
         callback,
         [&](const globe::io::snapshot::Snapshot& snapshot) { write_snapshot(snapshot, config.snapshot_path); },
         std::chrono::milliseconds(static_cast<long long>(config.snapshot_interval * 1000.0)),
-        config.image_path
+        config.image_path,
+        config.density_tolerance
     );
 
     auto sphere = factory.build();
@@ -241,6 +243,11 @@ Config parse_arguments(int argc, char *argv[]) {
     app.add_option("--image", config.image_path)
         ->description("Equirectangular image whose darkness is the density, for -f image")
         ->check(CLI::ExistingFile);
+
+    app.add_option("--density-tolerance", config.density_tolerance)
+        ->description("Refine the density's spline until its relative representation error is below this (0 keeps the cell-scale mesh)")
+        ->default_val(0.0)
+        ->check(CLI::NonNegativeNumber);
 
     app.add_option("--seed", config.seed)
         ->description("Seed for the initial random points; omit for a random seed");

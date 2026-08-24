@@ -8,6 +8,7 @@
 #include "../optimizers/capacity_constrained_optimizer.hpp"
 #include "../optimizers/lloyd_optimizer.hpp"
 #include "../optimizers/newton_optimizer/newton_optimizer.hpp"
+#include "../../../fields/scalar/field.hpp"
 #include "../../../fields/scalar/image_field.hpp"
 #include "../../../fields/scalar/noise_field.hpp"
 #include "../../../math/interval.hpp"
@@ -60,7 +61,8 @@ class Factory {
         Callback callback,
         SnapshotCallback snapshot_callback,
         std::chrono::milliseconds snapshot_interval,
-        std::string image_path = ""
+        std::string image_path = "",
+        double density_tolerance = 0.0
     );
 
     std::unique_ptr<Sphere> build();
@@ -95,6 +97,7 @@ class Factory {
     SnapshotCallback _snapshot_callback;
     std::chrono::milliseconds _snapshot_interval;
     std::string _image_path;
+    double _density_tolerance;
     io::snapshot::Snapshot _snapshot;
 
     template<fields::spherical::Field FieldType>
@@ -123,6 +126,12 @@ class Factory {
     [[nodiscard]] PiecewisePolynomialField sample_smooth_noise_field() const;
     [[nodiscard]] PiecewisePolynomialField sample_image_field() const;
     [[nodiscard]] PiecewisePolynomialField sample_quadratic_field() const;
+
+    template<fields::scalar::Field ScalarFieldType>
+    [[nodiscard]] PiecewisePolynomialField project_density(
+        ScalarFieldType& scalar_field,
+        const std::string& description
+    ) const;
     [[nodiscard]] static PolynomialField fit_noise_field();
 };
 
@@ -137,7 +146,8 @@ inline Factory::Factory(
     Callback callback,
     SnapshotCallback snapshot_callback,
     std::chrono::milliseconds snapshot_interval,
-    std::string image_path
+    std::string image_path,
+    double density_tolerance
 ) :
     _points_count(points_count),
     _density_field(std::move(density_field)),
@@ -149,7 +159,8 @@ inline Factory::Factory(
     _callback(std::move(callback)),
     _snapshot_callback(std::move(snapshot_callback)),
     _snapshot_interval(snapshot_interval),
-    _image_path(std::move(image_path)) {
+    _image_path(std::move(image_path)),
+    _density_tolerance(density_tolerance) {
 }
 
 inline std::unique_ptr<Sphere> Factory::build() {
@@ -244,34 +255,43 @@ inline PiecewisePolynomialField Factory::sample_noise_field() {
 // coefficients rather than sampled for.
 inline PiecewisePolynomialField Factory::sample_smooth_noise_field() const {
     NoiseField noise_field(Interval(NOISE_DENSITY_FLOOR, 1.0));
-    PowellSabinProjection projection;
-    int subdivisions = spline_subdivisions(_points_count);
-    auto result = projection.project(TriangleMesh::icosphere(subdivisions), noise_field);
-
-    std::cout << "Projected noise onto a C1 quadratic spline with " <<
-        result.field.mesh().triangles.size() << " pieces, density at least " <<
-        result.lowest_coefficient << ", residual RMS " <<
-        result.root_mean_square_residual << std::endl;
-
-    if (result.least_damping < 1.0) {
-        std::cout << "  the projection dipped below zero; gradients damped to " <<
-            result.least_damping << " to keep the density positive" << std::endl;
-    }
-
-    return std::move(result.field);
+    return project_density(noise_field, "noise");
 }
 
 inline PiecewisePolynomialField Factory::sample_image_field() const {
     ImageField image_field = ImageField::load(_image_path, Interval(NOISE_DENSITY_FLOOR, 1.0));
-    PowellSabinProjection projection;
-    int subdivisions = spline_subdivisions(_points_count);
-    auto result = projection.project(TriangleMesh::icosphere(subdivisions), image_field);
 
-    std::cout << "Projected " << image_field.width() << "x" << image_field.height() <<
-        " image onto a C1 quadratic spline with " <<
+    return project_density(
+        image_field,
+        std::to_string(image_field.width()) + "x" + std::to_string(image_field.height()) + " image"
+    );
+}
+
+// The mesh starts at the cell scale by the bandwidth rule and, when a
+// tolerance is requested, refines until the projection's reported error
+// meets it: accuracy is the input, and no one names a level.
+template<fields::scalar::Field ScalarFieldType>
+PiecewisePolynomialField Factory::project_density(
+    ScalarFieldType& scalar_field,
+    const std::string& description
+) const {
+    PowellSabinProjection projection;
+    int coarsest = spline_subdivisions(_points_count);
+
+    PowellSabinProjection::Result result = _density_tolerance > 0.0
+        ? projection.project_to_tolerance(coarsest, SPLINE_MAXIMUM_SUBDIVISIONS, _density_tolerance, scalar_field)
+        : projection.project(TriangleMesh::icosphere(coarsest), scalar_field);
+
+    std::cout << "Projected " << description << " onto a C1 quadratic spline with " <<
         result.field.mesh().triangles.size() << " pieces, density at least " <<
         result.lowest_coefficient << ", residual RMS " <<
-        result.root_mean_square_residual << std::endl;
+        result.root_mean_square_residual << " (" <<
+        result.relative_residual << " relative)" << std::endl;
+
+    if (_density_tolerance > 0.0 && result.relative_residual > _density_tolerance) {
+        std::cout << "  WARNING: the requested density tolerance " << _density_tolerance <<
+            " was not met at the finest mesh" << std::endl;
+    }
 
     if (result.least_damping < 1.0) {
         std::cout << "  the projection dipped below zero; gradients damped to " <<

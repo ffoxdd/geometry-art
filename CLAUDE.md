@@ -143,6 +143,7 @@ The `generate_globe` executable supports command-line flags for terminal/AI-assi
 - `--lloyd-passes <N>`: Density-weighted Lloyd warm-start passes (default: 5)
 - `--max-outer-iterations <N>` / `--max-inner-iterations <N>`: Augmented Lagrangian budget
 - `--capacity-tolerance <x>`: Relative RMS capacity error at which optimization stops (default: 1e-7)
+- `--density-tolerance <x>`: Refine the density's spline until its relative representation error is below this (0 keeps the cell-scale mesh)
 - `--snapshot <path>`: Write the tessellation as `<path>.json` and `<path>.svg`; `--snapshot-interval <s>` also rewrites it every `s` seconds while running
 - `--help`: Show usage information
 
