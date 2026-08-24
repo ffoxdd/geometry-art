@@ -27,9 +27,10 @@ manifold that will expose wherever the spherical one is silently
 load-bearing, and `Field::integrals` taking the region by concept
 rather than by the spherical type. `geometry/planar` already has the
 region types with divergence-theorem moments, so the polynomial layer
-is shared. Walls follow, bringing the bounded domain and the wall
-terms in the exact Hessian, and unlocking the cylinder and the plane.
-Edge treatments -- cut, conformed, fade -- are configuration on top;
-the design is in `docs/geometry_portability.md`.
+is shared. Cylinder and plane pieces are crops of the torus, their
+edge looks made in the density and the renderer, so walls -- the
+bounded domain and its terms in the exact Hessian -- are deferred
+until a piece demands the one look a crop cannot imitate; the design
+is in `docs/geometry_portability.md`.
 
 *Verified by:* the optimizer stack driving the torus unchanged.

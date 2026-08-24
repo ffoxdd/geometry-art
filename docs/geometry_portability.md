@@ -115,18 +115,25 @@ treatments decouple from the domain:
   side. This imitates the conformed edge, except the sealed cells
   hold less than a full capacity; only the true conformed edge needs
   the optimizer to know the wall.
-- **Fade.** The density ramps down toward the edge, inside a wall,
-  so cells swell and the pattern dissolves as it approaches the
-  border. The ramp bottoms out at a positive floor, never zero: the
-  capacity constraint needs every cell to hold mass, and the
-  positivity certification is precisely a proof the density has a
-  floor. The ramp must also be at least a cell wide, or the
-  bandwidth rule says the tessellation cannot read it.
+- **Fade.** The density dips toward the line where the frame will
+  cut, cells swell in the band, and the cut runs through the sparse
+  zone. On the torus this is pure density design -- the domain is
+  compact, so no wall is needed to keep masses finite -- and it
+  wastes almost nothing, since the cells in the band are as few as
+  the fade makes them. The dip bottoms out at a positive floor,
+  never zero: the capacity constraint needs every cell to hold
+  mass, and the positivity certification is precisely a proof the
+  density has a floor. The band must also be at least a cell wide,
+  or the bandwidth rule says the tessellation cannot read it.
 
 The renderer owns each frame edge independently, so the treatments
 mix per edge -- a cylinder cut at the top and scalloped at the
-bottom -- and every look except conformed and fade comes from the
-torus at render time.
+bottom. Every look except the true conformed edge comes from the
+torus, in the density or the renderer: the optimizer never sees a
+boundary, the density sees the frame only as a mask, and the frame
+itself is a crop. Walls are therefore deferred, not sequenced --
+built if and when a piece demands conformed edges that closed cuts
+cannot imitate.
 
 One caution for margins: a straight wall nucleates rows of cells
 aligned parallel to it, the way crystallization starts at the flat
