@@ -141,7 +141,16 @@
   <div id="studio">
     <h2>Run</h2>
     <div class="grid">
+      <label>geometry
+        <select id="geometry">
+          <option value="sphere">sphere</option>
+          <option value="cylinder">cylinder</option>
+          <option value="torus">torus</option>
+        </select>
+      </label>
       <label>points <input id="points" type="number" min="2" max="20000" value="200"></label>
+      <label>width <input id="width" type="number" min="0.1" max="100" step="0.1" value="2"></label>
+      <label>height <input id="height" type="number" min="0.1" max="100" step="0.1" value="1"></label>
       <label>field
         <select id="density_field">
           <option value="noise-smooth">noise (C1 spline)</option>
@@ -223,12 +232,42 @@ scene.add(key);
 scene.add(new THREE.AmbientLight(0xffffff, 0.25));
 
 // The shell sits just inside the cell network so the far side reads as
-// occluded rather than as a second layer of lines.
-const shell = new THREE.Mesh(
-  new THREE.SphereGeometry(0.985, 128, 128),
-  new THREE.MeshStandardMaterial({ color: 0x14151a, roughness: 0.85, metalness: 0.0 })
-);
+// occluded rather than as a second layer of lines; it takes the shape of
+// whatever surface the snapshot lives on.
+const shellMaterial = new THREE.MeshStandardMaterial({ color: 0x14151a, roughness: 0.85, metalness: 0.0 });
+let shell = new THREE.Mesh(new THREE.SphereGeometry(0.985, 128, 128), shellMaterial);
+let shellShape = 'sphere';
 scene.add(shell);
+
+function reshapeShell() {
+  const wanted = snapshot && snapshot.geometry ? snapshot.geometry : 'sphere';
+
+  if (wanted === shellShape) return;
+
+  scene.remove(shell);
+  shell.geometry.dispose();
+
+  if (wanted === 'cylinder') {
+    const scale = flatScale();
+    const radius = snapshot.width / (2 * Math.PI);
+    shell = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.985 * radius * scale, 0.985 * radius * scale, snapshot.height * scale, 128, 1, false),
+      shellMaterial
+    );
+  } else if (wanted === 'torus') {
+    const scale = flatScale();
+    const radius = snapshot.width / (2 * Math.PI);
+    const tube = Math.min(snapshot.height / (2 * Math.PI), 0.75 * radius);
+    const doughnut = new THREE.TorusGeometry(radius * scale, 0.985 * tube * scale, 96, 192);
+    doughnut.rotateX(Math.PI / 2);
+    shell = new THREE.Mesh(doughnut, shellMaterial);
+  } else {
+    shell = new THREE.Mesh(new THREE.SphereGeometry(0.985, 128, 128), shellMaterial);
+  }
+
+  shellShape = wanted;
+  scene.add(shell);
+}
 
 const group = new THREE.Group();
 scene.add(group);
@@ -275,6 +314,114 @@ function greatCircle(from, to, steps) {
   return points;
 }
 
+// The flat snapshots carry cells in their own charts over a rectangle of
+// periods; the viewer rolls the rectangle into space. The cylinder's rims
+// cut straight across the cells -- partial cells are part of the look --
+// while the seam stays periodic, so a protruding piece reappears from the
+// other rim; the torus needs no cutting at all.
+function flatGeometry() {
+  return snapshot && snapshot.geometry && snapshot.geometry !== 'sphere';
+}
+
+function flatScale() {
+  const radius = snapshot.width / (2 * Math.PI);
+
+  if (snapshot.geometry === 'cylinder') {
+    return 0.98 / Math.hypot(radius, snapshot.height / 2);
+  }
+
+  const tube = Math.min(snapshot.height / (2 * Math.PI), 0.75 * radius);
+  return 0.98 / (radius + tube);
+}
+
+function embed(x, y) {
+  const scale = flatScale();
+  const radius = snapshot.width / (2 * Math.PI);
+  const around = 2 * Math.PI * x / snapshot.width;
+
+  if (snapshot.geometry === 'cylinder') {
+    return new THREE.Vector3(
+      radius * Math.cos(around) * scale,
+      (y - snapshot.height / 2) * scale,
+      radius * Math.sin(around) * scale
+    );
+  }
+
+  const tube = Math.min(snapshot.height / (2 * Math.PI), 0.75 * radius);
+  const along = 2 * Math.PI * y / snapshot.height;
+  const ring = radius + tube * Math.cos(along);
+
+  return new THREE.Vector3(
+    ring * Math.cos(around) * scale,
+    tube * Math.sin(along) * scale,
+    ring * Math.sin(around) * scale
+  );
+}
+
+// The chart-space pieces of one edge that survive the frame: the whole
+// edge on the torus; on the cylinder, each period image clipped to the
+// band between the rims.
+function flatPieces(from, to) {
+  if (snapshot.geometry !== 'cylinder') {
+    return [[from, to]];
+  }
+
+  const pieces = [];
+
+  for (const tile of [-1, 0, 1]) {
+    const a = [from[0], from[1] + tile * snapshot.height];
+    const b = [to[0], to[1] + tile * snapshot.height];
+    let low = 0;
+    let high = 1;
+    const span = b[1] - a[1];
+
+    for (const bound of [0, snapshot.height]) {
+      const fromInside = bound === 0 ? a[1] >= 0 : a[1] <= bound;
+      const toInside = bound === 0 ? b[1] >= 0 : b[1] <= bound;
+      if (fromInside && toInside) continue;
+      if (!fromInside && !toInside) { low = 1; high = 0; break; }
+      const crossing = (bound - a[1]) / span;
+      if (fromInside) high = Math.min(high, crossing); else low = Math.max(low, crossing);
+    }
+
+    if (low < high) {
+      pieces.push([
+        [a[0] + low * (b[0] - a[0]), a[1] + low * span],
+        [a[0] + high * (b[0] - a[0]), a[1] + high * span],
+      ]);
+    }
+  }
+
+  return pieces;
+}
+
+function edgePaths(from, to, steps) {
+  if (!flatGeometry()) {
+    return [greatCircle(from, to, steps)];
+  }
+
+  return flatPieces(from, to).map(([a, b]) => {
+    const points = [];
+
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      points.push(embed(a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])));
+    }
+
+    return points;
+  });
+}
+
+function jointPosition(point) {
+  if (!flatGeometry()) {
+    return point;
+  }
+
+  const wrapped = ((point[1] % snapshot.height) + snapshot.height) % snapshot.height;
+  const position = embed(point[0], wrapped);
+  return [position.x, position.y, position.z];
+}
+
 // The whole view is addressable, so a particular reading of a particular
 // run can be linked rather than described.
 const query = new URLSearchParams(location.search);
@@ -283,8 +430,9 @@ const query = new URLSearchParams(location.search);
 // which runs generate_globe on request. A run's snapshot is rewritten while
 // it is in flight, so polling its version is enough to watch it evolve.
 const studio = {
-  fields: ['points', 'density_field', 'seed', 'capacity_tolerance', 'warm_start', 'lloyd_passes',
-           'inner_solver', 'max_outer_iterations', 'max_inner_iterations', 'newton_iterations'],
+  fields: ['geometry', 'width', 'height', 'points', 'density_field', 'seed', 'capacity_tolerance',
+           'warm_start', 'lloyd_passes', 'inner_solver', 'max_outer_iterations', 'max_inner_iterations',
+           'newton_iterations'],
   selected: query.get('run'),
   version: null,
   runs: [],
@@ -311,6 +459,8 @@ function build() {
   dispose();
 
   if (!snapshot) return;
+
+  reshapeShell();
 
   const cells = snapshot.cells;
   const target = snapshot.targetMass;
@@ -363,12 +513,13 @@ function buildLines(edges, shade) {
   const colours = [];
 
   for (const [from, to, cell] of edges) {
-    const points = greatCircle(from, to, 4);
     const colour = shade(cell);
 
-    for (let i = 0; i < points.length - 1; i++) {
-      positions.push(points[i].x, points[i].y, points[i].z, points[i + 1].x, points[i + 1].y, points[i + 1].z);
-      colours.push(colour.r, colour.g, colour.b, colour.r, colour.g, colour.b);
+    for (const points of edgePaths(from, to, 4)) {
+      for (let i = 0; i < points.length - 1; i++) {
+        positions.push(points[i].x, points[i].y, points[i].z, points[i + 1].x, points[i + 1].y, points[i + 1].z);
+        colours.push(colour.r, colour.g, colour.b, colour.r, colour.g, colour.b);
+      }
     }
   }
 
@@ -390,22 +541,25 @@ function buildTubes(edges, cells, shade, mode, radius) {
   const tubes = [];
 
   for (const [from, to, cell] of edges) {
-    const curve = new THREE.CatmullRomCurve3(greatCircle(from, to, 6));
-    const tube = new THREE.TubeGeometry(curve, 6, radius, radial, false);
-    tube.deleteAttribute('uv');
-
     const colour = shade(cell);
-    const count = tube.attributes.position.count;
-    const colours = new Float32Array(count * 3);
 
-    for (let i = 0; i < count; i++) {
-      colours[i * 3] = colour.r;
-      colours[i * 3 + 1] = colour.g;
-      colours[i * 3 + 2] = colour.b;
+    for (const points of edgePaths(from, to, 6)) {
+      const curve = new THREE.CatmullRomCurve3(points);
+      const tube = new THREE.TubeGeometry(curve, 6, radius, radial, false);
+      tube.deleteAttribute('uv');
+
+      const count = tube.attributes.position.count;
+      const colours = new Float32Array(count * 3);
+
+      for (let i = 0; i < count; i++) {
+        colours[i * 3] = colour.r;
+        colours[i * 3 + 1] = colour.g;
+        colours[i * 3 + 2] = colour.b;
+      }
+
+      tube.setAttribute('color', new THREE.BufferAttribute(colours, 3));
+      tubes.push(tube);
     }
-
-    tube.setAttribute('color', new THREE.BufferAttribute(colours, 3));
-    tubes.push(tube);
   }
 
   const merged = mergeGeometries(tubes);
@@ -419,7 +573,7 @@ function buildTubes(edges, cells, shade, mode, radius) {
 
   for (const cell of cells) {
     for (const point of cell.boundary) {
-      matrix.setPosition(...point);
+      matrix.setPosition(...jointPosition(point));
       joints.setMatrixAt(index++, matrix);
     }
   }
@@ -453,6 +607,32 @@ function load(text) {
 for (const id of ['colouring', 'weight']) {
   document.getElementById(id).addEventListener('input', requestBuild);
 }
+
+// The flat family holds constant and noise densities and descends with the
+// newton inner solver; the form narrows as the geometry changes.
+const FLAT_FIELDS = new Set(['noise', 'constant']);
+
+function applyGeometryChoices() {
+  const flatRun = document.getElementById('geometry').value !== 'sphere';
+  const field = document.getElementById('density_field');
+
+  for (const option of field.options) {
+    option.disabled = flatRun && !FLAT_FIELDS.has(option.value);
+  }
+
+  if (flatRun && !FLAT_FIELDS.has(field.value)) field.value = 'noise';
+
+  const solver = document.getElementById('inner_solver');
+  solver.disabled = flatRun;
+  if (flatRun) solver.value = 'newton';
+
+  for (const id of ['width', 'height']) {
+    document.getElementById(id).disabled = !flatRun;
+  }
+}
+
+document.getElementById('geometry').addEventListener('input', applyGeometryChoices);
+applyGeometryChoices();
 
 const drop = document.getElementById('drop');
 drop.addEventListener('click', () => {
@@ -499,7 +679,8 @@ function parameters() {
 
 function describe(run) {
   const p = run.parameters;
-  return `${p.points} · ${p.density_field} · ${p.inner_solver}` + (p.seed != null ? ` · seed ${p.seed}` : '');
+  const where = p.geometry && p.geometry !== 'sphere' ? `${p.geometry} · ` : '';
+  return where + `${p.points} · ${p.density_field} · ${p.inner_solver}` + (p.seed != null ? ` · seed ${p.seed}` : '');
 }
 
 function elapsed(run) {

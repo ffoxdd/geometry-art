@@ -28,6 +28,9 @@ REPOSITORY = Path(__file__).resolve().parent.parent
 VIEWER = Path(__file__).resolve().parent
 
 PARAMETERS = {
+    "geometry": {"flag": "--geometry", "type": str, "choices": ["sphere", "torus", "cylinder"], "default": "sphere"},
+    "width": {"flag": "--width", "type": float, "low": 0.1, "high": 100.0, "default": 2.0},
+    "height": {"flag": "--height", "type": float, "low": 0.1, "high": 100.0, "default": 1.0},
     "points": {"flag": "--points", "type": int, "low": 2, "high": 20000, "default": 200},
     "density_field": {"flag": "--density-field", "type": str, "choices": ["constant", "linear", "quadratic", "quadratic-piecewise", "noise", "noise-smooth", "noise-fit"], "default": "noise"},
     "seed": {"flag": "--seed", "type": int, "low": 0, "high": 2**31 - 1, "default": None},
@@ -35,7 +38,7 @@ PARAMETERS = {
     "lloyd_passes": {"flag": "--lloyd-passes", "type": int, "low": 0, "high": 1000, "default": 5},
     "newton_iterations": {"flag": "--newton-iterations", "type": int, "low": 0, "high": 10000, "default": 50},
     "inner_solver": {"flag": "--inner-solver", "type": str, "choices": ["lbfgs", "newton"], "default": "lbfgs"},
-    "newton_curvature": {"flag": "--newton-curvature", "type": str, "choices": ["gauss-newton", "finite-difference"], "default": "gauss-newton"},
+    "newton_curvature": {"flag": "--newton-curvature", "type": str, "choices": ["exact", "gauss-newton", "finite-difference"], "default": "exact"},
     "capacity_tolerance": {"flag": "--capacity-tolerance", "type": float, "low": 1e-12, "high": 1.0, "default": 1e-7},
     "max_outer_iterations": {"flag": "--max-outer-iterations", "type": int, "low": 1, "high": 1000, "default": 30},
     "max_inner_iterations": {"flag": "--max-inner-iterations", "type": int, "low": 1, "high": 100000, "default": 200},
@@ -227,6 +230,11 @@ def validate(requested):
             raise ValueError(f"{name} must be between {rule['low']} and {rule['high']}")
 
         parameters[name] = value
+
+    flat = parameters.get("geometry") in ("torus", "cylinder")
+
+    if flat and parameters.get("density_field") not in ("constant", "noise"):
+        raise ValueError("the flat family holds constant and noise densities")
 
     return parameters
 

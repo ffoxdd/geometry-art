@@ -1,5 +1,7 @@
 {
   "geometry": "sphere",
+  "width": 0,
+  "height": 0,
   "totalMass": 12.5663706,
   "targetMass": 6.28318531,
   "relativeRmsCapacityError": 0,

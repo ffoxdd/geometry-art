@@ -40,6 +40,8 @@ inline std::string JsonWriter::to_string(const Snapshot& snapshot) const {
 inline void JsonWriter::write(const Snapshot& snapshot, std::ostream& stream) const {
     stream << "{\n";
     stream << "  \"geometry\": \"" << snapshot.geometry << "\",\n";
+    stream << "  \"width\": " << number(snapshot.width) << ",\n";
+    stream << "  \"height\": " << number(snapshot.height) << ",\n";
     stream << "  \"totalMass\": " << number(snapshot.total_mass) << ",\n";
     stream << "  \"targetMass\": " << number(snapshot.target_mass()) << ",\n";
     stream << "  \"relativeRmsCapacityError\": " << number(snapshot.relative_rms_capacity_error()) << ",\n";
