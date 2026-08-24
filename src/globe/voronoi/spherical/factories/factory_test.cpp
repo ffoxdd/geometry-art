@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 using namespace globe;
+using namespace globe::voronoi;
 using namespace globe::voronoi::spherical;
 
 namespace {

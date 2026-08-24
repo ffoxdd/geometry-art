@@ -3,7 +3,7 @@
 
 #include "field.hpp"
 #include "polynomial_field.hpp"
-#include "region_integrals.hpp"
+#include "../region_integrals.hpp"
 #include "../scalar/field.hpp"
 #include "../../types.hpp"
 #include "../../cgal/types.hpp"

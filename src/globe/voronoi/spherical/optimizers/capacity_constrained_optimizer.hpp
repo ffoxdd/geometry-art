@@ -110,7 +110,7 @@ class CapacityConstrainedOptimizer {
 
     [[nodiscard]] CurvatureOperator curvature_operator(
         const std::vector<Vector3>& points,
-        const SphereState& state,
+        const DiagramState& state,
         const LagrangianEvaluation& evaluation,
         const std::vector<Vector3>& gradient
     ) const;
@@ -221,7 +221,7 @@ size_t CapacityConstrainedOptimizer<FieldType>::minimize_lagrangian_by_newton() 
     );
 
     std::vector<Vector3> current = site_points();
-    SphereState state = _lagrangian.sphere_state(*_sphere);
+    DiagramState state = _lagrangian.sphere_state(*_sphere);
     LagrangianEvaluation evaluation = _lagrangian.evaluate(*_sphere, state, _multipliers, _penalty);
     double radius = _parameters.newton.initial_trust_radius;
     size_t iterations = 0;
@@ -250,7 +250,7 @@ size_t CapacityConstrainedOptimizer<FieldType>::minimize_lagrangian_by_newton() 
 
         std::vector<Vector3> trial = stepped(current, step.step);
         apply_points(trial);
-        SphereState trial_state = _lagrangian.sphere_state(*_sphere);
+        DiagramState trial_state = _lagrangian.sphere_state(*_sphere);
         LagrangianEvaluation trial_evaluation = _lagrangian.evaluate(*_sphere, trial_state, _multipliers, _penalty);
         double ratio = (evaluation.value - trial_evaluation.value) / step.predicted_decrease;
 
@@ -282,7 +282,7 @@ size_t CapacityConstrainedOptimizer<FieldType>::minimize_lagrangian_by_newton() 
 template<fields::spherical::Field FieldType>
 typename CapacityConstrainedOptimizer<FieldType>::CurvatureOperator CapacityConstrainedOptimizer<FieldType>::curvature_operator(
     const std::vector<Vector3>& points,
-    const SphereState& state,
+    const DiagramState& state,
     const LagrangianEvaluation& evaluation,
     const std::vector<Vector3>& gradient
 ) const {
@@ -305,7 +305,7 @@ typename CapacityConstrainedOptimizer<FieldType>::CurvatureOperator CapacityCons
     }
 
     CapacityConstrainedHessian hessian(
-        blocks.through_normalization(points, evaluation.site_gradients),
+        blocks.template through_manifold<Normalization>(points, evaluation.site_gradients),
         CapacityJacobian(state, points),
         points,
         _penalty
@@ -322,7 +322,7 @@ std::vector<Vector3> CapacityConstrainedOptimizer<FieldType>::tangential_gradien
         sphere.insert(cgal::to_point(VectorS2(point)));
     }
 
-    SphereState state = _lagrangian.sphere_state(sphere);
+    DiagramState state = _lagrangian.sphere_state(sphere);
     LagrangianEvaluation evaluation = _lagrangian.evaluate(sphere, state, _multipliers, _penalty);
 
     return tangential_gradient(evaluation.site_gradients, points);

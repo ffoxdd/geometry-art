@@ -3,6 +3,7 @@
 #include "../../../testing/mocks/point_generator.hpp"
 
 using namespace globe;
+using namespace globe::voronoi;
 using namespace globe::voronoi::spherical;
 using globe::testing::mocks::MockPointGenerator;
 

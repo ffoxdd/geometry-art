@@ -1,14 +1,14 @@
-#ifndef GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_NEWTON_OPTIMIZER_TRUST_REGION_STEP_HPP_
-#define GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_NEWTON_OPTIMIZER_TRUST_REGION_STEP_HPP_
+#ifndef GLOBEART_SRC_GLOBE_VORONOI_TRUST_REGION_STEP_HPP_
+#define GLOBEART_SRC_GLOBE_VORONOI_TRUST_REGION_STEP_HPP_
 
-#include "../../../../types.hpp"
+#include "../types.hpp"
 #include <algorithm>
 #include <cmath>
 #include <concepts>
 #include <cstddef>
 #include <vector>
 
-namespace globe::voronoi::spherical {
+namespace globe::voronoi {
 
 template<typename T>
 concept LinearOperator = requires(const T& operator_, const std::vector<Vector3>& directions) {
@@ -170,6 +170,6 @@ inline double TrustRegionStep::boundary_scale(
     return (-cross + std::sqrt(discriminant)) / direction_square;
 }
 
-} // namespace globe::voronoi::spherical
+} // namespace globe::voronoi
 
-#endif //GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_NEWTON_OPTIMIZER_TRUST_REGION_STEP_HPP_
+#endif //GLOBEART_SRC_GLOBE_VORONOI_TRUST_REGION_STEP_HPP_

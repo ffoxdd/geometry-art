@@ -1,7 +1,7 @@
 #ifndef GLOBEART_SRC_GLOBE_FIELDS_SPHERICAL_FIELD_HPP_
 #define GLOBEART_SRC_GLOBE_FIELDS_SPHERICAL_FIELD_HPP_
 
-#include "region_integrals.hpp"
+#include "../region_integrals.hpp"
 #include "../../types.hpp"
 #include "../../geometry/spherical/arc.hpp"
 #include "../../geometry/spherical/polygon/polygon.hpp"

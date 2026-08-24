@@ -5,6 +5,7 @@
 #include "../../../testing/assertions/geometric.hpp"
 
 using namespace globe;
+using namespace globe::voronoi;
 using namespace globe::voronoi::spherical;
 using globe::testing::points_approximately_equal;
 

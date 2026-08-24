@@ -1,7 +1,7 @@
 #include "capacity_jacobian.hpp"
-#include "capacity_constrained_lagrangian.hpp"
-#include "../../../fields/spherical/polynomial_field.hpp"
-#include "../../../testing/macros.hpp"
+#include "spherical/optimizers/capacity_constrained_lagrangian.hpp"
+#include "../fields/spherical/polynomial_field.hpp"
+#include "../testing/macros.hpp"
 #include <Eigen/Geometry>
 #include <gtest/gtest.h>
 #include <cmath>
@@ -9,6 +9,7 @@
 #include <vector>
 
 using namespace globe;
+using namespace globe::voronoi;
 using namespace globe::voronoi::spherical;
 using fields::spherical::PolynomialField;
 

@@ -1,14 +1,14 @@
-#ifndef GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_CAPACITY_JACOBIAN_HPP_
-#define GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_CAPACITY_JACOBIAN_HPP_
+#ifndef GLOBEART_SRC_GLOBE_VORONOI_CAPACITY_JACOBIAN_HPP_
+#define GLOBEART_SRC_GLOBE_VORONOI_CAPACITY_JACOBIAN_HPP_
 
-#include "sphere_state.hpp"
-#include "../../../types.hpp"
-#include "../../../fields/spherical/region_integrals.hpp"
+#include "state.hpp"
+#include "../types.hpp"
+#include "../fields/region_integrals.hpp"
 #include <cstddef>
 #include <utility>
 #include <vector>
 
-namespace globe::voronoi::spherical {
+namespace globe::voronoi {
 
 // Derivatives of every cell's mass with respect to every site. Moving a site
 // sweeps only the bisectors it borders, so a cell's mass responds to its own
@@ -20,7 +20,7 @@ namespace globe::voronoi::spherical {
 // exactly the constraint part of the Lagrangian's site gradient.
 class CapacityJacobian {
  public:
-    CapacityJacobian(const SphereState& state, std::vector<Vector3> sites);
+    CapacityJacobian(const DiagramState& state, std::vector<Vector3> sites);
 
     [[nodiscard]] std::vector<double> apply(const std::vector<Vector3>& directions) const;
     [[nodiscard]] std::vector<Vector3> transpose_apply(const std::vector<double>& values) const;
@@ -37,11 +37,11 @@ class CapacityJacobian {
     [[nodiscard]] static Vector3 sweep_rate(
         const Vector3& site,
         const Vector3& neighbor,
-        const fields::spherical::RegionIntegrals& integrals
+        const fields::RegionIntegrals& integrals
     );
 };
 
-inline CapacityJacobian::CapacityJacobian(const SphereState& state, std::vector<Vector3> sites) {
+inline CapacityJacobian::CapacityJacobian(const DiagramState& state, std::vector<Vector3> sites) {
     _edges.resize(state.edges.size());
 
     for (size_t k = 0; k < state.edges.size(); ++k) {
@@ -82,14 +82,14 @@ inline std::vector<Vector3> CapacityJacobian::transpose_apply(const std::vector<
     return gradients;
 }
 
-// A displacement of the site moves the shared bisector outward at a rate
-// proportional to the boundary point's projection on it. The site is
-// subtracted so the rate is expressed about the site itself, which changes
-// nothing for the tangential displacements the optimizer takes.
+// A displacement of the site moves the shared bisector outward at a normal
+// speed of (x - site) . displacement / separation, the same expression on
+// the sphere and on any flat domain, so the rate is the boundary's first
+// moment taken about the site.
 inline Vector3 CapacityJacobian::sweep_rate(
     const Vector3& site,
     const Vector3& neighbor,
-    const fields::spherical::RegionIntegrals& integrals
+    const fields::RegionIntegrals& integrals
 ) {
     double separation = (neighbor - site).norm();
 
@@ -100,6 +100,6 @@ inline Vector3 CapacityJacobian::sweep_rate(
     return (integrals.first_moment - site * integrals.mass) / separation;
 }
 
-} // namespace globe::voronoi::spherical
+} // namespace globe::voronoi
 
-#endif //GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_CAPACITY_JACOBIAN_HPP_
+#endif //GLOBEART_SRC_GLOBE_VORONOI_CAPACITY_JACOBIAN_HPP_

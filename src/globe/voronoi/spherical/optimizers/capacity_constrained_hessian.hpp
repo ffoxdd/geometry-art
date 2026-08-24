@@ -1,8 +1,8 @@
 #ifndef GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_CAPACITY_CONSTRAINED_HESSIAN_HPP_
 #define GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_CAPACITY_CONSTRAINED_HESSIAN_HPP_
 
-#include "capacity_jacobian.hpp"
-#include "cvt_hessian.hpp"
+#include "../../capacity_jacobian.hpp"
+#include "../../hessian_blocks.hpp"
 #include "../../../types.hpp"
 #include <cstddef>
 #include <utility>

@@ -1,4 +1,6 @@
 #include "capacity_constrained_hessian.hpp"
+#include "cvt_hessian.hpp"
+#include "../../../math/normalization.hpp"
 #include "capacity_constrained_lagrangian.hpp"
 #include "../../../fields/spherical/polynomial_field.hpp"
 #include <gtest/gtest.h>
@@ -7,6 +9,7 @@
 #include <vector>
 
 using namespace globe;
+using namespace globe::voronoi;
 using namespace globe::voronoi::spherical;
 using fields::spherical::PolynomialField;
 
@@ -46,7 +49,7 @@ struct Fixture {
     std::vector<Vector3> points;
     std::unique_ptr<Sphere> sphere;
     PolynomialField field;
-    SphereState state;
+    DiagramState state;
     std::vector<Vector3> site_gradients;
 
     static Fixture build(size_t count) {
@@ -65,7 +68,7 @@ struct Fixture {
 
     [[nodiscard]] CapacityConstrainedHessian hessian(double penalty) const {
         return CapacityConstrainedHessian(
-            CvtHessian<PolynomialField>(field).assemble(*sphere).through_normalization(points, site_gradients),
+            CvtHessian<PolynomialField>(field).assemble(*sphere).template through_manifold<Normalization>(points, site_gradients),
             CapacityJacobian(state, points),
             points,
             penalty
@@ -100,7 +103,7 @@ TEST(CapacityConstrainedHessianTest, ReducesToTheEnergyCurvatureWithoutPenalty) 
     Fixture fixture = Fixture::build(14);
     HessianBlocks energy = CvtHessian<PolynomialField>(fixture.field)
         .assemble(*fixture.sphere)
-        .through_normalization(fixture.points, fixture.site_gradients);
+        .template through_manifold<Normalization>(fixture.points, fixture.site_gradients);
 
     std::vector<Vector3> directions = wave(fixture.points, 1.3);
     std::vector<Vector3> combined = fixture.hessian(0.0).multiply(directions);

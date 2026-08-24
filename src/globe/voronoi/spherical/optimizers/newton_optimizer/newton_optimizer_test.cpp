@@ -8,6 +8,7 @@
 #include <vector>
 
 using namespace globe;
+using namespace globe::voronoi;
 using namespace globe::voronoi::spherical;
 using fields::spherical::PolynomialField;
 

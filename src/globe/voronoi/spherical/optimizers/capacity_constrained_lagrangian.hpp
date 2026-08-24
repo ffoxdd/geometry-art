@@ -5,10 +5,11 @@
 #include "../../../fields/spherical/field.hpp"
 #include "../../../fields/spherical/polynomial_field.hpp"
 #include "../core/sphere.hpp"
-#include "../../../fields/spherical/region_integrals.hpp"
+#include "../../../fields/region_integrals.hpp"
 #include "../../../geometry/spherical/polygon/polygon.hpp"
-#include "capacity_jacobian.hpp"
-#include "sphere_state.hpp"
+#include "../../capacity_jacobian.hpp"
+#include "../../edge_slots.hpp"
+#include "../../state.hpp"
 #include "../../../math/polynomial/moments.hpp"
 #include "../../../std_ext/parallel_for.hpp"
 #include <CGAL/assertions.h>
@@ -41,7 +42,7 @@ class CapacityConstrainedLagrangian {
     [[nodiscard]] double target_mass() const { return _target_mass; }
 
     [[nodiscard]] std::vector<CellState> cell_states(const Sphere& sphere) const;
-    [[nodiscard]] SphereState sphere_state(const Sphere& sphere) const;
+    [[nodiscard]] DiagramState sphere_state(const Sphere& sphere) const;
     [[nodiscard]] LagrangianEvaluation evaluate(
         const Sphere& sphere,
         const std::vector<double>& multipliers,
@@ -49,19 +50,12 @@ class CapacityConstrainedLagrangian {
     ) const;
     [[nodiscard]] LagrangianEvaluation evaluate(
         const Sphere& sphere,
-        const SphereState& state,
+        const DiagramState& state,
         const std::vector<double>& multipliers,
         double penalty
     ) const;
 
  private:
-    using EdgeKey = std::pair<size_t, size_t>;
-
-    struct SharedArcs {
-        std::vector<Moments> moments;
-        std::vector<std::vector<size_t>> slots_by_cell;
-    };
-
     struct CellBuild {
         CellState cell;
         std::vector<EdgeState> edges;
@@ -70,7 +64,10 @@ class CapacityConstrainedLagrangian {
     FieldType _field;
     double _target_mass;
 
-    [[nodiscard]] SharedArcs shared_arcs(const std::vector<std::vector<CellEdgeInfo>>& cell_edges) const;
+    [[nodiscard]] std::vector<Moments> shared_arc_moments(
+        const std::vector<std::vector<CellEdgeInfo>>& cell_edges,
+        const EdgeSlots& slots
+    ) const;
     [[nodiscard]] CellBuild build_cell(
         const std::vector<CellEdgeInfo>& cell_edges,
         const std::vector<size_t>& slots,
@@ -79,10 +76,9 @@ class CapacityConstrainedLagrangian {
 
     [[nodiscard]] std::vector<Vector3> site_gradients(
         const Sphere& sphere,
-        const SphereState& state,
+        const DiagramState& state,
         const std::vector<double>& weights
     ) const;
-    [[nodiscard]] static EdgeKey edge_key(size_t a, size_t b);
 };
 
 inline double LagrangianEvaluation::root_mean_square_capacity_error() const {
@@ -117,7 +113,7 @@ std::vector<CellState> CapacityConstrainedLagrangian<FieldType>::cell_states(con
 }
 
 template<fields::spherical::Field FieldType>
-SphereState CapacityConstrainedLagrangian<FieldType>::sphere_state(const Sphere& sphere) const {
+DiagramState CapacityConstrainedLagrangian<FieldType>::sphere_state(const Sphere& sphere) const {
     size_t count = sphere.size();
     std::vector<std::vector<CellEdgeInfo>> cell_edges(count);
 
@@ -125,13 +121,14 @@ SphereState CapacityConstrainedLagrangian<FieldType>::sphere_state(const Sphere&
         cell_edges[k] = sphere.cell_edges(k);
     }
 
-    SharedArcs shared = shared_arcs(cell_edges);
-    SphereState state;
+    EdgeSlots slots = EdgeSlots::build(cell_edges);
+    std::vector<Moments> moments = shared_arc_moments(cell_edges, slots);
+    DiagramState state;
     state.cells.resize(count);
     state.edges.resize(count);
 
     std_ext::parallel_for(count, [&](size_t k) {
-        CellBuild built = build_cell(cell_edges[k], shared.slots_by_cell[k], shared.moments);
+        CellBuild built = build_cell(cell_edges[k], slots.slots_by_cell[k], moments);
         state.cells[k] = built.cell;
         state.edges[k] = std::move(built.edges);
     });
@@ -140,36 +137,19 @@ SphereState CapacityConstrainedLagrangian<FieldType>::sphere_state(const Sphere&
 }
 
 template<fields::spherical::Field FieldType>
-typename CapacityConstrainedLagrangian<FieldType>::SharedArcs
-CapacityConstrainedLagrangian<FieldType>::shared_arcs(
-    const std::vector<std::vector<CellEdgeInfo>>& cell_edges
+std::vector<Moments> CapacityConstrainedLagrangian<FieldType>::shared_arc_moments(
+    const std::vector<std::vector<CellEdgeInfo>>& cell_edges,
+    const EdgeSlots& slots
 ) const {
-    std::map<EdgeKey, size_t> slot_by_key;
-    std::vector<Arc> arcs;
-    SharedArcs shared;
-    shared.slots_by_cell.resize(cell_edges.size());
-
-    for (size_t k = 0; k < cell_edges.size(); ++k) {
-        shared.slots_by_cell[k].reserve(cell_edges[k].size());
-
-        for (const CellEdgeInfo& edge : cell_edges[k]) {
-            auto [iterator, inserted] = slot_by_key.try_emplace(edge_key(k, edge.neighbor_index), arcs.size());
-            if (inserted) {
-                arcs.push_back(edge.arc);
-            }
-
-            shared.slots_by_cell[k].push_back(iterator->second);
-        }
-    }
-
     int moment_degree = _field.degree() + 1;
-    shared.moments.assign(arcs.size(), Moments(moment_degree));
+    std::vector<Moments> moments(slots.count(), Moments(moment_degree));
 
-    std_ext::parallel_for(arcs.size(), [&](size_t slot) {
-        shared.moments[slot] = arcs[slot].moments(moment_degree);
+    std_ext::parallel_for(slots.count(), [&](size_t slot) {
+        auto [cell, position] = slots.representatives[slot];
+        moments[slot] = cell_edges[cell][position].arc.moments(moment_degree);
     });
 
-    return shared;
+    return moments;
 }
 
 template<fields::spherical::Field FieldType>
@@ -213,7 +193,7 @@ LagrangianEvaluation CapacityConstrainedLagrangian<FieldType>::evaluate(
 template<fields::spherical::Field FieldType>
 LagrangianEvaluation CapacityConstrainedLagrangian<FieldType>::evaluate(
     const Sphere& sphere,
-    const SphereState& state,
+    const DiagramState& state,
     const std::vector<double>& multipliers,
     double penalty
 ) const {
@@ -247,7 +227,7 @@ LagrangianEvaluation CapacityConstrainedLagrangian<FieldType>::evaluate(
 template<fields::spherical::Field FieldType>
 std::vector<Vector3> CapacityConstrainedLagrangian<FieldType>::site_gradients(
     const Sphere& sphere,
-    const SphereState& state,
+    const DiagramState& state,
     const std::vector<double>& weights
 ) const {
     size_t count = sphere.size();
@@ -264,12 +244,6 @@ std::vector<Vector3> CapacityConstrainedLagrangian<FieldType>::site_gradients(
     }
 
     return gradients;
-}
-
-template<fields::spherical::Field FieldType>
-typename CapacityConstrainedLagrangian<FieldType>::EdgeKey
-CapacityConstrainedLagrangian<FieldType>::edge_key(size_t a, size_t b) {
-    return a < b ? EdgeKey{a, b} : EdgeKey{b, a};
 }
 
 } // namespace globe::voronoi::spherical

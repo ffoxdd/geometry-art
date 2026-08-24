@@ -4,7 +4,7 @@
 #include <vector>
 
 using namespace globe;
-using namespace globe::voronoi::spherical;
+using namespace globe::voronoi;
 
 namespace {
 

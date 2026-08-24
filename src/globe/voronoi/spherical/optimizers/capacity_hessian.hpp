@@ -2,7 +2,7 @@
 #define GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_CAPACITY_HESSIAN_HPP_
 
 #include "cvt_hessian.hpp"
-#include "sphere_state.hpp"
+#include "../../state.hpp"
 #include "../../../types.hpp"
 #include "../../../fields/spherical/field.hpp"
 #include "../../../fields/spherical/polynomial_field.hpp"
@@ -44,7 +44,7 @@ class CapacityHessian {
 
     [[nodiscard]] HessianBlocks assemble(
         const Sphere& sphere,
-        const SphereState& state,
+        const DiagramState& state,
         const std::vector<Vector3>& sites,
         const std::vector<double>& weights
     ) const;
@@ -60,7 +60,7 @@ class CapacityHessian {
 
     [[nodiscard]] EdgeContribution edge_contribution(
         const CellEdgeInfo& edge,
-        const fields::spherical::RegionIntegrals& integrals,
+        const fields::RegionIntegrals& integrals,
         size_t own_index,
         const std::vector<Vector3>& sites
     ) const;
@@ -92,7 +92,7 @@ CapacityHessian<FieldType>::CapacityHessian(FieldType field) :
 template<fields::spherical::Field FieldType>
 HessianBlocks CapacityHessian<FieldType>::assemble(
     const Sphere& sphere,
-    const SphereState& state,
+    const DiagramState& state,
     const std::vector<Vector3>& sites,
     const std::vector<double>& weights
 ) const {
@@ -182,7 +182,7 @@ HessianBlocks CapacityHessian<FieldType>::assemble(
 template<fields::spherical::Field FieldType>
 typename CapacityHessian<FieldType>::EdgeContribution CapacityHessian<FieldType>::edge_contribution(
     const CellEdgeInfo& edge,
-    const fields::spherical::RegionIntegrals& integrals,
+    const fields::RegionIntegrals& integrals,
     size_t own_index,
     const std::vector<Vector3>& sites
 ) const {

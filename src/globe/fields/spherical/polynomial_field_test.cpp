@@ -6,7 +6,7 @@
 
 using namespace globe;
 using fields::spherical::PolynomialField;
-using fields::spherical::RegionIntegrals;
+using fields::RegionIntegrals;
 
 namespace {
 

@@ -1,6 +1,6 @@
 #include "capacity_hessian.hpp"
 #include "capacity_constrained_lagrangian.hpp"
-#include "capacity_jacobian.hpp"
+#include "../../capacity_jacobian.hpp"
 #include "../../../fields/scalar/noise_field.hpp"
 #include "../../../fields/spherical/piecewise_polynomial_field.hpp"
 #include "../../../fields/spherical/polynomial_field.hpp"
@@ -22,10 +22,10 @@ using fields::spherical::PowellSabinProjection;
 using geometry::spherical::TriangleMesh;
 using voronoi::spherical::CapacityConstrainedLagrangian;
 using voronoi::spherical::CapacityHessian;
-using voronoi::spherical::CapacityJacobian;
-using voronoi::spherical::HessianBlocks;
+using voronoi::CapacityJacobian;
+using voronoi::HessianBlocks;
 using voronoi::spherical::Sphere;
-using voronoi::spherical::SphereState;
+using voronoi::DiagramState;
 
 namespace {
 
@@ -80,7 +80,7 @@ std::vector<Vector3> weighted_capacity_gradient(
 ) {
     auto sphere = build_sphere(points);
     CapacityConstrainedLagrangian<FieldType> lagrangian(field, 0.0);
-    SphereState state = lagrangian.sphere_state(*sphere);
+    DiagramState state = lagrangian.sphere_state(*sphere);
 
     std::vector<Vector3> normalized(points.size());
 
@@ -98,12 +98,12 @@ void expect_matches_finite_differences(const FieldType& field, size_t site_count
 
     auto sphere = build_sphere(points);
     CapacityConstrainedLagrangian<FieldType> lagrangian(field, 0.0);
-    SphereState state = lagrangian.sphere_state(*sphere);
+    DiagramState state = lagrangian.sphere_state(*sphere);
     std::vector<Vector3> site_gradients = CapacityJacobian(state, points).transpose_apply(weights);
 
     HessianBlocks blocks = CapacityHessian<FieldType>(field)
         .assemble(*sphere, state, points, weights)
-        .through_normalization(points, site_gradients);
+        .template through_manifold<Normalization>(points, site_gradients);
 
     for (int trial = 0; trial < 3; ++trial) {
         std::vector<Vector3> direction(points.size());
@@ -180,12 +180,12 @@ TEST(CapacityHessianTest, IsSymmetricOnTangentDirections) {
 
     auto sphere = build_sphere(points);
     CapacityConstrainedLagrangian<PolynomialField> lagrangian(field, 0.0);
-    SphereState state = lagrangian.sphere_state(*sphere);
+    DiagramState state = lagrangian.sphere_state(*sphere);
     std::vector<Vector3> site_gradients = CapacityJacobian(state, points).transpose_apply(weights);
 
     HessianBlocks blocks = CapacityHessian<PolynomialField>(field)
         .assemble(*sphere, state, points, weights)
-        .through_normalization(points, site_gradients);
+        .template through_manifold<Normalization>(points, site_gradients);
 
     std::vector<Vector3> first(points.size());
     std::vector<Vector3> second(points.size());

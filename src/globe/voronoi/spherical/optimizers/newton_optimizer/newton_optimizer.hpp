@@ -1,7 +1,7 @@
 #ifndef GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_NEWTON_OPTIMIZER_NEWTON_OPTIMIZER_HPP_
 #define GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_NEWTON_OPTIMIZER_NEWTON_OPTIMIZER_HPP_
 
-#include "trust_region_step.hpp"
+#include "../../../trust_region_step.hpp"
 #include "../capacity_constrained_lagrangian.hpp"
 #include "../cvt_hessian.hpp"
 #include "../../../../types.hpp"
@@ -124,7 +124,7 @@ std::unique_ptr<Sphere> NewtonOptimizer<FieldType>::optimize() {
         }
 
         if (!blocks.has_value()) {
-            blocks = _hessian.assemble(*_sphere).through_normalization(current, evaluation.site_gradients);
+            blocks = _hessian.assemble(*_sphere).template through_manifold<Normalization>(current, evaluation.site_gradients);
         }
 
         TrustRegionStep::Result step = solver.solve(evaluation.gradient, *blocks, radius);
