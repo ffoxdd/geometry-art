@@ -32,7 +32,7 @@ struct NewtonParameters {
     double acceptance_threshold = 0.1;
     size_t max_conjugate_gradient_iterations = 100;
     double conjugate_gradient_tolerance = 0.1;
-    std::string curvature = "gauss-newton";
+    std::string curvature = "exact";
 };
 
 struct NewtonReport {

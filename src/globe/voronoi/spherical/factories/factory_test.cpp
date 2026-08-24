@@ -79,19 +79,19 @@ TEST(FactoryTest, EXPENSIVE_BuildWithFittedNoiseDensity) {
 
 // The mesh follows the site count by the bandwidth rule: the coarsest
 // icosphere whose edges fit inside a cell of angular radius 2 / sqrt(N).
-TEST(FactoryTest, SmoothNoiseSubdivisionsFollowTheCellScale) {
-    EXPECT_EQ(Factory::smooth_noise_subdivisions(10), 1);
-    EXPECT_EQ(Factory::smooth_noise_subdivisions(50), 2);
-    EXPECT_EQ(Factory::smooth_noise_subdivisions(200), 3);
-    EXPECT_EQ(Factory::smooth_noise_subdivisions(500), 4);
-    EXPECT_EQ(Factory::smooth_noise_subdivisions(1000), 5);
+TEST(FactoryTest, SplineSubdivisionsFollowTheCellScale) {
+    EXPECT_EQ(Factory::spline_subdivisions(10), 1);
+    EXPECT_EQ(Factory::spline_subdivisions(50), 2);
+    EXPECT_EQ(Factory::spline_subdivisions(200), 3);
+    EXPECT_EQ(Factory::spline_subdivisions(500), 4);
+    EXPECT_EQ(Factory::spline_subdivisions(1000), 5);
 }
 
-TEST(FactoryTest, SmoothNoiseSubdivisionsAreMonotoneAndClamped) {
+TEST(FactoryTest, SplineSubdivisionsAreMonotoneAndClamped) {
     int previous = 0;
 
     for (int count : {2, 10, 100, 1000, 10000, 100000, 1000000}) {
-        int level = Factory::smooth_noise_subdivisions(count);
+        int level = Factory::spline_subdivisions(count);
         EXPECT_GE(level, previous);
         EXPECT_GE(level, 1);
         EXPECT_LE(level, 6);

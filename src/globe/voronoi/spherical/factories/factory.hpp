@@ -8,6 +8,7 @@
 #include "../optimizers/capacity_constrained_optimizer.hpp"
 #include "../optimizers/lloyd_optimizer.hpp"
 #include "../optimizers/newton_optimizer/newton_optimizer.hpp"
+#include "../../../fields/scalar/image_field.hpp"
 #include "../../../fields/scalar/noise_field.hpp"
 #include "../../../math/interval.hpp"
 #include "../../../fields/spherical/field.hpp"
@@ -35,6 +36,7 @@
 
 namespace globe::voronoi::spherical {
 
+using fields::scalar::ImageField;
 using fields::scalar::NoiseField;
 using globe::Interval;
 using fields::spherical::PiecewisePolynomialField;
@@ -57,7 +59,8 @@ class Factory {
         std::optional<unsigned int> seed,
         Callback callback,
         SnapshotCallback snapshot_callback,
-        std::chrono::milliseconds snapshot_interval
+        std::chrono::milliseconds snapshot_interval,
+        std::string image_path = ""
     );
 
     std::unique_ptr<Sphere> build();
@@ -66,7 +69,7 @@ class Factory {
     // build actually used, which the caller no longer has a handle on.
     [[nodiscard]] const io::snapshot::Snapshot& snapshot() const { return _snapshot; }
 
-    [[nodiscard]] static int smooth_noise_subdivisions(int points_count);
+    [[nodiscard]] static int spline_subdivisions(int points_count);
 
  private:
     static constexpr int NOISE_FIT_DEGREE = 8;
@@ -74,8 +77,8 @@ class Factory {
     static constexpr int NOISE_MESH_SUBDIVISIONS = 4;
     static constexpr double NOISE_DENSITY_FLOOR = 0.2;
     static constexpr int NOISE_MESH_DEGREE = 2;
-    static constexpr int SMOOTH_NOISE_MINIMUM_SUBDIVISIONS = 1;
-    static constexpr int SMOOTH_NOISE_MAXIMUM_SUBDIVISIONS = 6;
+    static constexpr int SPLINE_MINIMUM_SUBDIVISIONS = 1;
+    static constexpr int SPLINE_MAXIMUM_SUBDIVISIONS = 6;
 
     using SeededBoundingBoxSampler = globe::UniformBoundingBoxSampler<globe::UniformIntervalSampler>;
     using SeededCartesianGenerator = generators::cartesian::RandomPointGenerator<SeededBoundingBoxSampler>;
@@ -91,6 +94,7 @@ class Factory {
     Callback _callback;
     SnapshotCallback _snapshot_callback;
     std::chrono::milliseconds _snapshot_interval;
+    std::string _image_path;
     io::snapshot::Snapshot _snapshot;
 
     template<fields::spherical::Field FieldType>
@@ -117,6 +121,7 @@ class Factory {
 
     [[nodiscard]] static PiecewisePolynomialField sample_noise_field();
     [[nodiscard]] PiecewisePolynomialField sample_smooth_noise_field() const;
+    [[nodiscard]] PiecewisePolynomialField sample_image_field() const;
     [[nodiscard]] PiecewisePolynomialField sample_quadratic_field() const;
     [[nodiscard]] static PolynomialField fit_noise_field();
 };
@@ -131,7 +136,8 @@ inline Factory::Factory(
     std::optional<unsigned int> seed,
     Callback callback,
     SnapshotCallback snapshot_callback,
-    std::chrono::milliseconds snapshot_interval
+    std::chrono::milliseconds snapshot_interval,
+    std::string image_path
 ) :
     _points_count(points_count),
     _density_field(std::move(density_field)),
@@ -142,7 +148,8 @@ inline Factory::Factory(
     _seed(seed),
     _callback(std::move(callback)),
     _snapshot_callback(std::move(snapshot_callback)),
-    _snapshot_interval(snapshot_interval) {
+    _snapshot_interval(snapshot_interval),
+    _image_path(std::move(image_path)) {
 }
 
 inline std::unique_ptr<Sphere> Factory::build() {
@@ -152,6 +159,10 @@ inline std::unique_ptr<Sphere> Factory::build() {
 
     if (_density_field == "noise-smooth") {
         return build_with(sample_smooth_noise_field());
+    }
+
+    if (_density_field == "image") {
+        return build_with(sample_image_field());
     }
 
     if (_density_field == "quadratic-piecewise") {
@@ -234,10 +245,29 @@ inline PiecewisePolynomialField Factory::sample_noise_field() {
 inline PiecewisePolynomialField Factory::sample_smooth_noise_field() const {
     NoiseField noise_field(Interval(NOISE_DENSITY_FLOOR, 1.0));
     PowellSabinProjection projection;
-    int subdivisions = smooth_noise_subdivisions(_points_count);
+    int subdivisions = spline_subdivisions(_points_count);
     auto result = projection.project(TriangleMesh::icosphere(subdivisions), noise_field);
 
     std::cout << "Projected noise onto a C1 quadratic spline with " <<
+        result.field.mesh().triangles.size() << " pieces, density at least " <<
+        result.lowest_coefficient << std::endl;
+
+    if (result.least_damping < 1.0) {
+        std::cout << "  the projection dipped below zero; gradients damped to " <<
+            result.least_damping << " to keep the density positive" << std::endl;
+    }
+
+    return std::move(result.field);
+}
+
+inline PiecewisePolynomialField Factory::sample_image_field() const {
+    ImageField image_field = ImageField::load(_image_path, Interval(NOISE_DENSITY_FLOOR, 1.0));
+    PowellSabinProjection projection;
+    int subdivisions = spline_subdivisions(_points_count);
+    auto result = projection.project(TriangleMesh::icosphere(subdivisions), image_field);
+
+    std::cout << "Projected " << image_field.width() << "x" << image_field.height() <<
+        " image onto a C1 quadratic spline with " <<
         result.field.mesh().triangles.size() << " pieces, density at least " <<
         result.lowest_coefficient << std::endl;
 
@@ -254,12 +284,12 @@ inline PiecewisePolynomialField Factory::sample_smooth_noise_field() const {
 // those averages faithful at any mesh no coarser than the cells. So the
 // mesh is the coarsest icosphere whose edges fit inside a cell, and no one
 // has to name a level.
-inline int Factory::smooth_noise_subdivisions(int points_count) {
+inline int Factory::spline_subdivisions(int points_count) {
     double cell_radius = 2.0 / std::sqrt(static_cast<double>(points_count));
     double icosahedron_edge = std::acos(1.0 / std::sqrt(5.0));
     int level = static_cast<int>(std::ceil(std::log2(icosahedron_edge / cell_radius)));
 
-    return std::clamp(level, SMOOTH_NOISE_MINIMUM_SUBDIVISIONS, SMOOTH_NOISE_MAXIMUM_SUBDIVISIONS);
+    return std::clamp(level, SPLINE_MINIMUM_SUBDIVISIONS, SPLINE_MAXIMUM_SUBDIVISIONS);
 }
 
 // The quadratic field represented on the noise mesh: the same function, so

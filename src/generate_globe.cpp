@@ -44,6 +44,7 @@ struct Config {
     std::string output_dir;
     std::string snapshot_path;
     double snapshot_interval = 0.0;
+    std::string image_path;
 };
 
 Config parse_arguments(int argc, char *argv[]);
@@ -118,7 +119,8 @@ int main(int argc, char *argv[]) {
         config.seed,
         callback,
         [&](const globe::io::snapshot::Snapshot& snapshot) { write_snapshot(snapshot, config.snapshot_path); },
-        std::chrono::milliseconds(static_cast<long long>(config.snapshot_interval * 1000.0))
+        std::chrono::milliseconds(static_cast<long long>(config.snapshot_interval * 1000.0)),
+        config.image_path
     );
 
     auto sphere = factory.build();
@@ -172,6 +174,11 @@ Config parse_arguments(int argc, char *argv[]) {
     CLI::App app{"Globe Art Generator"};
 
     Config config;
+    app.callback([&config]() {
+        if (config.density_field == "image" && config.image_path.empty()) {
+            throw CLI::ValidationError("--image", "-f image needs an image file");
+        }
+    });
 
     app.add_option("--points,-p", config.points_count)
         ->description("Number of points to generate")
@@ -179,7 +186,7 @@ Config parse_arguments(int argc, char *argv[]) {
 
     app.add_option("--density-field,-f", config.density_field)
         ->description("Density field type")
-        ->check(CLI::IsMember({"constant", "linear", "quadratic", "quadratic-piecewise", "noise", "noise-smooth", "noise-fit"}))
+        ->check(CLI::IsMember({"constant", "linear", "quadratic", "quadratic-piecewise", "noise", "noise-smooth", "noise-fit", "image"}))
         ->default_val("quadratic");
 
     app.add_option("--render", config.perform_render)
@@ -228,8 +235,12 @@ Config parse_arguments(int argc, char *argv[]) {
 
     app.add_option("--newton-curvature", config.newton_curvature)
         ->description("Curvature model for the newton inner solver")
-        ->check(CLI::IsMember({"gauss-newton", "exact", "finite-difference"}))
-        ->default_val("gauss-newton");
+        ->check(CLI::IsMember({"exact", "gauss-newton", "finite-difference"}))
+        ->default_val("exact");
+
+    app.add_option("--image", config.image_path)
+        ->description("Equirectangular image whose darkness is the density, for -f image")
+        ->check(CLI::ExistingFile);
 
     app.add_option("--seed", config.seed)
         ->description("Seed for the initial random points; omit for a random seed");

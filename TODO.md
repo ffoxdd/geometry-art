@@ -9,60 +9,23 @@ Ordered so that each stage is verifiable on its own and derisks the
 next. The limits motivating the work are in
 `docs/exactness_frontier.md`.
 
-Speed comes before representation: the system already handles the
-fields we care about, and handles them slowly.
-
 Where two items look equally valuable, prefer the one that carries over
 to the plane, the torus and meshes; `docs/geometry_portability.md`
 records what already does. That consideration retired the
 spherical-harmonic basis: it addressed conditioning in high-degree
 global fits, and the global path is the one that does not generalise.
 
-### 1. Exact constraint curvature
-The inner Newton model is Gauss-Newton: exact for the energy, slope-only
-for the penalty, and missing the multiplier-weighted curvature of the
-constraints altogether. That term does not vanish at a solution, because
-mass has a price wherever the density varies. Reading the true curvature
-by finite differences (`--newton-curvature finite-difference`) cuts the
-inner iterations on the noise field by two to three times. Deriving it
-needs the Voronoi vertex velocities -- the implicit function theorem on
-the three equidistance equations -- and the density gradient along the
-bisectors. Both are geometry-portable in the way the sweep rate is.
-
-*Verified by:* the analytic curvature matching the finite-difference
-one to the difference error, and matching its iteration counts.
-
-### 2. Choose the resolution from the site count
-Unblocked: the C1 field is now the L2 projection onto the spline space
-(`PowellSabinProjection`, one sparse symmetric solve), so a mesh matched
-to the cell scale is faithful in the averages the tessellation reads --
-under half a percent of cell mass at 200 sites -- and the answer to "how
-fine" stopped being "several times finer than the cell". What remains is
-to compute the level from the site count instead of taking it as input.
-
-*Verified by:* a requested cell-scale tolerance being met without the
-caller naming a subdivision level.
-
-### 3. Accuracy as the input
+### 1. Accuracy as the input
 Take a requested accuracy and choose the representation to meet it,
 rather than taking a mesh level and a degree and reporting what
-accuracy came out. Sits on the stage above, which is what makes raising
-degree and refining reliable.
+accuracy came out. The mesh level already follows the site count by
+the bandwidth rule; what remains is a requested tolerance choosing the
+degree and the level together.
 
 *Verified by:* a requested tolerance being met without the caller
 naming a degree or a subdivision level.
 
-### 4. Image densities
-Load an image, map it onto the sphere and sample it onto the C¹ field
-at the cell scale. A C¹ field cannot hold a discontinuity, and the
-bandwidth rule says the tessellation cannot express one either, so
-alignment to image edges is unnecessary: a step becomes a ramp one cell
-wide.
-
-*Verified by:* a synthetic step edge producing a clean size transition
-with no ringing in the fitted density.
-
-### 5. The flat family
+### 2. The flat family
 Plane, cylinder and torus are one implementation: all three are
 intrinsically flat, differing only in which directions wrap. The
 cheapest second instance, and the one that would let a `Geometry`

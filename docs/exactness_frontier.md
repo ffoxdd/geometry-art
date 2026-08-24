@@ -65,17 +65,19 @@ polynomial piecewise and compare every cell and edge integral against
 the global field; `test/piecewise_precision_test.cpp` holds that to
 1e-11.
 
-**Smoothness — real, and it is a rate limit rather than a correctness
-one.** Degree-`d` Lagrange elements share nodes, so the piecewise
-density is C⁰. The CVT energy's slope and curvature both see the
-density only through boundary integrals, so they stay continuous; the
+**Smoothness — real, and answered by the C¹ elements.** Degree-`d`
+Lagrange elements share nodes, so that piecewise density is C⁰: the
 constraints' curvature sees the density's gradient on the bisectors,
-so it jumps wherever a bisector crosses a mesh edge, and the augmented
-Lagrangian is C¹ but not C². With the representation exact, both inner
-solvers converge on the piecewise noise field across the seeds tried;
-the cost shows up as iteration count, with Newton needing roughly
-twice the inner iterations it needs on a polynomial field. Restoring
-C² means making the density C¹ — C¹ elements.
+which jumps wherever a bisector crosses a mesh edge, and the augmented
+Lagrangian is C¹ but not C². The Powell–Sabin spline restores C¹
+density and with it a continuous constraint curvature, which is what
+lets that curvature be assembled and trusted (`CapacityHessian`): each
+bisector's sweep differentiates into the great circle's rotation, the
+change of site separation, and the sliding of the Voronoi vertices by
+the implicit function theorem, all exact arc moments within the
+Delaunay sparsity. With it the inner Newton model is the full Hessian
+of the augmented Lagrangian rather than Gauss–Newton, and the inner
+iterations on the noise fields drop by three to five times.
 
 **Aliasing — dissolved by projecting instead of sampling.** Choosing a
 representation's coefficients by evaluating the field at points puts
@@ -146,28 +148,20 @@ KKT solve, and attacks the iteration count directly.
 
 Ordered by leverage per unit of effort. See `TODO.md` for status.
 
-1. Exact constraint curvature. The inner Newton model is Gauss–Newton:
-   it omits the multiplier-weighted curvature of the constraints, which
-   does not vanish at a solution because mass has a price wherever the
-   density varies. Reading the true curvature by finite differences cuts
-   the inner iterations on the noise field by two to three times, so
-   the term is worth deriving; it needs the Voronoi vertex velocities
-   and the density gradient on the bisectors.
-2. C¹ elements, so that curvature is continuous and the second-order
-   rate holds on piecewise fields. Spherical Powell–Sabin in
-   Bernstein–Bézier form: value and gradient sampled at mesh vertices
-   from any callable, positivity by coefficient sign, mesh resolution
-   from the site count.
-3. Make accuracy the input and the discretisation the output: request a
+1. Make accuracy the input and the discretisation the output: request a
    tolerance, raise degree and refine the mesh until the representation
-   error is below what the capacity tolerance needs.
-4. Image densities, sampled onto the C¹ field at the cell scale; a C¹
-   field cannot hold a discontinuity, so alignment to image edges is
-   unnecessary under the bandwidth rule.
+   error is below what the capacity tolerance needs. The mesh level
+   already follows the site count by the bandwidth rule; the degree does
+   not yet follow anything.
+2. The flat family: plane, cylinder and torus as one implementation, the
+   second instance a `Geometry` abstraction would be extracted from.
 
-Done: per-cell integration runs in parallel; the exact CVT Hessian and
-the constraint Jacobian are assembled and drive both an unconstrained
-trust-region relaxation and a second-order inner solve for the
-constrained problem; the piecewise representation agrees with the
-global one to 1e-11 on every cell and edge, and every seed that used to
-stall on it converges.
+Done: per-cell integration runs in parallel; the exact CVT Hessian,
+the constraint Jacobian and the exact constraint curvature are all
+assembled from arc moments and drive a second-order inner solve whose
+model is the full Hessian of the augmented Lagrangian; the density is
+the L2 projection onto a C¹ Powell–Sabin spline whose mesh follows the
+site count, with positivity certified by coefficient sign; image
+densities load through the same path; the piecewise representation
+agrees with the global one to 1e-11 on every cell and edge, and every
+seed that used to stall on it converges.
