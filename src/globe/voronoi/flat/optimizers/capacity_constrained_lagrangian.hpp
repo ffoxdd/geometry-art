@@ -1,6 +1,7 @@
 #ifndef GLOBEART_SRC_GLOBE_VORONOI_FLAT_OPTIMIZERS_CAPACITY_CONSTRAINED_LAGRANGIAN_HPP_
 #define GLOBEART_SRC_GLOBE_VORONOI_FLAT_OPTIMIZERS_CAPACITY_CONSTRAINED_LAGRANGIAN_HPP_
 
+#include "../core/periodic_slots.hpp"
 #include "../core/torus.hpp"
 #include "../../capacity_jacobian.hpp"
 #include "../../lagrangian_evaluation.hpp"
@@ -9,11 +10,8 @@
 #include "../../../std_ext/parallel_for.hpp"
 #include "../../../types.hpp"
 #include <CGAL/assertions.h>
-#include <array>
 #include <cmath>
 #include <cstddef>
-#include <map>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -55,12 +53,9 @@ class CapacityConstrainedLagrangian {
         Vector3 moment_about_target;
     };
 
-    using SlotKey = std::tuple<size_t, size_t, int, int>;
-
     FieldType _field;
     double _target_mass;
 
-    [[nodiscard]] SlotKey slot_key(const Torus& torus, size_t cell, const CellEdgeInfo& edge) const;
     [[nodiscard]] static Vector3 planar(const Vector2& point);
 };
 
@@ -79,31 +74,11 @@ DiagramState CapacityConstrainedLagrangian<FieldType>::diagram_state(const Torus
         cell_edges[k] = torus.cell_edges(k);
     }
 
-    std::map<SlotKey, size_t> slot_by_key;
-    std::vector<std::pair<size_t, size_t>> representatives;
-    std::vector<std::vector<size_t>> slots_by_cell(count);
+    PeriodicSlots shared = PeriodicSlots::build(torus, cell_edges);
+    std::vector<SlotState> slots(shared.count());
 
-    for (size_t k = 0; k < count; ++k) {
-        slots_by_cell[k].reserve(cell_edges[k].size());
-
-        for (size_t position = 0; position < cell_edges[k].size(); ++position) {
-            auto [iterator, inserted] = slot_by_key.try_emplace(
-                slot_key(torus, k, cell_edges[k][position]),
-                representatives.size()
-            );
-
-            if (inserted) {
-                representatives.emplace_back(k, position);
-            }
-
-            slots_by_cell[k].push_back(iterator->second);
-        }
-    }
-
-    std::vector<SlotState> slots(representatives.size());
-
-    std_ext::parallel_for(representatives.size(), [&](size_t slot) {
-        auto [cell, position] = representatives[slot];
+    std_ext::parallel_for(shared.count(), [&](size_t slot) {
+        auto [cell, position] = shared.representatives[slot];
         const CellEdgeInfo& edge = cell_edges[cell][position];
         auto integrals = _field.integrals(edge.boundary);
         Vector3 own = planar(torus.site(cell));
@@ -134,7 +109,7 @@ DiagramState CapacityConstrainedLagrangian<FieldType>::diagram_state(const Torus
         state.edges[k].reserve(cell_edges[k].size());
 
         for (size_t position = 0; position < cell_edges[k].size(); ++position) {
-            const SlotState& slot = slots[slots_by_cell[k][position]];
+            const SlotState& slot = slots[shared.slots_by_cell[k][position]];
             bool from_source = slot.source_cell == k;
 
             state.edges[k].push_back(EdgeState{
@@ -148,29 +123,6 @@ DiagramState CapacityConstrainedLagrangian<FieldType>::diagram_state(const Torus
     });
 
     return state;
-}
-
-// The physical bisector is named by the unordered site pair and the period
-// offset between the charts, oriented from the smaller index so both sides
-// produce the same key. A self-edge's two appearances get opposite offsets
-// and therefore separate slots, which is what keeps their cancelling sweep
-// contributions independently accounted.
-template<fields::flat::Field FieldType>
-typename CapacityConstrainedLagrangian<FieldType>::SlotKey
-CapacityConstrainedLagrangian<FieldType>::slot_key(
-    const Torus& torus,
-    size_t cell,
-    const CellEdgeInfo& edge
-) const {
-    Vector2 offset = edge.neighbor_position - torus.site(edge.neighbor_index);
-    int dx = static_cast<int>(std::lround(offset.x() / torus.width()));
-    int dy = static_cast<int>(std::lround(offset.y() / torus.height()));
-
-    if (cell <= edge.neighbor_index) {
-        return SlotKey{cell, edge.neighbor_index, dx, dy};
-    }
-
-    return SlotKey{edge.neighbor_index, cell, -dx, -dy};
 }
 
 template<fields::flat::Field FieldType>

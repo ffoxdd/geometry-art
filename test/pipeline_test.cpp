@@ -16,7 +16,7 @@
 
 using namespace globe;
 using io::snapshot::Snapshot;
-using voronoi::spherical::CapacityConstrainedParameters;
+using voronoi::CapacityConstrainedParameters;
 using voronoi::spherical::Factory;
 using voronoi::spherical::noop_callback;
 

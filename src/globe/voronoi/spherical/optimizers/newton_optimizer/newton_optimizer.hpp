@@ -1,6 +1,7 @@
 #ifndef GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_NEWTON_OPTIMIZER_NEWTON_OPTIMIZER_HPP_
 #define GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_NEWTON_OPTIMIZER_NEWTON_OPTIMIZER_HPP_
 
+#include "../../../optimizer_parameters.hpp"
 #include "../../../trust_region_step.hpp"
 #include "../capacity_constrained_lagrangian.hpp"
 #include "../cvt_hessian.hpp"
@@ -20,29 +21,6 @@
 #include <vector>
 
 namespace globe::voronoi::spherical {
-
-struct NewtonParameters {
-    size_t max_iterations = 100;
-    // The gradient is a difference of moment integrals, so it bottoms out
-    // near the square root of machine epsilon like the capacity error does.
-    double gradient_tolerance = 1e-7;
-    double initial_trust_radius = 0.1;
-    double max_trust_radius = 1.0;
-    double minimum_trust_radius = 1e-12;
-    double acceptance_threshold = 0.1;
-    size_t max_conjugate_gradient_iterations = 100;
-    double conjugate_gradient_tolerance = 0.1;
-    std::string curvature = "exact";
-};
-
-struct NewtonReport {
-    size_t iterations = 0;
-    size_t accepted_steps = 0;
-    double cvt_energy = 0.0;
-    double gradient_norm = 0.0;
-    bool converged = false;
-    bool stalled = false;
-};
 
 // Minimises the CVT energy by trust-region Newton over the sites as ambient
 // vectors. The energy is scale invariant in each site, so a step is taken in

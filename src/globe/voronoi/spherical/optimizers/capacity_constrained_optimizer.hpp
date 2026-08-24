@@ -1,6 +1,7 @@
 #ifndef GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_CAPACITY_CONSTRAINED_OPTIMIZER_HPP_
 #define GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_CAPACITY_CONSTRAINED_OPTIMIZER_HPP_
 
+#include "../../optimizer_parameters.hpp"
 #include "capacity_constrained_lagrangian.hpp"
 #include "capacity_constrained_hessian.hpp"
 #include "capacity_hessian.hpp"
@@ -29,28 +30,6 @@
 #include <vector>
 
 namespace globe::voronoi::spherical {
-
-struct CapacityConstrainedParameters {
-    size_t max_outer_iterations = 30;
-    size_t max_inner_iterations = 200;
-    double relative_capacity_tolerance = 1e-7;
-    double penalty_growth = 10.0;
-    double required_violation_decrease = 0.25;
-    double max_penalty_growth_factor = 1e8;
-    size_t max_stalled_outer_iterations = 2;
-    size_t lbfgs_history = 8;
-    std::string inner_solver = "lbfgs";
-    NewtonParameters newton;
-};
-
-struct CapacityConstrainedReport {
-    size_t outer_iterations = 0;
-    size_t inner_iterations = 0;
-    double cvt_energy = 0.0;
-    double relative_rms_capacity_error = 0.0;
-    bool converged = false;
-    bool stalled = false;
-};
 
 template<fields::spherical::Field FieldType = fields::spherical::PolynomialField>
 class CapacityConstrainedOptimizer {

@@ -21,7 +21,7 @@ using namespace globe;
 using io::qt::Application;
 using io::qt::SphereDrawer;
 using io::text::SphereRepository;
-using voronoi::spherical::CapacityConstrainedParameters;
+using voronoi::CapacityConstrainedParameters;
 using voronoi::spherical::Factory;
 using voronoi::spherical::Sphere;
 using voronoi::spherical::Callback;
