@@ -16,7 +16,7 @@
 using namespace globe;
 using fields::spherical::PiecewisePolynomialField;
 using fields::spherical::PolynomialField;
-using fields::spherical::RegionIntegrals;
+using fields::RegionIntegrals;
 using geometry::spherical::TriangleMesh;
 using voronoi::spherical::RandomBuilder;
 using voronoi::spherical::Sphere;

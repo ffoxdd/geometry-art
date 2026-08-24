@@ -69,7 +69,7 @@ struct Fixture {
     [[nodiscard]] CapacityConstrainedHessian hessian(double penalty) const {
         return CapacityConstrainedHessian(
             CvtHessian<PolynomialField>(field).assemble(*sphere).template through_manifold<Normalization>(points, site_gradients),
-            CapacityJacobian(state, points),
+            CapacityJacobian(state),
             points,
             penalty
         );

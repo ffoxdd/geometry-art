@@ -60,7 +60,7 @@ class CapacityHessian {
 
     [[nodiscard]] EdgeContribution edge_contribution(
         const CellEdgeInfo& edge,
-        const fields::RegionIntegrals& integrals,
+        const EdgeState& edge_state,
         size_t own_index,
         const std::vector<Vector3>& sites
     ) const;
@@ -121,7 +121,7 @@ HessianBlocks CapacityHessian<FieldType>::assemble(
 
         contributions[slot] = edge_contribution(
             cell_edges[k][position],
-            state.edges[k][position].integrals,
+            state.edges[k][position],
             k,
             sites
         );
@@ -182,7 +182,7 @@ HessianBlocks CapacityHessian<FieldType>::assemble(
 template<fields::spherical::Field FieldType>
 typename CapacityHessian<FieldType>::EdgeContribution CapacityHessian<FieldType>::edge_contribution(
     const CellEdgeInfo& edge,
-    const fields::RegionIntegrals& integrals,
+    const EdgeState& edge_state,
     size_t own_index,
     const std::vector<Vector3>& sites
 ) const {
@@ -203,6 +203,7 @@ typename CapacityHessian<FieldType>::EdgeContribution CapacityHessian<FieldType>
 
     Vector3 normal = difference / separation;
     Matrix3 normal_cross = cross_matrix(normal);
+    Vector3 first_moment = edge_state.moment_about_own + own * edge_state.mass;
 
     // The bisector rotates with the minimal angular velocity taking its
     // normal along, so a site motion turns into `omega = normal x (u_own -
@@ -210,14 +211,14 @@ typename CapacityHessian<FieldType>::EdgeContribution CapacityHessian<FieldType>
     // into curvature in the site motions.
     Matrix3 rotation_rows = normal_cross / separation;
 
-    Matrix3 swept = rotation_curvature(_field.gradient_second_moments(edge.arc), integrals.first_moment) *
+    Matrix3 swept = rotation_curvature(_field.gradient_second_moments(edge.arc), first_moment) *
         rotation_rows / separation;
 
-    Matrix3 metric = integrals.first_moment * normal.transpose() / (separation * separation);
+    Matrix3 metric = first_moment * normal.transpose() / (separation * separation);
 
     contribution.blocks[0] = swept - metric;
     contribution.blocks[1] = -contribution.blocks[0];
-    contribution.gauge = integrals.mass / separation;
+    contribution.gauge = edge_state.mass / separation;
 
     add_endpoint(
         contribution,

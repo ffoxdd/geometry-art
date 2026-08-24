@@ -71,7 +71,9 @@ class CapacityConstrainedLagrangian {
     [[nodiscard]] CellBuild build_cell(
         const std::vector<CellEdgeInfo>& cell_edges,
         const std::vector<size_t>& slots,
-        const std::vector<Moments>& shared_moments
+        const std::vector<Moments>& shared_moments,
+        const std::vector<Vector3>& sites,
+        size_t own_index
     ) const;
 
     [[nodiscard]] std::vector<Vector3> site_gradients(
@@ -123,12 +125,19 @@ DiagramState CapacityConstrainedLagrangian<FieldType>::sphere_state(const Sphere
 
     EdgeSlots slots = EdgeSlots::build(cell_edges);
     std::vector<Moments> moments = shared_arc_moments(cell_edges, slots);
+
+    std::vector<Vector3> sites(count);
+
+    for (size_t k = 0; k < count; ++k) {
+        sites[k] = to_vector3(sphere.site(k));
+    }
+
     DiagramState state;
     state.cells.resize(count);
     state.edges.resize(count);
 
     std_ext::parallel_for(count, [&](size_t k) {
-        CellBuild built = build_cell(cell_edges[k], slots.slots_by_cell[k], moments);
+        CellBuild built = build_cell(cell_edges[k], slots.slots_by_cell[k], moments, sites, k);
         state.cells[k] = built.cell;
         state.edges[k] = std::move(built.edges);
     });
@@ -157,7 +166,9 @@ typename CapacityConstrainedLagrangian<FieldType>::CellBuild
 CapacityConstrainedLagrangian<FieldType>::build_cell(
     const std::vector<CellEdgeInfo>& cell_edges,
     const std::vector<size_t>& slots,
-    const std::vector<Moments>& shared_moments
+    const std::vector<Moments>& shared_moments,
+    const std::vector<Vector3>& sites,
+    size_t own_index
 ) const {
     std::vector<Arc> arcs;
     std::vector<Moments> arc_moments;
@@ -165,18 +176,28 @@ CapacityConstrainedLagrangian<FieldType>::build_cell(
     arcs.reserve(cell_edges.size());
     arc_moments.reserve(cell_edges.size());
     built.edges.reserve(cell_edges.size());
+    const Vector3& own = sites[own_index];
 
     for (size_t position = 0; position < cell_edges.size(); ++position) {
         const CellEdgeInfo& edge = cell_edges[position];
         const Moments& moments = shared_moments[slots[position]];
+        const Vector3& neighbor = sites[edge.neighbor_index];
 
         arcs.push_back(edge.arc);
         arc_moments.push_back(moments);
-        built.edges.push_back(EdgeState{edge.neighbor_index, _field.integrals(edge.arc, moments)});
+        auto integrals = _field.integrals(edge.arc, moments);
+        built.edges.push_back(EdgeState{
+            edge.neighbor_index,
+            (neighbor - own).norm(),
+            integrals.mass,
+            integrals.first_moment - own * integrals.mass,
+            integrals.first_moment - neighbor * integrals.mass
+        });
     }
 
+    // On the unit sphere the squared-norm moment is the mass itself.
     auto integrals = _field.integrals(Polygon(arcs), arc_moments);
-    built.cell = CellState{integrals.mass, integrals.first_moment};
+    built.cell = CellState{integrals.mass, integrals.first_moment, integrals.mass};
 
     return built;
 }
@@ -210,7 +231,8 @@ LagrangianEvaluation CapacityConstrainedLagrangian<FieldType>::evaluate(
         Vector3 site = to_vector3(sphere.site(i));
         capacity_errors[i] = states[i].mass - _target_mass;
         weights[i] = multipliers[i] + penalty * capacity_errors[i];
-        cvt_energy += 2.0 * (states[i].mass - site.dot(states[i].first_moment));
+        cvt_energy += states[i].squared_norm_moment -
+            2.0 * site.dot(states[i].first_moment) + site.squaredNorm() * states[i].mass;
         value += multipliers[i] * capacity_errors[i] + 0.5 * penalty * capacity_errors[i] * capacity_errors[i];
     }
 
@@ -231,13 +253,7 @@ std::vector<Vector3> CapacityConstrainedLagrangian<FieldType>::site_gradients(
     const std::vector<double>& weights
 ) const {
     size_t count = sphere.size();
-    std::vector<Vector3> sites(count);
-
-    for (size_t k = 0; k < count; ++k) {
-        sites[k] = to_vector3(sphere.site(k));
-    }
-
-    std::vector<Vector3> gradients = CapacityJacobian(state, std::move(sites)).transpose_apply(weights);
+    std::vector<Vector3> gradients = CapacityJacobian(state).transpose_apply(weights);
 
     for (size_t k = 0; k < count; ++k) {
         gradients[k] -= 2.0 * state.cells[k].first_moment;

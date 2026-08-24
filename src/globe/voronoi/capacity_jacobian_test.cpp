@@ -72,8 +72,8 @@ std::vector<double> masses(const Sphere& sphere, const PolynomialField& field) {
     return result;
 }
 
-CapacityJacobian jacobian_for(const Sphere& sphere, const PolynomialField& field, const std::vector<Vector3>& points) {
-    return CapacityJacobian(lagrangian_for(sphere, field).sphere_state(sphere), points);
+CapacityJacobian jacobian_for(const Sphere& sphere, const PolynomialField& field) {
+    return CapacityJacobian(lagrangian_for(sphere, field).sphere_state(sphere));
 }
 
 Vector3 tangent_at(const Vector3& site, int axis) {
@@ -88,7 +88,7 @@ TEST(CapacityJacobianTest, ForwardAndTransposeAreAdjoint) {
     PolynomialField field = test_field();
     std::vector<Vector3> points = ambient_points(fibonacci_sites(14));
     auto sphere = build_sphere(points);
-    CapacityJacobian jacobian = jacobian_for(*sphere, field, points);
+    CapacityJacobian jacobian = jacobian_for(*sphere, field);
 
     std::vector<Vector3> directions(points.size());
     std::vector<double> values(points.size());
@@ -116,7 +116,7 @@ TEST(CapacityJacobianTest, ForwardRatesSumToZero) {
     PolynomialField field = test_field();
     std::vector<Vector3> points = ambient_points(fibonacci_sites(14));
     auto sphere = build_sphere(points);
-    CapacityJacobian jacobian = jacobian_for(*sphere, field, points);
+    CapacityJacobian jacobian = jacobian_for(*sphere, field);
 
     std::vector<Vector3> directions(points.size());
 
@@ -140,7 +140,7 @@ TEST(CapacityJacobianTest, EXPENSIVE_MatchesFiniteDifferencesOfTheCellMasses) {
     PolynomialField field = test_field();
     std::vector<Vector3> points = ambient_points(fibonacci_sites(14));
     auto sphere = build_sphere(points);
-    CapacityJacobian jacobian = jacobian_for(*sphere, field, points);
+    CapacityJacobian jacobian = jacobian_for(*sphere, field);
     double step = 1e-6;
 
     for (size_t column = 0; column < points.size(); ++column) {

@@ -306,7 +306,7 @@ typename CapacityConstrainedOptimizer<FieldType>::CurvatureOperator CapacityCons
 
     CapacityConstrainedHessian hessian(
         blocks.template through_manifold<Normalization>(points, evaluation.site_gradients),
-        CapacityJacobian(state, points),
+        CapacityJacobian(state),
         points,
         _penalty
     );

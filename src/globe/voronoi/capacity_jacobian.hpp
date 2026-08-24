@@ -20,7 +20,7 @@ namespace globe::voronoi {
 // exactly the constraint part of the Lagrangian's site gradient.
 class CapacityJacobian {
  public:
-    CapacityJacobian(const DiagramState& state, std::vector<Vector3> sites);
+    explicit CapacityJacobian(const DiagramState& state);
 
     [[nodiscard]] std::vector<double> apply(const std::vector<Vector3>& directions) const;
     [[nodiscard]] std::vector<Vector3> transpose_apply(const std::vector<double>& values) const;
@@ -33,26 +33,28 @@ class CapacityJacobian {
     };
 
     std::vector<std::vector<EdgeGradient>> _edges;
-
-    [[nodiscard]] static Vector3 sweep_rate(
-        const Vector3& site,
-        const Vector3& neighbor,
-        const fields::RegionIntegrals& integrals
-    );
 };
 
-inline CapacityJacobian::CapacityJacobian(const DiagramState& state, std::vector<Vector3> sites) {
+// A displacement of a site moves the shared bisector outward at a normal
+// speed of (x - site) . displacement / separation, the same expression on
+// the sphere and on any flat domain. The state stores exactly the moments
+// about each site, so no site coordinate enters here.
+inline CapacityJacobian::CapacityJacobian(const DiagramState& state) {
     _edges.resize(state.edges.size());
 
     for (size_t k = 0; k < state.edges.size(); ++k) {
         _edges[k].reserve(state.edges[k].size());
 
         for (const EdgeState& edge : state.edges[k]) {
-            const Vector3& neighbor = sites[edge.neighbor_index];
+            if (edge.separation < GEOMETRIC_EPSILON) {
+                _edges[k].push_back(EdgeGradient{edge.neighbor_index, Vector3::Zero(), Vector3::Zero()});
+                continue;
+            }
+
             _edges[k].push_back(EdgeGradient{
                 edge.neighbor_index,
-                sweep_rate(sites[k], neighbor, edge.integrals),
-                sweep_rate(neighbor, sites[k], edge.integrals)
+                edge.moment_about_own / edge.separation,
+                edge.moment_about_neighbor / edge.separation
             });
         }
     }
@@ -80,24 +82,6 @@ inline std::vector<Vector3> CapacityJacobian::transpose_apply(const std::vector<
     }
 
     return gradients;
-}
-
-// A displacement of the site moves the shared bisector outward at a normal
-// speed of (x - site) . displacement / separation, the same expression on
-// the sphere and on any flat domain, so the rate is the boundary's first
-// moment taken about the site.
-inline Vector3 CapacityJacobian::sweep_rate(
-    const Vector3& site,
-    const Vector3& neighbor,
-    const fields::RegionIntegrals& integrals
-) {
-    double separation = (neighbor - site).norm();
-
-    if (separation < GEOMETRIC_EPSILON) {
-        return Vector3::Zero();
-    }
-
-    return (integrals.first_moment - site * integrals.mass) / separation;
 }
 
 } // namespace globe::voronoi

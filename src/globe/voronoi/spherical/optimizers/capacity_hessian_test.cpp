@@ -88,7 +88,7 @@ std::vector<Vector3> weighted_capacity_gradient(
         normalized[k] = points[k].normalized();
     }
 
-    return tangential(CapacityJacobian(state, normalized).transpose_apply(weights), points);
+    return tangential(CapacityJacobian(state).transpose_apply(weights), points);
 }
 
 template<fields::spherical::Field FieldType>
@@ -99,7 +99,7 @@ void expect_matches_finite_differences(const FieldType& field, size_t site_count
     auto sphere = build_sphere(points);
     CapacityConstrainedLagrangian<FieldType> lagrangian(field, 0.0);
     DiagramState state = lagrangian.sphere_state(*sphere);
-    std::vector<Vector3> site_gradients = CapacityJacobian(state, points).transpose_apply(weights);
+    std::vector<Vector3> site_gradients = CapacityJacobian(state).transpose_apply(weights);
 
     HessianBlocks blocks = CapacityHessian<FieldType>(field)
         .assemble(*sphere, state, points, weights)
@@ -181,7 +181,7 @@ TEST(CapacityHessianTest, IsSymmetricOnTangentDirections) {
     auto sphere = build_sphere(points);
     CapacityConstrainedLagrangian<PolynomialField> lagrangian(field, 0.0);
     DiagramState state = lagrangian.sphere_state(*sphere);
-    std::vector<Vector3> site_gradients = CapacityJacobian(state, points).transpose_apply(weights);
+    std::vector<Vector3> site_gradients = CapacityJacobian(state).transpose_apply(weights);
 
     HessianBlocks blocks = CapacityHessian<PolynomialField>(field)
         .assemble(*sphere, state, points, weights)
