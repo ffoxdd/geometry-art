@@ -1,7 +1,9 @@
+#include "globe/voronoi/flat/factories/factory.hpp"
 #include "globe/voronoi/spherical/factories/factory.hpp"
 #include "globe/voronoi/spherical/core/callback.hpp"
 #include "globe/io/qt/application.hpp"
 #include "globe/io/qt/voronoi_sphere_drawer.hpp"
+#include "globe/io/snapshot/flat_svg_writer.hpp"
 #include "globe/io/snapshot/json_writer.hpp"
 #include "globe/io/snapshot/svg_writer.hpp"
 #include "globe/io/text/sphere_repository.hpp"
@@ -28,6 +30,9 @@ using voronoi::spherical::Callback;
 using voronoi::spherical::noop_callback;
 
 struct Config {
+    std::string geometry = "sphere";
+    double width = 2.0;
+    double height = 1.0;
     int points_count;
     std::string density_field;
     bool perform_render;
@@ -51,8 +56,14 @@ struct Config {
 Config parse_arguments(int argc, char *argv[]);
 void write_snapshot(const globe::io::snapshot::Snapshot& snapshot, const std::string& path);
 
+int run_flat(const Config& config);
+
 int main(int argc, char *argv[]) {
     Config config = parse_arguments(argc, argv);
+
+    if (config.geometry != "sphere") {
+        return run_flat(config);
+    }
 
     std::cout <<
         "Configuration:" << std::endl <<
@@ -167,9 +178,58 @@ void write_snapshot(const globe::io::snapshot::Snapshot& snapshot, const std::st
 
     {
         std::ofstream drawing(path + ".svg.tmp");
-        globe::io::snapshot::SvgWriter().write(snapshot, drawing);
+
+        if (snapshot.geometry == "sphere") {
+            globe::io::snapshot::SvgWriter().write(snapshot, drawing);
+        } else {
+            globe::io::snapshot::FlatSvgWriter().write(snapshot, drawing);
+        }
     }
     std::filesystem::rename(path + ".svg.tmp", path + ".svg");
+}
+
+// The flat pipeline: same options, a rectangle of periods instead of a
+// sphere, and the frame cut from the torus at render time.
+int run_flat(const Config& config) {
+    std::cout <<
+        "Configuration:" << std::endl <<
+        "  Geometry: " << config.geometry << " (" << config.width << " x " << config.height << ")" << std::endl <<
+        "  Points: " << config.points_count << std::endl <<
+        "  Density: " << config.density_field << std::endl <<
+        "  Lloyd passes: " << config.lloyd_passes << std::endl <<
+        "  Capacity tolerance: " << config.capacity_tolerance << std::endl <<
+        "  Seed: " << (config.seed.has_value() ? std::to_string(*config.seed) : "random") << std::endl <<
+        std::endl;
+
+    globe::voronoi::CapacityConstrainedParameters optimizer_parameters;
+    optimizer_parameters.max_outer_iterations = static_cast<size_t>(config.max_outer_iterations);
+    optimizer_parameters.max_inner_iterations = static_cast<size_t>(config.max_inner_iterations);
+    optimizer_parameters.relative_capacity_tolerance = config.capacity_tolerance;
+    optimizer_parameters.inner_solver = "newton";
+
+    globe::voronoi::flat::Factory factory(
+        config.points_count,
+        config.density_field,
+        static_cast<size_t>(config.lloyd_passes),
+        optimizer_parameters,
+        config.seed,
+        config.width,
+        config.height,
+        config.image_path,
+        config.geometry,
+        globe::voronoi::flat::noop_callback(),
+        [&](const globe::io::snapshot::Snapshot& snapshot) { write_snapshot(snapshot, config.snapshot_path); },
+        std::chrono::milliseconds(static_cast<long long>(config.snapshot_interval * 1000.0))
+    );
+
+    factory.build();
+
+    if (!config.snapshot_path.empty()) {
+        write_snapshot(factory.snapshot(), config.snapshot_path);
+        std::cout << "Snapshot: " << config.snapshot_path << ".json and " << config.snapshot_path << ".svg" << std::endl;
+    }
+
+    return 0;
 }
 
 Config parse_arguments(int argc, char *argv[]) {
@@ -185,6 +245,21 @@ Config parse_arguments(int argc, char *argv[]) {
     app.add_option("--points,-p", config.points_count)
         ->description("Number of points to generate")
         ->default_val(10);
+
+    app.add_option("--geometry,-g", config.geometry)
+        ->description("Domain to tessellate: the sphere, or a flat torus a cylinder frame is cut from")
+        ->check(CLI::IsMember({"sphere", "torus", "cylinder"}))
+        ->default_val("sphere");
+
+    app.add_option("--width", config.width)
+        ->description("Circumference of the flat domain")
+        ->default_val(2.0)
+        ->check(CLI::PositiveNumber);
+
+    app.add_option("--height", config.height)
+        ->description("Height of the flat domain")
+        ->default_val(1.0)
+        ->check(CLI::PositiveNumber);
 
     app.add_option("--density-field,-f", config.density_field)
         ->description("Density field type")

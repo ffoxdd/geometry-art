@@ -1,0 +1,53 @@
+#ifndef GLOBEART_SRC_GLOBE_IO_SNAPSHOT_FLAT_CAPTURE_HPP_
+#define GLOBEART_SRC_GLOBE_IO_SNAPSHOT_FLAT_CAPTURE_HPP_
+
+#include "snapshot.hpp"
+#include "../../fields/flat/field.hpp"
+#include "../../voronoi/flat/core/torus.hpp"
+#include <cstddef>
+#include <string>
+
+namespace globe::io::snapshot {
+
+// The flat tessellation as the same plain data the sphere produces. Cells
+// are reported in their own charts, so a cell may protrude past the
+// rectangle; the renderer wraps or crops as it pleases. The frame size
+// travels in the width and height fields.
+template<fields::flat::Field FieldType>
+[[nodiscard]] Snapshot capture_flat(
+    const voronoi::flat::Torus& torus,
+    const FieldType& field,
+    std::string geometry = "torus"
+) {
+    Snapshot snapshot;
+    snapshot.geometry = std::move(geometry);
+    snapshot.width = torus.width();
+    snapshot.height = torus.height();
+    snapshot.total_mass = field.total_mass();
+    snapshot.cells.reserve(torus.size());
+
+    for (size_t index = 0; index < torus.size(); ++index) {
+        auto cell = torus.cell(index);
+        Snapshot::Cell entry;
+        entry.site_index = index;
+        entry.site = torus.site_vector(index);
+        entry.mass = field.integrals(cell).mass;
+        entry.area = cell.area();
+
+        for (const Vector2& vertex : cell.vertices()) {
+            entry.boundary.emplace_back(vertex.x(), vertex.y(), 0.0);
+        }
+
+        for (const auto& edge : torus.cell_edges(index)) {
+            entry.neighbors.push_back(edge.neighbor_index);
+        }
+
+        snapshot.cells.push_back(std::move(entry));
+    }
+
+    return snapshot;
+}
+
+} // namespace globe::io::snapshot
+
+#endif //GLOBEART_SRC_GLOBE_IO_SNAPSHOT_FLAT_CAPTURE_HPP_

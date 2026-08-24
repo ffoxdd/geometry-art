@@ -28,6 +28,11 @@ struct Snapshot {
     };
 
     std::string geometry;
+
+    // The rectangle of periods, for flat geometries; unused on the sphere.
+    double width = 0.0;
+    double height = 0.0;
+
     std::vector<Cell> cells;
     double total_mass = 0.0;
 

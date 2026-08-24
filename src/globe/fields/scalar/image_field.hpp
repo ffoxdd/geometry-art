@@ -33,6 +33,10 @@ class ImageField {
 
     [[nodiscard]] double value(const VectorS2& point) const;
 
+    // The density at a fraction of the picture: u runs across and wraps, v
+    // runs down from the top and clamps.
+    [[nodiscard]] double value_at(double u, double v) const;
+
     [[nodiscard]] size_t width() const { return _width; }
     [[nodiscard]] size_t height() const { return _height; }
 
@@ -94,8 +98,12 @@ inline double ImageField::value(const VectorS2& point) const {
     double longitude = std::atan2(point.y(), point.x());
     double latitude = std::asin(std::clamp(point.z(), -1.0, 1.0));
 
-    double column = (longitude + M_PI) / (2.0 * M_PI) * static_cast<double>(_width) - 0.5;
-    double row = (M_PI_2 - latitude) / M_PI * static_cast<double>(_height) - 0.5;
+    return value_at((longitude + M_PI) / (2.0 * M_PI), (M_PI_2 - latitude) / M_PI);
+}
+
+inline double ImageField::value_at(double u, double v) const {
+    double column = u * static_cast<double>(_width) - 0.5;
+    double row = v * static_cast<double>(_height) - 0.5;
 
     long row_low = static_cast<long>(std::floor(row));
     long column_low = static_cast<long>(std::floor(column));
