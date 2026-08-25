@@ -3,6 +3,7 @@
 
 #include "../../types.hpp"
 #include "../../fields/spherical/field.hpp"
+#include "../../std_ext/parallel_for.hpp"
 #include "../../voronoi/spherical/core/diagram.hpp"
 #include <cstddef>
 #include <string>
@@ -73,11 +74,11 @@ Snapshot capture(const DiagramType& diagram, const FieldType& field) {
     Snapshot snapshot;
     snapshot.geometry = "sphere";
     snapshot.total_mass = field.total_mass();
-    snapshot.cells.reserve(diagram.size());
+    snapshot.cells.resize(diagram.size());
 
-    for (size_t index = 0; index < diagram.size(); ++index) {
+    std_ext::parallel_for(diagram.size(), [&](size_t index) {
         Polygon cell = diagram.cell(index);
-        Snapshot::Cell entry;
+        Snapshot::Cell& entry = snapshot.cells[index];
         entry.site_index = index;
         entry.site = to_vector3(diagram.site(index));
         entry.mass = field.integrals(cell).mass;
@@ -90,9 +91,7 @@ Snapshot capture(const DiagramType& diagram, const FieldType& field) {
         for (const CellEdgeInfo& edge : diagram.cell_edges(index)) {
             entry.neighbors.push_back(edge.neighbor_index);
         }
-
-        snapshot.cells.push_back(std::move(entry));
-    }
+    });
 
     return snapshot;
 }

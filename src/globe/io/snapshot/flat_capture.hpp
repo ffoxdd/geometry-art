@@ -3,6 +3,7 @@
 
 #include "snapshot.hpp"
 #include "../../fields/flat/field.hpp"
+#include "../../std_ext/parallel_for.hpp"
 #include "../../voronoi/flat/core/torus.hpp"
 #include <cstddef>
 #include <string>
@@ -24,11 +25,11 @@ template<fields::flat::Field FieldType>
     snapshot.width = torus.width();
     snapshot.height = torus.height();
     snapshot.total_mass = field.total_mass();
-    snapshot.cells.reserve(torus.size());
+    snapshot.cells.resize(torus.size());
 
-    for (size_t index = 0; index < torus.size(); ++index) {
+    std_ext::parallel_for(torus.size(), [&](size_t index) {
         auto cell = torus.cell(index);
-        Snapshot::Cell entry;
+        Snapshot::Cell& entry = snapshot.cells[index];
         entry.site_index = index;
         entry.site = torus.site_vector(index);
         entry.mass = field.integrals(cell).mass;
@@ -41,9 +42,7 @@ template<fields::flat::Field FieldType>
         for (const auto& edge : torus.cell_edges(index)) {
             entry.neighbors.push_back(edge.neighbor_index);
         }
-
-        snapshot.cells.push_back(std::move(entry));
-    }
+    });
 
     return snapshot;
 }

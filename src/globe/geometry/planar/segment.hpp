@@ -3,6 +3,7 @@
 
 #include "../../types.hpp"
 #include "../../math/binomials.hpp"
+#include "../../math/powers.hpp"
 #include "../../math/polynomial/moments.hpp"
 #include "../../math/polynomial/multi_index.hpp"
 #include <cmath>
@@ -12,6 +13,7 @@ namespace globe::geometry::planar {
 
 using globe::math::polynomial::Moments;
 using globe::math::polynomial::MultiIndex;
+using globe::math::powers;
 
 // A straight edge in the plane. Moments are reported in the same
 // three-index table the spherical types use, with the third exponent left at
@@ -72,9 +74,14 @@ inline Moments Segment::moments(int max_degree) const {
 // every monomial into a sum of powers of t, which integrate to 1 / (i + j + 1)
 // over the unit parameter interval.
 inline Moments Segment::parametric_moments(int max_degree) const {
-    std::vector<std::vector<double>> binomial = globe::math::binomials(max_degree);
+    const std::vector<std::vector<double>>& binomial = globe::math::binomials(max_degree);
     Vector2 step = direction();
     Moments result(max_degree);
+
+    std::vector<double> source_x = powers(_source.x(), max_degree);
+    std::vector<double> source_y = powers(_source.y(), max_degree);
+    std::vector<double> step_x = powers(step.x(), max_degree);
+    std::vector<double> step_y = powers(step.y(), max_degree);
 
     for (const MultiIndex& index : MultiIndex::all_up_to(max_degree)) {
         if (index.z != 0) {
@@ -86,8 +93,8 @@ inline Moments Segment::parametric_moments(int max_degree) const {
         for (int i = 0; i <= index.x; ++i) {
             for (int j = 0; j <= index.y; ++j) {
                 total +=
-                    binomial[index.x][i] * std::pow(_source.x(), index.x - i) * std::pow(step.x(), i) *
-                    binomial[index.y][j] * std::pow(_source.y(), index.y - j) * std::pow(step.y(), j) /
+                    binomial[index.x][i] * source_x[index.x - i] * step_x[i] *
+                    binomial[index.y][j] * source_y[index.y - j] * step_y[j] /
                     static_cast<double>(i + j + 1);
             }
         }

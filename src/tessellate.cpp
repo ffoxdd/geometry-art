@@ -296,7 +296,7 @@ int run_flat(const Config& config, int argc, char *argv[]) {
 }
 
 Config parse_arguments(int argc, char *argv[]) {
-    CLI::App app{"Globe Art Generator"};
+    CLI::App app{"Capacity-constrained tessellation on a sphere, torus, or cylinder"};
 
     Config config;
     app.callback([&config]() {

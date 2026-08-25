@@ -4,9 +4,12 @@
 #include "optimizer_parameters.hpp"
 #include "trust_region_step.hpp"
 #include "../types.hpp"
+#include <chrono>
 #include <cmath>
 #include <concepts>
 #include <cstddef>
+#include <iomanip>
+#include <iostream>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -30,6 +33,11 @@ concept NewtonModel = requires(T& model, const std::vector<Vector3>& step, typen
     model.accept(std::move(trial));
 };
 
+// A long inner solve reports nothing until its outer iteration ends, which
+// at large site counts is many minutes of silence, so the descent prints on
+// a wall-clock cadence. A solve that finishes sooner stays silent.
+constexpr std::chrono::seconds NEWTON_PROGRESS_INTERVAL{5};
+
 // One trust-region Newton descent, shared by every geometry: the loop owns
 // the radius policy and the accept/reject protocol, the model owns all the
 // geometry. A rejected step leaves the iterate where it was, so the
@@ -44,6 +52,7 @@ size_t newton_minimize(ModelType& model, const NewtonParameters& parameters, siz
     double radius = parameters.initial_trust_radius;
     size_t iterations = 0;
     bool curvature_stale = true;
+    auto last_report = std::chrono::steady_clock::now();
 
     while (iterations < max_iterations) {
         std::vector<Vector3> gradient = model.gradient();
@@ -55,6 +64,18 @@ size_t newton_minimize(ModelType& model, const NewtonParameters& parameters, siz
 
         if (std::sqrt(gradient_norm) <= parameters.gradient_tolerance) {
             break;
+        }
+
+        auto now = std::chrono::steady_clock::now();
+
+        if (now - last_report >= NEWTON_PROGRESS_INTERVAL) {
+            last_report = now;
+
+            std::cout << "    " << std::setw(6) << std::left << "newton" << std::right <<
+                std::setw(4) << iterations << ": value " <<
+                std::scientific << std::setprecision(6) << model.value() <<
+                ", gradient " << std::setprecision(3) << std::sqrt(gradient_norm) <<
+                std::defaultfloat << std::endl;
         }
 
         if (curvature_stale) {

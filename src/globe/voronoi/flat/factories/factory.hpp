@@ -197,6 +197,9 @@ Callback Factory::snapshotting_callback(const FieldType& field) const {
         return _callback;
     }
 
+    // The clock is stamped when a capture finishes rather than when it starts,
+    // so a capture that costs more than the interval leaves the solver the
+    // interval to run in instead of repeating back to back.
     auto last = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
 
     return [this, &field, last](const Torus& torus) {
@@ -207,8 +210,8 @@ Callback Factory::snapshotting_callback(const FieldType& field) const {
             return;
         }
 
-        *last = now;
         _snapshot_callback(io::snapshot::capture_flat(torus, field, _geometry_name));
+        *last = std::chrono::steady_clock::now();
     };
 }
 
