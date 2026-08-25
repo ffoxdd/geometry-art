@@ -49,15 +49,15 @@ class TorusRepository {
             throw std::runtime_error("Missing periods header in: " + path);
         }
 
-        auto torus = std::make_unique<Torus>(width, height);
+        std::vector<Vector2> sites;
         double x = 0.0;
         double y = 0.0;
 
         while (file >> x >> y) {
-            torus->insert(Vector2(x, y));
+            sites.emplace_back(x, y);
         }
 
-        return torus;
+        return std::make_unique<Torus>(width, height, std::move(sites));
     }
 };
 

@@ -13,13 +13,8 @@ using globe::testing::flat_scatter;
 using globe::testing::scattered_torus;
 using globe::testing::torus_of;
 
-namespace {
-
-// Low-discrepancy sites covering the rectangle, so no cell is degenerate.
-} // namespace
-
 TEST(TorusTest, CanonicalWrapsIntoTheRectangle) {
-    Torus torus(2.0, 1.0);
+    Torus torus(2.0, 1.0, {});
 
     EXPECT_NEAR(torus.canonical(Vector2(2.5, -0.25)).x(), 0.5, 1e-12);
     EXPECT_NEAR(torus.canonical(Vector2(2.5, -0.25)).y(), 0.75, 1e-12);
@@ -30,13 +25,15 @@ TEST(TorusTest, CanonicalWrapsIntoTheRectangle) {
 // A regular grid of sites tessellates the torus into identical rectangles,
 // the one case where every cell is known in closed form.
 TEST(TorusTest, GridSitesGiveRectangularCellsOfEqualArea) {
-    Torus torus(2.0, 1.0);
+    std::vector<Vector2> sites;
 
     for (int row = 0; row < 2; ++row) {
         for (int column = 0; column < 4; ++column) {
-            torus.insert(Vector2(0.25 + 0.5 * column, 0.25 + 0.5 * row));
+            sites.emplace_back(0.25 + 0.5 * column, 0.25 + 0.5 * row);
         }
     }
+
+    Torus torus(2.0, 1.0, std::move(sites));
 
     for (size_t index = 0; index < torus.size(); ++index) {
         EXPECT_NEAR(torus.cell(index).area(), 0.25, 1e-9);
@@ -112,9 +109,7 @@ TEST(TorusTest, BoundariesAreEquidistantFromBothSites) {
 // it must appear in the edge list -- twice, once per direction, so the two
 // cuts' sweep contributions cancel exactly.
 TEST(TorusTest, ACellCanBorderItselfAcrossTheSeam) {
-    Torus torus(1.0, 1.0);
-    torus.insert(Vector2(0.25, 0.5));
-    torus.insert(Vector2(0.75, 0.5));
+    Torus torus(1.0, 1.0, {Vector2(0.25, 0.5), Vector2(0.75, 0.5)});
 
     EXPECT_NEAR(torus.cell(0).area(), 0.5, 1e-9);
     EXPECT_NEAR(torus.cell(1).area(), 0.5, 1e-9);
@@ -146,4 +141,24 @@ TEST(TorusTest, RebuiltPreservesSitesUpToWrapping) {
     for (size_t index = 0; index < torus->size(); ++index) {
         EXPECT_NEAR((rebuilt->site(index) - torus->site(index)).norm(), 0.0, 1e-12);
     }
+}
+
+// The band of periodic images is laid at a guess from the mean cell width,
+// which a clustered scatter defeats: its cells span far more than that, so
+// the covering has to be measured and widened before the diagram is right.
+TEST(TorusTest, ClusteredSitesWidenTheBandUntilTheCellsStillPartition) {
+    std::vector<Vector2> sites;
+
+    for (const Vector2& site : flat_scatter(64, 1.0, 1.0)) {
+        sites.emplace_back(0.02 * site.x(), 0.02 * site.y());
+    }
+
+    auto torus = torus_of(sites, 1.0, 1.0);
+    double total = 0.0;
+
+    for (size_t index = 0; index < torus->size(); ++index) {
+        total += torus->cell(index).area();
+    }
+
+    EXPECT_NEAR(total, 1.0, 1e-9);
 }

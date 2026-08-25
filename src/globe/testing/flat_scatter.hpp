@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstddef>
 #include <memory>
+#include <utility>
 #include <vector>
 
 namespace globe::testing {
@@ -28,27 +29,15 @@ inline std::vector<Vector2> flat_scatter(size_t count, double width, double heig
 }
 
 inline std::unique_ptr<voronoi::flat::Torus> torus_of(
-    const std::vector<Vector2>& sites,
+    std::vector<Vector2> sites,
     double width,
     double height
 ) {
-    auto torus = std::make_unique<voronoi::flat::Torus>(width, height);
-
-    for (const Vector2& site : sites) {
-        torus->insert(site);
-    }
-
-    return torus;
+    return std::make_unique<voronoi::flat::Torus>(width, height, std::move(sites));
 }
 
 inline std::unique_ptr<voronoi::flat::Torus> scattered_torus(size_t count, double width, double height) {
-    auto torus = std::make_unique<voronoi::flat::Torus>(width, height);
-
-    for (const Vector2& site : flat_scatter(count, width, height)) {
-        torus->insert(site);
-    }
-
-    return torus;
+    return torus_of(flat_scatter(count, width, height), width, height);
 }
 
 } // namespace globe::testing

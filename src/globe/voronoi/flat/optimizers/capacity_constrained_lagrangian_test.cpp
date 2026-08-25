@@ -110,13 +110,15 @@ TEST(FlatLagrangianTest, EnergyOfAGridIsTheClosedFormValue) {
     // A 2x2 grid on the unit torus: each cell is a 0.5 square centered on
     // its site, whose integral of |x - s|^2 is (side^4)/6.
     ConstantField field(1.0, 1.0, 1.0);
-    Torus torus(1.0, 1.0);
+    std::vector<Vector2> sites;
 
     for (int row = 0; row < 2; ++row) {
         for (int column = 0; column < 2; ++column) {
-            torus.insert(Vector2(0.25 + 0.5 * column, 0.25 + 0.5 * row));
+            sites.emplace_back(0.25 + 0.5 * column, 0.25 + 0.5 * row);
         }
     }
+
+    Torus torus(1.0, 1.0, std::move(sites));
 
     CapacityConstrainedLagrangian<ConstantField> lagrangian(field, 0.25);
     LagrangianEvaluation evaluation = lagrangian.evaluate(torus, std::vector<double>(4, 0.0), 0.0);

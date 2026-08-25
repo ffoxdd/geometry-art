@@ -220,13 +220,14 @@ inline std::unique_ptr<Torus> Factory::initial_torus() const {
     std::uniform_real_distribution<double> across(0.0, _width);
     std::uniform_real_distribution<double> along(0.0, _height);
 
-    auto torus = std::make_unique<Torus>(_width, _height);
+    std::vector<Vector2> sites;
+    sites.reserve(static_cast<size_t>(_points_count));
 
     for (int k = 0; k < _points_count; ++k) {
-        torus->insert(Vector2(across(engine), along(engine)));
+        sites.emplace_back(across(engine), along(engine));
     }
 
-    return torus;
+    return std::make_unique<Torus>(_width, _height, std::move(sites));
 }
 
 template<fields::flat::Field FieldType>
