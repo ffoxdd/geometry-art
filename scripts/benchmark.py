@@ -76,7 +76,7 @@ def parse_arguments():
     parser.add_argument("--binary", default="./build-release/tessellate")
     parser.add_argument("--inner-solver", default="lbfgs")
     parser.add_argument("--warm-start", default="lloyd")
-    parser.add_argument("--output-dir", default="/tmp/globe-benchmark")
+    parser.add_argument("--output-dir", default="/tmp/geometry-art-benchmark")
     return parser.parse_args()
 
 

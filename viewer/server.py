@@ -388,7 +388,7 @@ def main():
 
     Handler.runs = Runs(arguments.binary.resolve(), arguments.runs.resolve())
     server = http.server.ThreadingHTTPServer(("127.0.0.1", arguments.port), Handler)
-    print(f"Globe Art studio at http://localhost:{arguments.port}/  (runs in {arguments.runs})")
+    print(f"Geometry Art studio at http://localhost:{arguments.port}/  (runs in {arguments.runs})")
 
     try:
         server.serve_forever()

@@ -1,19 +1,19 @@
-#include "globe/fields/spherical/piecewise_polynomial_field.hpp"
-#include "globe/fields/spherical/polynomial_field.hpp"
-#include "globe/generators/cartesian/random_point_generator.hpp"
-#include "globe/generators/spherical/random_point_generator.hpp"
-#include "globe/geometry/cartesian/bounding_box_sampler/uniform_bounding_box_sampler.hpp"
-#include "globe/geometry/spherical/triangle_mesh.hpp"
-#include "globe/math/interval_sampler/uniform_interval_sampler.hpp"
-#include "globe/testing/macros.hpp"
-#include "globe/voronoi/spherical/core/random_builder.hpp"
-#include "globe/voronoi/spherical/core/sphere.hpp"
+#include "geometry_art/fields/spherical/piecewise_polynomial_field.hpp"
+#include "geometry_art/fields/spherical/polynomial_field.hpp"
+#include "geometry_art/generators/cartesian/random_point_generator.hpp"
+#include "geometry_art/generators/spherical/random_point_generator.hpp"
+#include "geometry_art/geometry/cartesian/bounding_box_sampler/uniform_bounding_box_sampler.hpp"
+#include "geometry_art/geometry/spherical/triangle_mesh.hpp"
+#include "geometry_art/math/interval_sampler/uniform_interval_sampler.hpp"
+#include "geometry_art/testing/macros.hpp"
+#include "geometry_art/voronoi/spherical/core/random_builder.hpp"
+#include "geometry_art/voronoi/spherical/core/sphere.hpp"
 #include <gtest/gtest.h>
 #include <algorithm>
 #include <cmath>
 #include <memory>
 
-using namespace globe;
+using namespace geometry_art;
 using fields::spherical::PiecewisePolynomialField;
 using fields::spherical::PolynomialField;
 using fields::RegionIntegrals;

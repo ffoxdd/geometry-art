@@ -1,0 +1,66 @@
+#ifndef GEOMETRY_ART_IO_TEXT_TORUS_REPOSITORY_HPP_
+#define GEOMETRY_ART_IO_TEXT_TORUS_REPOSITORY_HPP_
+
+#include "../../types.hpp"
+#include "../../voronoi/flat/core/torus.hpp"
+#include <fstream>
+#include <iomanip>
+#include <memory>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+
+namespace geometry_art::io::text {
+
+using voronoi::flat::Torus;
+
+// Sites on a flat torus as text: the first line carries the periods, every
+// further line one canonical site.
+class TorusRepository {
+ public:
+    static void save(const Torus& torus, const std::string& path) {
+        std::ofstream file(path);
+
+        if (!file) {
+            throw std::runtime_error("Failed to open file for writing: " + path);
+        }
+
+        file << std::setprecision(17);
+        file << "periods " << torus.width() << " " << torus.height() << "\n";
+
+        for (size_t index = 0; index < torus.size(); ++index) {
+            Vector2 site = torus.site(index);
+            file << site.x() << " " << site.y() << "\n";
+        }
+    }
+
+    static std::unique_ptr<Torus> load(const std::string& path) {
+        std::ifstream file(path);
+
+        if (!file) {
+            throw std::runtime_error("Failed to open file for reading: " + path);
+        }
+
+        std::string header;
+        double width = 0.0;
+        double height = 0.0;
+
+        if (!(file >> header >> width >> height) || header != "periods") {
+            throw std::runtime_error("Missing periods header in: " + path);
+        }
+
+        std::vector<Vector2> sites;
+        double x = 0.0;
+        double y = 0.0;
+
+        while (file >> x >> y) {
+            sites.emplace_back(x, y);
+        }
+
+        return std::make_unique<Torus>(width, height, std::move(sites));
+    }
+};
+
+} // namespace geometry_art::io::text
+
+#endif //GEOMETRY_ART_IO_TEXT_TORUS_REPOSITORY_HPP_

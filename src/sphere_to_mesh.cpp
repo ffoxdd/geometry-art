@@ -1,13 +1,13 @@
-#include "globe/io/text/sphere_repository.hpp"
-#include "globe/io/mesh/exporter.hpp"
+#include "geometry_art/io/text/sphere_repository.hpp"
+#include "geometry_art/io/mesh/exporter.hpp"
 #include <CLI/CLI.hpp>
 #include <filesystem>
 #include <iostream>
 #include <string>
 
-using globe::io::text::SphereRepository;
-using globe::io::mesh::Exporter;
-using globe::io::mesh::Format;
+using geometry_art::io::text::SphereRepository;
+using geometry_art::io::mesh::Exporter;
+using geometry_art::io::mesh::Format;
 
 double parse_units(const std::string& units_str) {
     if (units_str == "mm" || units_str == "millimeters") {

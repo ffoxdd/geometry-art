@@ -1,14 +1,14 @@
-#include "globe/voronoi/flat/factories/factory.hpp"
-#include "globe/voronoi/spherical/factories/factory.hpp"
-#include "globe/voronoi/spherical/core/callback.hpp"
-#include "globe/io/qt/application.hpp"
-#include "globe/io/qt/flat_drawer.hpp"
-#include "globe/io/qt/voronoi_sphere_drawer.hpp"
-#include "globe/io/snapshot/flat_svg_writer.hpp"
-#include "globe/io/snapshot/json_writer.hpp"
-#include "globe/io/snapshot/svg_writer.hpp"
-#include "globe/io/text/sphere_repository.hpp"
-#include "globe/io/text/torus_repository.hpp"
+#include "geometry_art/voronoi/flat/factories/factory.hpp"
+#include "geometry_art/voronoi/spherical/factories/factory.hpp"
+#include "geometry_art/voronoi/spherical/core/callback.hpp"
+#include "geometry_art/io/qt/application.hpp"
+#include "geometry_art/io/qt/flat_drawer.hpp"
+#include "geometry_art/io/qt/voronoi_sphere_drawer.hpp"
+#include "geometry_art/io/snapshot/flat_svg_writer.hpp"
+#include "geometry_art/io/snapshot/json_writer.hpp"
+#include "geometry_art/io/snapshot/svg_writer.hpp"
+#include "geometry_art/io/text/sphere_repository.hpp"
+#include "geometry_art/io/text/torus_repository.hpp"
 #include <CLI/CLI.hpp>
 #include <chrono>
 #include <ctime>
@@ -21,7 +21,7 @@
 #include <sstream>
 #include <string>
 
-using namespace globe;
+using namespace geometry_art;
 using io::qt::Application;
 using io::qt::SphereDrawer;
 using io::text::SphereRepository;
@@ -56,7 +56,7 @@ struct Config {
 };
 
 Config parse_arguments(int argc, char *argv[]);
-void write_snapshot(const globe::io::snapshot::Snapshot& snapshot, const std::string& path);
+void write_snapshot(const geometry_art::io::snapshot::Snapshot& snapshot, const std::string& path);
 
 int run_flat(const Config& config, int argc, char *argv[]);
 
@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
             render_mode = io::qt::RenderMode::Minimal;
         }
 
-        drawer = std::make_unique<SphereDrawer>("Globe", render_mode);
+        drawer = std::make_unique<SphereDrawer>("Tessellate", render_mode);
         drawer->show();
         application->process_events();
 
@@ -132,7 +132,7 @@ int main(int argc, char *argv[]) {
         optimizer_parameters,
         config.seed,
         callback,
-        [&](const globe::io::snapshot::Snapshot& snapshot) { write_snapshot(snapshot, config.snapshot_path); },
+        [&](const geometry_art::io::snapshot::Snapshot& snapshot) { write_snapshot(snapshot, config.snapshot_path); },
         std::chrono::milliseconds(static_cast<long long>(config.snapshot_interval * 1000.0)),
         config.image_path,
         config.density_tolerance
@@ -168,13 +168,13 @@ int main(int argc, char *argv[]) {
 
 // Written beside the target and renamed into place, so a reader polling the
 // file never sees a partial one.
-void write_snapshot(const globe::io::snapshot::Snapshot& snapshot, const std::string& path) {
+void write_snapshot(const geometry_art::io::snapshot::Snapshot& snapshot, const std::string& path) {
     std::filesystem::path target(path);
     std::filesystem::create_directories(target.parent_path());
 
     {
         std::ofstream json(path + ".json.tmp");
-        globe::io::snapshot::JsonWriter().write(snapshot, json);
+        geometry_art::io::snapshot::JsonWriter().write(snapshot, json);
     }
     std::filesystem::rename(path + ".json.tmp", path + ".json");
 
@@ -182,9 +182,9 @@ void write_snapshot(const globe::io::snapshot::Snapshot& snapshot, const std::st
         std::ofstream drawing(path + ".svg.tmp");
 
         if (snapshot.geometry == "sphere") {
-            globe::io::snapshot::SvgWriter().write(snapshot, drawing);
+            geometry_art::io::snapshot::SvgWriter().write(snapshot, drawing);
         } else {
-            globe::io::snapshot::FlatSvgWriter().write(snapshot, drawing);
+            geometry_art::io::snapshot::FlatSvgWriter().write(snapshot, drawing);
         }
     }
     std::filesystem::rename(path + ".svg.tmp", path + ".svg");
@@ -206,8 +206,8 @@ int run_flat(const Config& config, int argc, char *argv[]) {
         std::endl;
 
     std::unique_ptr<Application> application;
-    std::unique_ptr<globe::io::qt::FlatDrawer> drawer;
-    globe::voronoi::flat::Callback callback = globe::voronoi::flat::noop_callback();
+    std::unique_ptr<geometry_art::io::qt::FlatDrawer> drawer;
+    geometry_art::voronoi::flat::Callback callback = geometry_art::voronoi::flat::noop_callback();
 
     if (config.perform_render) {
         application = std::make_unique<Application>(argc, argv);
@@ -219,7 +219,7 @@ int run_flat(const Config& config, int argc, char *argv[]) {
             render_mode = io::qt::RenderMode::Minimal;
         }
 
-        drawer = std::make_unique<globe::io::qt::FlatDrawer>(
+        drawer = std::make_unique<geometry_art::io::qt::FlatDrawer>(
             config.geometry == "cylinder" ? "Cylinder" : "Torus",
             render_mode,
             config.geometry == "cylinder" ? io::qt::FlatEmbedding::Cylinder : io::qt::FlatEmbedding::Torus
@@ -230,7 +230,7 @@ int run_flat(const Config& config, int argc, char *argv[]) {
         using namespace std::chrono_literals;
         auto last_render = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
 
-        callback = [&application, &drawer, last_render](const globe::voronoi::flat::Torus& torus) {
+        callback = [&application, &drawer, last_render](const geometry_art::voronoi::flat::Torus& torus) {
             application->process_events();
 
             auto now = std::chrono::steady_clock::now();
@@ -242,14 +242,14 @@ int run_flat(const Config& config, int argc, char *argv[]) {
         };
     }
 
-    globe::voronoi::CapacityConstrainedParameters optimizer_parameters;
+    geometry_art::voronoi::CapacityConstrainedParameters optimizer_parameters;
     optimizer_parameters.max_outer_iterations = static_cast<size_t>(config.max_outer_iterations);
     optimizer_parameters.max_inner_iterations = static_cast<size_t>(config.max_inner_iterations);
     optimizer_parameters.relative_capacity_tolerance = config.capacity_tolerance;
     optimizer_parameters.inner_solver = "newton";
     optimizer_parameters.newton.curvature = config.newton_curvature;
 
-    globe::voronoi::flat::Factory factory(
+    geometry_art::voronoi::flat::Factory factory(
         config.points_count,
         config.density_field,
         static_cast<size_t>(config.lloyd_passes),
@@ -262,7 +262,7 @@ int run_flat(const Config& config, int argc, char *argv[]) {
         config.image_path,
         config.geometry,
         callback,
-        [&](const globe::io::snapshot::Snapshot& snapshot) { write_snapshot(snapshot, config.snapshot_path); },
+        [&](const geometry_art::io::snapshot::Snapshot& snapshot) { write_snapshot(snapshot, config.snapshot_path); },
         std::chrono::milliseconds(static_cast<long long>(config.snapshot_interval * 1000.0)),
         config.density_tolerance
     );
@@ -284,7 +284,7 @@ int run_flat(const Config& config, int argc, char *argv[]) {
         std::put_time(std::localtime(&time), "%Y%m%d_%H%M%S") <<
         ".txt";
 
-    globe::io::text::TorusRepository::save(*torus, filename.str());
+    geometry_art::io::text::TorusRepository::save(*torus, filename.str());
     std::cout << "Saved: " << filename.str() << std::endl;
 
     if (config.perform_render) {

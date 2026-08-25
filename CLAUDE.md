@@ -13,7 +13,7 @@
 ### Expensive and Integration Tests
 Tests that are statistical, slow, or integration-focused should use the `EXPENSIVE_` prefix with environment variable gating:
 - Prefix expensive test names with `EXPENSIVE_`
-- Use `REQUIRE_EXPENSIVE()` macro at the start of the test (defined in `src/globe/testing/geometric_assertions.hpp`)
+- Use `REQUIRE_EXPENSIVE()` macro at the start of the test (defined in `src/geometry_art/testing/geometric_assertions.hpp`)
 - All tests are always compiled
 - Skipped by default (normal runs skip them)
 - Opt-in to run by setting environment variable: `EXPENSIVE=1`

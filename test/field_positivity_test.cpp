@@ -1,16 +1,16 @@
-#include "globe/fields/scalar/noise_field.hpp"
-#include "globe/fields/spherical/piecewise_polynomial_field.hpp"
-#include "globe/fields/spherical/polynomial_field_fitter.hpp"
-#include "globe/generators/spherical/fibonacci_point_generator.hpp"
-#include "globe/geometry/spherical/triangle_mesh.hpp"
-#include "globe/math/interval.hpp"
-#include "globe/testing/macros.hpp"
+#include "geometry_art/fields/scalar/noise_field.hpp"
+#include "geometry_art/fields/spherical/piecewise_polynomial_field.hpp"
+#include "geometry_art/fields/spherical/polynomial_field_fitter.hpp"
+#include "geometry_art/generators/spherical/fibonacci_point_generator.hpp"
+#include "geometry_art/geometry/spherical/triangle_mesh.hpp"
+#include "geometry_art/math/interval.hpp"
+#include "geometry_art/testing/macros.hpp"
 #include <gtest/gtest.h>
 #include <algorithm>
 #include <iostream>
 #include <vector>
 
-using namespace globe;
+using namespace geometry_art;
 using fields::scalar::NoiseField;
 using fields::spherical::PiecewisePolynomialField;
 using fields::spherical::PolynomialFieldFitter;

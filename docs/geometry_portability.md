@@ -22,7 +22,7 @@ written in a form that holds on the plane and the flat torus as well.
 
 **The optimizer stack.** The trust-region Newton descent, the
 augmented Lagrangian outer loop, `TrustRegionStep`, `CapacityJacobian`
-and the Hessian block structure exist once, in `globe::voronoi`, and
+and the Hessian block structure exist once, in `geometry_art::voronoi`, and
 drive both geometries through small model classes. The diagram state
 is stored in chart-invariant relative moments -- each bisector's
 moments about its two sites, with the separation -- so one bisector

@@ -1,9 +1,9 @@
 // The top of the pyramid: the pipeline as a whole, and then the programs as
 // programs. Nothing here reaches inside the solver -- these hold the
 // properties a finished tessellation must have however it was reached.
-#include "globe/io/snapshot/snapshot.hpp"
-#include "globe/testing/macros.hpp"
-#include "globe/voronoi/spherical/factories/factory.hpp"
+#include "geometry_art/io/snapshot/snapshot.hpp"
+#include "geometry_art/testing/macros.hpp"
+#include "geometry_art/voronoi/spherical/factories/factory.hpp"
 #include <gtest/gtest.h>
 #include <cmath>
 #include <cstdlib>
@@ -14,7 +14,7 @@
 #include <algorithm>
 #include <string>
 
-using namespace globe;
+using namespace geometry_art;
 using io::snapshot::Snapshot;
 using voronoi::CapacityConstrainedParameters;
 using voronoi::spherical::Factory;
@@ -25,7 +25,7 @@ namespace {
 constexpr unsigned int SEED = 7;
 
 std::filesystem::path scratch(const std::string& name) {
-    std::filesystem::path directory = std::filesystem::temp_directory_path() / "globe-pipeline-test";
+    std::filesystem::path directory = std::filesystem::temp_directory_path() / "geometry-art-pipeline-test";
     std::filesystem::create_directories(directory);
     return directory / name;
 }
@@ -53,7 +53,7 @@ int run(const std::string& command) {
 }
 
 std::string binary(const std::string& name) {
-    return std::string(GLOBE_BINARY_DIR) + "/" + name;
+    return std::string(GEOMETRY_ART_BINARY_DIR) + "/" + name;
 }
 
 } // namespace
@@ -120,7 +120,7 @@ TEST(PipelineTest, BothInnerSolversReachTheSameTessellationQuality) {
     EXPECT_EQ(lbfgs.cells.size(), newton.cells.size());
 }
 
-TEST(PipelineTest, EXPENSIVE_GenerateGlobeWritesAReadableSnapshot) {
+TEST(PipelineTest, EXPENSIVE_TessellateWritesAReadableSnapshot) {
     REQUIRE_EXPENSIVE();
 
     std::filesystem::path prefix = scratch("cli");

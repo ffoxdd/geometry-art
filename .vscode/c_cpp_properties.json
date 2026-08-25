@@ -5,8 +5,8 @@
       "name": "Mac",
       "includePath": [
         "${workspaceFolder}/src",
-        "${workspaceFolder}/src/globe",
-        "${workspaceFolder}/src/globe/**",
+        "${workspaceFolder}/src/geometry_art",
+        "${workspaceFolder}/src/geometry_art/**",
         "/opt/homebrew/include",
         "/opt/homebrew/opt/cgal/include",
         "/opt/homebrew/opt/qt@6/include",

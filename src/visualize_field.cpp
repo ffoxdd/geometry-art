@@ -1,9 +1,9 @@
-#include "globe/fields/spherical/polynomial_field.hpp"
-#include "globe/generators/spherical/fibonacci_point_generator.hpp"
-#include "globe/math/interval.hpp"
-#include "globe/cgal/types.hpp"
-#include "globe/io/qt/application.hpp"
-#include "globe/io/qt/viewer.hpp"
+#include "geometry_art/fields/spherical/polynomial_field.hpp"
+#include "geometry_art/generators/spherical/fibonacci_point_generator.hpp"
+#include "geometry_art/math/interval.hpp"
+#include "geometry_art/cgal/types.hpp"
+#include "geometry_art/io/qt/application.hpp"
+#include "geometry_art/io/qt/viewer.hpp"
 #include <CGAL/convex_hull_3.h>
 #include <CGAL/Surface_mesh.h>
 #include <cmath>
@@ -11,7 +11,7 @@
 #include <map>
 #include <random>
 
-using namespace globe;
+using namespace geometry_art;
 using fields::spherical::PolynomialField;
 using generators::spherical::FibonacciPointGenerator;
 using io::qt::Application;
