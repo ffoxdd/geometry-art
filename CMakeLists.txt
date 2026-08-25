@@ -31,9 +31,9 @@ target_link_libraries(globe_noise PUBLIC globe anl)
 
 # Executables
 
-add_executable(generate_globe src/generate_globe.cpp)
-target_link_libraries(generate_globe PRIVATE globe globe_noise CGAL::CGAL_Qt6 CLI11::CLI11)
-target_compile_definitions(generate_globe PRIVATE CGAL_USE_BASIC_VIEWER CGAL_USE_BASIC_VIEWER_QT QT_NO_KEYWORDS)
+add_executable(tessellate src/tessellate.cpp)
+target_link_libraries(tessellate PRIVATE globe globe_noise CGAL::CGAL_Qt6 CLI11::CLI11)
+target_compile_definitions(tessellate PRIVATE CGAL_USE_BASIC_VIEWER CGAL_USE_BASIC_VIEWER_QT QT_NO_KEYWORDS)
 
 add_executable(visualize_field src/visualize_field.cpp)
 target_link_libraries(visualize_field PRIVATE globe CGAL::CGAL_Qt6)

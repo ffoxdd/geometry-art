@@ -427,7 +427,7 @@ function jointPosition(point) {
 const query = new URLSearchParams(location.search);
 
 // The studio: present only when the page is served by viewer/server.py,
-// which runs generate_globe on request. A run's snapshot is rewritten while
+// which runs tessellate on request. A run's snapshot is rewritten while
 // it is in flight, so polling its version is enough to watch it evolve.
 const studio = {
   fields: ['geometry', 'width', 'height', 'points', 'density_field', 'seed', 'capacity_tolerance',

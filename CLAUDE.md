@@ -136,7 +136,7 @@ What belongs in integration tests:
 - End-to-end workflows with realistic data volumes
 
 ### Terminal Testing Flags
-The `generate_globe` executable supports command-line flags for terminal/AI-assisted testing:
+The `tessellate` executable supports command-line flags for terminal/AI-assisted testing:
 - `--points <N>` / `-p`: Number of sites (default: 10)
 - `--density-field <type>` / `-f`: 'constant', 'linear', 'quadratic', 'noise' (piecewise polynomial mesh), 'noise-smooth' (C1 spline projection), 'noise-fit' (global polynomial fit) or 'image' (with `--image <path>`, darker is denser) (default: quadratic)
 - `--render <bool>`: Set to `false` to run without Qt rendering
@@ -150,9 +150,9 @@ The `generate_globe` executable supports command-line flags for terminal/AI-assi
 - `--help`: Show usage information
 
 Examples:
-- Fast terminal test with constant density: `./generate_globe --render false -f constant -p 10`
-- Larger run with the quadratic field: `./generate_globe --render false -p 200`
-- Visual debugging with fewer points: `./generate_globe -p 10`
+- Fast terminal test with constant density: `./tessellate --render false -f constant -p 10`
+- Larger run with the quadratic field: `./tessellate --render false -p 200`
+- Visual debugging with fewer points: `./tessellate -p 10`
 
 ## CGAL Considerations
 

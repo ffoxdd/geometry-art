@@ -128,7 +128,7 @@ TEST(PipelineTest, EXPENSIVE_GenerateGlobeWritesAReadableSnapshot) {
     std::filesystem::remove(prefix.string() + ".svg");
 
     int status = run(
-        binary("generate_globe") + " --render false -f constant -p 24 --seed 7"
+        binary("tessellate") + " --render false -f constant -p 24 --seed 7"
         " --capacity-tolerance 1e-6"
         " --snapshot " + prefix.string() + " -o " + scratch("out").string()
     );
@@ -160,7 +160,7 @@ TEST(PipelineTest, EXPENSIVE_SphereToMeshWritesAWellFormedStl) {
     std::filesystem::remove_all(output);
 
     ASSERT_EQ(run(
-        binary("generate_globe") + " --render false -f constant -p 24 --seed 7"
+        binary("tessellate") + " --render false -f constant -p 24 --seed 7"
         " --capacity-tolerance 1e-6 -o " + output.string()
     ), 0);
 

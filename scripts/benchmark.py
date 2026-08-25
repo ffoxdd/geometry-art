@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Time generate_globe over a fixed set of configurations.
+"""Time tessellate over a fixed set of configurations.
 
 Iteration counts are reproducible because every run is seeded, so a
 change that claims to reduce work can be checked against a recorded
@@ -73,7 +73,7 @@ def run(arguments, field, sites):
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--binary", default="./build-release/generate_globe")
+    parser.add_argument("--binary", default="./build-release/tessellate")
     parser.add_argument("--inner-solver", default="lbfgs")
     parser.add_argument("--warm-start", default="lloyd")
     parser.add_argument("--output-dir", default="/tmp/globe-benchmark")

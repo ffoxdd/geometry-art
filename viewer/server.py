@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Serves the viewer and runs generate_globe on request.
+"""Serves the viewer and runs tessellate on request.
 
-    python3 viewer/server.py [--port 8731] [--binary build-release/generate_globe] [--runs runs]
+    python3 viewer/server.py [--port 8731] [--binary build-release/tessellate] [--runs runs]
 
 Standard library only. Runs are queued and executed one at a time, each in
 its own directory under --runs with the launch parameters, the solver log,
@@ -379,7 +379,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--port", type=int, default=8731)
-    parser.add_argument("--binary", type=Path, default=REPOSITORY / "build-release" / "generate_globe")
+    parser.add_argument("--binary", type=Path, default=REPOSITORY / "build-release" / "tessellate")
     parser.add_argument("--runs", type=Path, default=REPOSITORY / "runs")
     arguments = parser.parse_args()
 

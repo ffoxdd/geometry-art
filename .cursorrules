@@ -211,7 +211,7 @@ While isolated tests show CGAL's triangulation is deterministic, the rebuild app
 - Ensures consistent edge iteration order (relevant for floating-point summations)
 
 ### Terminal Testing Flags
-The `generate_globe` executable supports command-line flags for terminal/AI-assisted testing:
+The `tessellate` executable supports command-line flags for terminal/AI-assisted testing:
 - `--points <N>` / `-p`: Number of sites (default: 10)
 - `--density-field <type>` / `-f`: 'constant', 'linear', 'quadratic', 'noise' (piecewise polynomial mesh) or 'noise-fit' (global polynomial fit) (default: quadratic)
 - `--render <bool>`: Set to `false` to run without Qt rendering
@@ -221,6 +221,6 @@ The `generate_globe` executable supports command-line flags for terminal/AI-assi
 - `--help`: Show usage information
 
 Examples:
-- Fast terminal test with constant density: `./generate_globe --render false -f constant -p 10`
-- Larger run with the quadratic field: `./generate_globe --render false -p 200`
-- Visual debugging with fewer points: `./generate_globe -p 10`
+- Fast terminal test with constant density: `./tessellate --render false -f constant -p 10`
+- Larger run with the quadratic field: `./tessellate --render false -p 200`
+- Visual debugging with fewer points: `./tessellate -p 10`
