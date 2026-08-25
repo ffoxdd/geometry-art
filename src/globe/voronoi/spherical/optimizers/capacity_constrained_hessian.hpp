@@ -1,6 +1,7 @@
 #ifndef GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_CAPACITY_CONSTRAINED_HESSIAN_HPP_
 #define GLOBEART_SRC_GLOBE_VORONOI_SPHERICAL_OPTIMIZERS_CAPACITY_CONSTRAINED_HESSIAN_HPP_
 
+#include "../../block_preconditioner.hpp"
 #include "../../capacity_jacobian.hpp"
 #include "../../hessian_blocks.hpp"
 #include "../../../types.hpp"
@@ -29,13 +30,19 @@ class CapacityConstrainedHessian {
 
     [[nodiscard]] std::vector<Vector3> multiply(const std::vector<Vector3>& directions) const;
 
+    [[nodiscard]] std::vector<Vector3> precondition(const std::vector<Vector3>& residuals) const {
+        return _preconditioner.apply(residuals);
+    }
+
  private:
     HessianBlocks _energy_curvature;
     CapacityJacobian _jacobian;
     std::vector<Vector3> _sites;
     double _penalty;
+    BlockPreconditioner _preconditioner;
 
     [[nodiscard]] std::vector<Vector3> tangential(const std::vector<Vector3>& value) const;
+    [[nodiscard]] std::vector<Matrix3> diagonal_blocks() const;
 };
 
 inline CapacityConstrainedHessian::CapacityConstrainedHessian(
@@ -48,6 +55,7 @@ inline CapacityConstrainedHessian::CapacityConstrainedHessian(
     _jacobian(std::move(jacobian)),
     _sites(std::move(sites)),
     _penalty(penalty) {
+    _preconditioner = BlockPreconditioner(diagonal_blocks());
 }
 
 inline std::vector<Vector3> CapacityConstrainedHessian::multiply(const std::vector<Vector3>& directions) const {
@@ -73,6 +81,29 @@ inline std::vector<Vector3> CapacityConstrainedHessian::tangential(const std::ve
 
     for (size_t k = 0; k < value.size(); ++k) {
         result[k] = value[k] - value[k].dot(_sites[k]) * _sites[k];
+    }
+
+    return result;
+}
+
+// The penalty pulls the block diagonal apart as it grows, which is exactly
+// what the conjugate gradient struggles with, so the diagonal it is
+// preconditioned by carries the penalty's own share, projected onto the
+// tangent planes the descent moves in.
+inline std::vector<Matrix3> CapacityConstrainedHessian::diagonal_blocks() const {
+    std::vector<Matrix3> result = _energy_curvature.diagonal;
+
+    if (_penalty > 0.0) {
+        std::vector<Matrix3> constraint = _jacobian.normal_equations_diagonal();
+
+        for (size_t k = 0; k < result.size(); ++k) {
+            result[k] += _penalty * constraint[k];
+        }
+    }
+
+    for (size_t k = 0; k < result.size(); ++k) {
+        Matrix3 projection = Matrix3::Identity() - _sites[k] * _sites[k].transpose();
+        result[k] = projection * result[k] * projection;
     }
 
     return result;

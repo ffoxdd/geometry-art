@@ -7,6 +7,7 @@
 #include "lloyd_optimizer.hpp"
 #include "../core/torus.hpp"
 #include "../../augmented_lagrangian_loop.hpp"
+#include "../../block_preconditioner.hpp"
 #include "../../capacity_jacobian.hpp"
 #include "../../hessian_blocks.hpp"
 #include "../../lagrangian_evaluation.hpp"
@@ -52,8 +53,15 @@ class CapacityConstrainedOptimizer {
         HessianBlocks blocks;
         CapacityJacobian jacobian;
         double penalty;
+        BlockPreconditioner preconditioner;
+
+        [[nodiscard]] static CurvatureOperator of(HessianBlocks blocks, CapacityJacobian jacobian, double penalty);
 
         [[nodiscard]] std::vector<Vector3> multiply(const std::vector<Vector3>& directions) const;
+
+        [[nodiscard]] std::vector<Vector3> precondition(const std::vector<Vector3>& residuals) const {
+            return preconditioner.apply(residuals);
+        }
     };
 
     // One inner Newton descent at fixed multipliers and penalty.
@@ -164,7 +172,7 @@ void CapacityConstrainedOptimizer<FieldType>::Model::refresh_curvature() {
         blocks = blocks.plus(_optimizer._constraint_curvature.assemble(*_optimizer._torus, weights));
     }
 
-    _curvature.emplace(CurvatureOperator{std::move(blocks), CapacityJacobian(_state), _penalty});
+    _curvature.emplace(CurvatureOperator::of(std::move(blocks), CapacityJacobian(_state), _penalty));
 }
 
 template<fields::flat::Field FieldType>
@@ -191,6 +199,34 @@ void CapacityConstrainedOptimizer<FieldType>::Model::accept(Trial&& trial) {
     _evaluation = std::move(trial.evaluation);
     _curvature.reset();
     _optimizer._callback(*_optimizer._torus);
+}
+
+// The penalty pulls the block diagonal apart as it grows, which is exactly
+// what the conjugate gradient struggles with, so the diagonal it is
+// preconditioned by carries the penalty's own share.
+template<fields::flat::Field FieldType>
+typename CapacityConstrainedOptimizer<FieldType>::CurvatureOperator
+CapacityConstrainedOptimizer<FieldType>::CurvatureOperator::of(
+    HessianBlocks blocks,
+    CapacityJacobian jacobian,
+    double penalty
+) {
+    std::vector<Matrix3> diagonal = blocks.diagonal;
+
+    if (penalty > 0.0) {
+        std::vector<Matrix3> constraint = jacobian.normal_equations_diagonal();
+
+        for (size_t k = 0; k < diagonal.size(); ++k) {
+            diagonal[k] += penalty * constraint[k];
+        }
+    }
+
+    return CurvatureOperator{
+        std::move(blocks),
+        std::move(jacobian),
+        penalty,
+        BlockPreconditioner(diagonal)
+    };
 }
 
 template<fields::flat::Field FieldType>

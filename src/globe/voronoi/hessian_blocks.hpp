@@ -1,9 +1,11 @@
 #ifndef GLOBEART_SRC_GLOBE_VORONOI_HESSIAN_BLOCKS_HPP_
 #define GLOBEART_SRC_GLOBE_VORONOI_HESSIAN_BLOCKS_HPP_
 
+#include "block_preconditioner.hpp"
 #include "../types.hpp"
 #include <CGAL/assertions.h>
 #include <cstddef>
+#include <utility>
 #include <vector>
 
 namespace globe::voronoi {
@@ -100,6 +102,30 @@ HessianBlocks HessianBlocks::through_manifold(
     }
 
     return result;
+}
+
+// The blocks paired with the inverse of their block diagonal, which is what
+// the descent's conjugate gradient asks a curvature operator for. The pairing
+// is explicit because the inverse is built once the blocks are final, not on
+// every product.
+struct PreconditionedBlocks {
+    HessianBlocks blocks;
+    BlockPreconditioner preconditioner;
+
+    [[nodiscard]] static PreconditionedBlocks of(HessianBlocks blocks);
+
+    [[nodiscard]] std::vector<Vector3> multiply(const std::vector<Vector3>& directions) const {
+        return blocks.multiply(directions);
+    }
+
+    [[nodiscard]] std::vector<Vector3> precondition(const std::vector<Vector3>& residuals) const {
+        return preconditioner.apply(residuals);
+    }
+};
+
+inline PreconditionedBlocks PreconditionedBlocks::of(HessianBlocks blocks) {
+    BlockPreconditioner preconditioner(blocks.diagonal);
+    return PreconditionedBlocks{std::move(blocks), std::move(preconditioner)};
 }
 
 } // namespace globe::voronoi

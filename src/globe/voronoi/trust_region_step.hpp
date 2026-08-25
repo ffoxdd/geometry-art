@@ -10,15 +10,23 @@
 
 namespace globe::voronoi {
 
+// A curvature operator, plus the block-diagonal inverse the conjugate
+// gradient preconditions with. An operator with no useful block diagonal
+// returns its argument, which is the unpreconditioned method.
 template<typename T>
 concept LinearOperator = requires(const T& operator_, const std::vector<Vector3>& directions) {
     { operator_.multiply(directions) } -> std::convertible_to<std::vector<Vector3>>;
+    { operator_.precondition(directions) } -> std::convertible_to<std::vector<Vector3>>;
 };
 
 // Steihaug's truncated conjugate gradient: minimises the quadratic model
 // g·p + p·Hp/2 over the ball of the given radius, stopping early at the
 // boundary or at a direction of negative curvature. Only Hessian-vector
 // products are needed, so the Hessian is never factorised.
+//
+// The iteration is preconditioned by the operator's block diagonal while the
+// ball stays Euclidean, so the trust radius keeps its plain meaning as how
+// far a site may move.
 class TrustRegionStep {
  public:
     struct Result {
@@ -72,13 +80,14 @@ TrustRegionStep::Result TrustRegionStep::solve(
     double gradient_norm = norm(gradient);
     double tolerance = std::min(_relative_tolerance, std::sqrt(gradient_norm)) * gradient_norm;
 
-    std::vector<Vector3> residual = gradient;
-    std::vector<Vector3> direction = combine(result.step, -1.0, gradient);
-    double residual_square = dot(residual, residual);
-
     if (gradient_norm <= tolerance) {
         return result;
     }
+
+    std::vector<Vector3> residual = gradient;
+    std::vector<Vector3> preconditioned = hessian.precondition(residual);
+    std::vector<Vector3> direction = combine(result.step, -1.0, preconditioned);
+    double residual_product = dot(residual, preconditioned);
 
     while (result.iterations < _max_iterations) {
         std::vector<Vector3> mapped = hessian.multiply(direction);
@@ -91,7 +100,7 @@ TrustRegionStep::Result TrustRegionStep::solve(
             break;
         }
 
-        double step_scale = residual_square / curvature;
+        double step_scale = residual_product / curvature;
         std::vector<Vector3> candidate = combine(result.step, step_scale, direction);
 
         if (norm(candidate) >= radius) {
@@ -102,19 +111,20 @@ TrustRegionStep::Result TrustRegionStep::solve(
 
         result.step = candidate;
         residual = combine(residual, step_scale, mapped);
-        double next_residual_square = dot(residual, residual);
 
-        if (std::sqrt(next_residual_square) <= tolerance) {
+        if (norm(residual) <= tolerance) {
             break;
         }
 
-        double conjugacy = next_residual_square / residual_square;
+        preconditioned = hessian.precondition(residual);
+        double next_residual_product = dot(residual, preconditioned);
+        double conjugacy = next_residual_product / residual_product;
 
         for (size_t i = 0; i < direction.size(); ++i) {
-            direction[i] = conjugacy * direction[i] - residual[i];
+            direction[i] = conjugacy * direction[i] - preconditioned[i];
         }
 
-        residual_square = next_residual_square;
+        residual_product = next_residual_product;
     }
 
     std::vector<Vector3> mapped_step = hessian.multiply(result.step);

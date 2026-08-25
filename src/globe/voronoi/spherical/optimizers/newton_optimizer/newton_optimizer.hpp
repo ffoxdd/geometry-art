@@ -60,7 +60,7 @@ class NewtonOptimizer {
         [[nodiscard]] double value() const { return _evaluation.energy; }
         [[nodiscard]] const std::vector<Vector3>& gradient() const { return _evaluation.gradient; }
         void refresh_curvature();
-        [[nodiscard]] const HessianBlocks& curvature() const { return *_curvature; }
+        [[nodiscard]] const PreconditionedBlocks& curvature() const { return *_curvature; }
         [[nodiscard]] Trial trial(const std::vector<Vector3>& step) const;
         [[nodiscard]] double trial_value(const Trial& trial) const { return trial.evaluation.energy; }
         void accept(Trial&& trial);
@@ -72,7 +72,7 @@ class NewtonOptimizer {
         NewtonOptimizer& _optimizer;
         std::vector<Vector3> _points;
         Evaluation _evaluation;
-        std::optional<HessianBlocks> _curvature;
+        std::optional<PreconditionedBlocks> _curvature;
         size_t _accepted_steps = 0;
     };
 
@@ -131,10 +131,10 @@ NewtonOptimizer<FieldType>::Model::Model(NewtonOptimizer& optimizer) :
 
 template<fields::spherical::Field FieldType>
 void NewtonOptimizer<FieldType>::Model::refresh_curvature() {
-    _curvature.emplace(
+    _curvature.emplace(PreconditionedBlocks::of(
         _optimizer._hessian.assemble(*_optimizer._sphere)
             .template through_manifold<Normalization>(_points, _evaluation.site_gradients)
-    );
+    ));
 }
 
 template<fields::spherical::Field FieldType>

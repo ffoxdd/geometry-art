@@ -90,9 +90,22 @@ class CapacityConstrainedOptimizer {
     [[nodiscard]] size_t minimize_lagrangian_by_lbfgs();
     [[nodiscard]] size_t minimize_lagrangian_by_newton();
 
+    // The three curvature models share no type, so both directions the
+    // descent asks for are carried as functions. A model with no block
+    // diagonal to offer preconditions with the identity.
     struct CurvatureOperator {
-        std::function<std::vector<Vector3>(const std::vector<Vector3>&)> apply;
-        [[nodiscard]] std::vector<Vector3> multiply(const std::vector<Vector3>& directions) const { return apply(directions); }
+        using Transform = std::function<std::vector<Vector3>(const std::vector<Vector3>&)>;
+
+        Transform apply;
+        Transform inverse_diagonal;
+
+        [[nodiscard]] std::vector<Vector3> multiply(const std::vector<Vector3>& directions) const {
+            return apply(directions);
+        }
+
+        [[nodiscard]] std::vector<Vector3> precondition(const std::vector<Vector3>& residuals) const {
+            return inverse_diagonal(residuals);
+        }
     };
 
     class NewtonLagrangianModel {
@@ -266,7 +279,11 @@ typename CapacityConstrainedOptimizer<FieldType>::CurvatureOperator CapacityCons
     if (_parameters.newton.curvature == "finite-difference") {
         auto gradient_at = [this](const std::vector<Vector3>& displaced) { return tangential_gradient_at(displaced); };
         FiniteDifferenceHessian<decltype(gradient_at)> hessian(points, gradient, gradient_at, FINITE_DIFFERENCE_DISPLACEMENT);
-        return {[hessian](const std::vector<Vector3>& directions) { return hessian.multiply(directions); }};
+
+        return {
+            [hessian](const std::vector<Vector3>& directions) { return hessian.multiply(directions); },
+            [](const std::vector<Vector3>& residuals) { return residuals; }
+        };
     }
 
     HessianBlocks blocks = _curvature.assemble(*_sphere);
@@ -288,7 +305,10 @@ typename CapacityConstrainedOptimizer<FieldType>::CurvatureOperator CapacityCons
         _penalty
     );
 
-    return {[hessian](const std::vector<Vector3>& directions) { return hessian.multiply(directions); }};
+    return {
+        [hessian](const std::vector<Vector3>& directions) { return hessian.multiply(directions); },
+        [hessian](const std::vector<Vector3>& residuals) { return hessian.precondition(residuals); }
+    };
 }
 
 template<fields::spherical::Field FieldType>
