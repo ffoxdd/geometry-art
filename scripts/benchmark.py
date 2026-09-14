@@ -40,7 +40,6 @@ def main():
 def run(arguments, field, sites):
     command = [
         arguments.binary,
-        "--render", "false",
         "--density-field", field,
         "--points", str(sites),
         "--seed", str(SEED),

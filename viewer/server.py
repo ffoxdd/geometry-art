@@ -1,16 +1,24 @@
 #!/usr/bin/env python3
-"""Serves the viewer and runs tessellate on request.
+"""Serves the studio and runs tessellate or aggregate on request.
 
-    python3 viewer/server.py [--port 8731] [--binary build-release/tessellate] [--runs runs]
+    ./studio [--port 8731] [--binary build-release/tessellate]
+             [--aggregate-binary build-release/aggregate] [--runs runs]
 
 Standard library only. Runs are queued and executed one at a time, each in
-its own directory under --runs with the launch parameters, the solver log,
+its own directory under --runs with the launch parameters, the program log,
 and the snapshot the viewer loads. The snapshot is rewritten while the run
-is in progress, so the viewer can redraw the tessellation as it evolves.
+is in progress, so the viewer can redraw the structure as it evolves.
+
+Each program declares its parameters once, here, and the page builds its
+form from that declaration. A parameter says which flag it becomes, how to
+present it, and when it applies at all: `when` governs the parameter,
+`choice_when` governs one of its choices. A condition reads parameters
+resolved before it, so a parameter is declared after everything it names.
 """
 
 import argparse
 import atexit
+import errno
 import http.server
 import json
 import os
@@ -27,30 +35,265 @@ from urllib.parse import urlparse
 REPOSITORY = Path(__file__).resolve().parent.parent
 VIEWER = Path(__file__).resolve().parent
 
-PARAMETERS = {
-    "geometry": {"flag": "--geometry", "type": str, "choices": ["sphere", "torus", "cylinder"], "default": "sphere"},
-    "width": {"flag": "--width", "type": float, "low": 0.1, "high": 100.0, "default": 2.0},
-    "height": {"flag": "--height", "type": float, "low": 0.1, "high": 100.0, "default": 1.0},
-    "points": {"flag": "--points", "type": int, "low": 2, "high": 20000, "default": 200},
-    "density_field": {"flag": "--density-field", "type": str, "choices": ["constant", "linear", "quadratic", "quadratic-piecewise", "noise", "noise-smooth", "noise-fit"], "default": "noise"},
-    "seed": {"flag": "--seed", "type": int, "low": 0, "high": 2**31 - 1, "default": None},
-    "warm_start": {"flag": "--warm-start", "type": str, "choices": ["lloyd", "newton"], "default": "lloyd"},
-    "lloyd_passes": {"flag": "--lloyd-passes", "type": int, "low": 0, "high": 1000, "default": 5},
-    "newton_iterations": {"flag": "--newton-iterations", "type": int, "low": 0, "high": 10000, "default": 50},
-    "inner_solver": {"flag": "--inner-solver", "type": str, "choices": ["lbfgs", "newton"], "default": "lbfgs"},
-    "newton_curvature": {"flag": "--newton-curvature", "type": str, "choices": ["exact", "gauss-newton", "finite-difference"], "default": "exact"},
-    "capacity_tolerance": {"flag": "--capacity-tolerance", "type": float, "low": 1e-12, "high": 1.0, "default": 1e-7},
-    "max_outer_iterations": {"flag": "--max-outer-iterations", "type": int, "low": 1, "high": 1000, "default": 30},
-    "max_inner_iterations": {"flag": "--max-inner-iterations", "type": int, "low": 1, "high": 100000, "default": 200},
+SPHERE_ONLY = {"geometry": ["sphere"]}
+FLAT = {"geometry": ["cylinder", "torus"]}
+
+PROGRAMS = {
+    "tessellate": {
+        "label": "tessellate",
+        "summary": "capacity-constrained Voronoi cells",
+        "headline": ["geometry", "points", "density_field"],
+
+        "groups": [
+            {
+                "label": "domain",
+                "parameters": ["geometry", "points", "width", "height"],
+            },
+            {
+                "label": "density",
+                "parameters": ["density_field", "seed"],
+            },
+            {
+                "label": "solver",
+                "collapsed": True,
+                "parameters": [
+                    "warm_start",
+                    "lloyd_passes",
+                    "newton_iterations",
+                    "inner_solver",
+                    "newton_curvature",
+                    "capacity_tolerance",
+                    "max_outer_iterations",
+                    "max_inner_iterations",
+                ],
+            },
+        ],
+
+        "parameters": {
+            "geometry": {
+                "flag": "--geometry",
+                "label": "geometry",
+                "type": "text",
+                "choices": {"sphere": "sphere", "cylinder": "cylinder", "torus": "torus"},
+                "default": "sphere",
+            },
+            "points": {
+                "flag": "--points",
+                "label": "points",
+                "type": "integer",
+                "low": 2,
+                "high": 20000,
+                "default": 200,
+            },
+            "width": {
+                "flag": "--width",
+                "label": "width",
+                "type": "number",
+                "low": 0.1,
+                "high": 100.0,
+                "step": 0.1,
+                "default": 2.0,
+                "when": FLAT,
+            },
+            "height": {
+                "flag": "--height",
+                "label": "height",
+                "type": "number",
+                "low": 0.1,
+                "high": 100.0,
+                "step": 0.1,
+                "default": 1.0,
+                "when": FLAT,
+            },
+            "density_field": {
+                "flag": "--density-field",
+                "label": "field",
+                "type": "text",
+                "choices": {
+                    "noise-smooth": "noise (C1 spline)",
+                    "noise": "noise (kinked)",
+                    "noise-fit": "noise (global fit)",
+                    "quadratic": "quadratic",
+                    "quadratic-piecewise": "quadratic (tiles)",
+                    "linear": "linear",
+                    "constant": "constant",
+                },
+                "choice_when": {
+                    "noise-smooth": SPHERE_ONLY,
+                    "noise-fit": SPHERE_ONLY,
+                    "quadratic": SPHERE_ONLY,
+                    "quadratic-piecewise": SPHERE_ONLY,
+                    "linear": SPHERE_ONLY,
+                },
+                "default": "noise-smooth",
+                "wide": True,
+            },
+            "seed": {
+                "flag": "--seed",
+                "label": "seed",
+                "type": "integer",
+                "low": 0,
+                "high": 2**31 - 1,
+                "placeholder": "random",
+                "default": None,
+            },
+            "warm_start": {
+                "flag": "--warm-start",
+                "label": "warm start",
+                "type": "text",
+                "choices": {"lloyd": "lloyd", "newton": "newton"},
+                "default": "lloyd",
+            },
+            "lloyd_passes": {
+                "flag": "--lloyd-passes",
+                "label": "lloyd passes",
+                "type": "integer",
+                "low": 0,
+                "high": 1000,
+                "default": 5,
+                "when": {"warm_start": ["lloyd"]},
+            },
+            "newton_iterations": {
+                "flag": "--newton-iterations",
+                "label": "newton steps",
+                "type": "integer",
+                "low": 0,
+                "high": 10000,
+                "default": 50,
+                "when": {"warm_start": ["newton"]},
+            },
+            "inner_solver": {
+                "flag": "--inner-solver",
+                "label": "inner solver",
+                "type": "text",
+                "choices": {"lbfgs": "lbfgs", "newton": "newton"},
+                "choice_when": {"lbfgs": SPHERE_ONLY},
+                "default": "lbfgs",
+            },
+            "newton_curvature": {
+                "flag": "--newton-curvature",
+                "label": "curvature",
+                "type": "text",
+                "choices": {
+                    "exact": "exact",
+                    "gauss-newton": "gauss-newton",
+                    "finite-difference": "finite difference",
+                },
+                "default": "exact",
+                "when": {"inner_solver": ["newton"]},
+                "wide": True,
+            },
+            "capacity_tolerance": {
+                "flag": "--capacity-tolerance",
+                "label": "tolerance",
+                "type": "number",
+                "low": 1e-12,
+                "high": 1.0,
+                "step": "any",
+                "default": 1e-7,
+            },
+            "max_outer_iterations": {
+                "flag": "--max-outer-iterations",
+                "label": "max outer",
+                "type": "integer",
+                "low": 1,
+                "high": 1000,
+                "default": 30,
+            },
+            "max_inner_iterations": {
+                "flag": "--max-inner-iterations",
+                "label": "max inner",
+                "type": "integer",
+                "low": 1,
+                "high": 100000,
+                "default": 200,
+            },
+        },
+    },
+
+    "aggregate": {
+        "label": "aggregate",
+        "summary": "diffusion-limited aggregation",
+        "headline": ["particles", "return_mode"],
+
+        "groups": [
+            {
+                "label": "growth",
+                "parameters": ["particles", "overlap", "seed"],
+            },
+            {
+                "label": "walk",
+                "collapsed": True,
+                "parameters": ["spawn_margin", "return_mode", "kill_factor"],
+            },
+        ],
+
+        "parameters": {
+            "particles": {
+                "flag": "--particles",
+                "label": "particles",
+                "type": "integer",
+                "low": 2,
+                "high": 200000,
+                "default": 5000,
+            },
+            "overlap": {
+                "flag": "--overlap",
+                "label": "overlap",
+                "type": "number",
+                "low": 1e-4,
+                "high": 0.5,
+                "step": 0.001,
+                "default": 0.01,
+            },
+            "seed": {
+                "flag": "--seed",
+                "label": "seed",
+                "type": "integer",
+                "low": 0,
+                "high": 2**31 - 1,
+                "placeholder": "random",
+                "default": None,
+            },
+            "spawn_margin": {
+                "flag": "--spawn-margin",
+                "label": "spawn margin",
+                "type": "number",
+                "low": 0.1,
+                "high": 100.0,
+                "step": 0.1,
+                "default": 2.0,
+            },
+            "return_mode": {
+                "flag": "--return-mode",
+                "label": "return mode",
+                "type": "text",
+                "choices": {"harmonic": "harmonic", "kill": "kill"},
+                "default": "harmonic",
+            },
+            "kill_factor": {
+                "flag": "--kill-factor",
+                "label": "kill factor",
+                "type": "number",
+                "low": 1.0,
+                "high": 1000.0,
+                "step": 0.5,
+                "default": 3.0,
+                "when": {"return_mode": ["kill"]},
+            },
+        },
+    },
 }
+
+CONVERTERS = {"integer": int, "number": float, "text": str}
 
 SNAPSHOT_INTERVAL_SECONDS = 1.0
 LOG_TAIL_LINES = 40
 
 
 class Runs:
-    def __init__(self, binary, directory):
-        self.binary = binary
+    def __init__(self, binaries, directory):
+        self.binaries = binaries
         self.directory = directory
         self.directory.mkdir(parents=True, exist_ok=True)
         self.lock = threading.Lock()
@@ -58,16 +301,22 @@ class Runs:
         self.processes = {}
         self.worker = threading.Thread(target=self.drain, daemon=True)
         self.worker.start()
-        self.mark_interrupted()
+        self.adopt()
         atexit.register(self.shutdown)
 
     def start(self, requested):
-        parameters = validate(requested)
+        program, parameters = validate(requested)
+        binary = self.binaries.get(program)
+
+        if binary is None or not binary.exists():
+            raise ValueError(f"{program} is not built; expected {binary}")
+
         run_id = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6]
         folder = self.directory / run_id
         folder.mkdir()
         record = {
             "id": run_id,
+            "program": program,
             "parameters": parameters,
             "status": "queued",
             "created": time.time(),
@@ -100,12 +349,13 @@ class Runs:
         if record is None or record["status"] != "queued":
             return
 
-        command = [str(self.binary), "--render", "false", "--snapshot", str(folder / "snapshot"),
+        program = record["program"]
+        command = [str(self.binaries[program]), "--snapshot", str(folder / "snapshot"),
                    "--snapshot-interval", str(SNAPSHOT_INTERVAL_SECONDS)]
 
         for name, value in record["parameters"].items():
             if value is not None:
-                command += [PARAMETERS[name]["flag"], str(value)]
+                command += [PROGRAMS[program]["parameters"][name]["flag"], str(value)]
 
         record["status"] = "running"
         record["started"] = time.time()
@@ -201,43 +451,84 @@ class Runs:
 
         return records
 
-    # A run that was in flight when the server last stopped has no process
-    # behind it any more; say so rather than leaving it "running" forever.
-    def mark_interrupted(self):
+    # The run directory outlives any one server, so what is already in it is
+    # brought up to what a record holds today: a run that was in flight has
+    # no process behind it any more, and a record that names no program is
+    # from before there was a second one.
+    def adopt(self):
         for folder in self.directory.iterdir():
             record = read_json(folder / "run.json")
 
-            if record is not None and record["status"] in ("queued", "running", "cancelling"):
+            if record is None:
+                continue
+
+            record.setdefault("program", "tessellate")
+
+            if record["status"] in ("queued", "running", "cancelling"):
                 record["status"] = "interrupted"
-                write_json(folder / "run.json", record)
+
+            write_json(folder / "run.json", record)
 
 
 def validate(requested):
+    program = requested.get("program") or "tessellate"
+
+    if program not in PROGRAMS:
+        raise ValueError(f"program must be one of {sorted(PROGRAMS)}")
+
     parameters = {}
 
-    for name, rule in PARAMETERS.items():
-        value = requested.get(name, rule["default"])
+    for name, rule in PROGRAMS[program]["parameters"].items():
+        parameters[name] = resolve(name, rule, requested, parameters)
 
-        if value is None or value == "":
-            parameters[name] = None
-            continue
+    return program, parameters
 
-        value = rule["type"](value)
 
-        if "choices" in rule and value not in rule["choices"]:
-            raise ValueError(f"{name} must be one of {rule['choices']}")
+# A parameter that does not apply is dropped rather than defaulted, so the
+# program is never handed a flag the form did not offer.
+def resolve(name, rule, requested, resolved):
+    if not applies(rule.get("when"), resolved):
+        return None
 
-        if "low" in rule and not (rule["low"] <= value <= rule["high"]):
-            raise ValueError(f"{name} must be between {rule['low']} and {rule['high']}")
+    given = requested.get(name)
 
-        parameters[name] = value
+    if given is None or given == "":
+        return fallback(rule, resolved)
 
-    flat = parameters.get("geometry") in ("torus", "cylinder")
+    return checked(name, rule, CONVERTERS[rule["type"]](given), resolved)
 
-    if flat and parameters.get("density_field") not in ("constant", "noise"):
-        raise ValueError("the flat family holds constant and noise densities")
 
-    return parameters
+def fallback(rule, resolved):
+    default = rule.get("default")
+
+    if default is None or choice_applies(rule, default, resolved):
+        return default
+
+    return next((choice for choice in rule["choices"] if choice_applies(rule, choice, resolved)), None)
+
+
+def checked(name, rule, value, resolved):
+    if "choices" in rule and value not in rule["choices"]:
+        raise ValueError(f"{name} must be one of {sorted(rule['choices'])}")
+
+    if not choice_applies(rule, value, resolved):
+        raise ValueError(f"{name} cannot be {value} alongside the other parameters")
+
+    if "low" in rule and not (rule["low"] <= value <= rule["high"]):
+        raise ValueError(f"{name} must be between {rule['low']} and {rule['high']}")
+
+    return value
+
+
+def choice_applies(rule, value, resolved):
+    return applies(rule.get("choice_when", {}).get(value), resolved)
+
+
+def applies(condition, resolved):
+    if condition is None:
+        return True
+
+    return all(resolved.get(parameter) in allowed for parameter, allowed in condition.items())
 
 
 def snapshot_file(folder):
@@ -253,7 +544,7 @@ def final_line(path):
     lines = tail_lines(path, 200)
 
     for line in reversed(lines):
-        if "Final" in line:
+        if "Final" in line or "Grew" in line:
             return line.strip()
 
     return lines[-1].strip() if lines else None
@@ -286,12 +577,16 @@ def write_json(path, value):
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     runs = None
+    programs = None
 
     def __init__(self, *arguments, **keywords):
         super().__init__(*arguments, directory=str(VIEWER), **keywords)
 
     def do_GET(self):
         path = urlparse(self.path).path
+
+        if path == "/api/programs":
+            return self.reply(200, self.programs)
 
         if path == "/api/runs":
             return self.reply(200, self.runs.list())
@@ -367,7 +662,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(content)
 
     def end_headers(self):
-        if self.path.endswith((".html", ".js")):
+        if self.path.endswith((".html", ".js", ".css")):
             self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
@@ -376,24 +671,56 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             super().log_message(format, *arguments)
 
 
+# A program with no binary behind it is dropped from the schema, so the page
+# never offers a run the server would refuse.
+def buildable(binaries):
+    return {name: PROGRAMS[name] for name, binary in binaries.items() if binary.exists()}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--port", type=int, default=8731)
     parser.add_argument("--binary", type=Path, default=REPOSITORY / "build-release" / "tessellate")
+    parser.add_argument("--aggregate-binary", type=Path, default=REPOSITORY / "build-release" / "aggregate")
     parser.add_argument("--runs", type=Path, default=REPOSITORY / "runs")
     arguments = parser.parse_args()
 
-    if not arguments.binary.exists():
-        parser.error(f"{arguments.binary} does not exist; build it or pass --binary")
+    binaries = {
+        "tessellate": arguments.binary.resolve(),
+        "aggregate": arguments.aggregate_binary.resolve(),
+    }
 
-    Handler.runs = Runs(arguments.binary.resolve(), arguments.runs.resolve())
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", arguments.port), Handler)
+    programs = buildable(binaries)
+
+    if not programs:
+        parser.error("no binaries found; build one or pass --binary / --aggregate-binary")
+
+    for name, binary in binaries.items():
+        if name not in programs:
+            print(f"note: {name} is not built ({binary}); the studio will not offer it")
+
+    server = listen(parser, arguments.port)
+    Handler.programs = programs
+    Handler.runs = Runs(binaries, arguments.runs.resolve())
     print(f"Geometry Art studio at http://localhost:{arguments.port}/  (runs in {arguments.runs})")
 
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
+
+
+def listen(parser, port):
+    try:
+        return http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    except OSError as error:
+        if error.errno != errno.EADDRINUSE:
+            raise
+
+        parser.error(
+            f"port {port} is busy; a studio is probably already running at "
+            f"http://localhost:{port}/ -- reload it, or pass --port"
+        )
 
 
 if __name__ == "__main__":

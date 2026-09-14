@@ -139,7 +139,6 @@ What belongs in integration tests:
 The `tessellate` executable supports command-line flags for terminal/AI-assisted testing:
 - `--points <N>` / `-p`: Number of sites (default: 10)
 - `--density-field <type>` / `-f`: 'constant', 'linear', 'quadratic', 'noise' (piecewise polynomial mesh), 'noise-smooth' (C1 spline projection), 'noise-fit' (global polynomial fit) or 'image' (with `--image <path>`, darker is denser) (default: quadratic)
-- `--render <bool>`: Set to `false` to run without Qt rendering
 - `--lloyd-passes <N>`: Density-weighted Lloyd warm-start passes (default: 5)
 - `--max-outer-iterations <N>` / `--max-inner-iterations <N>`: Augmented Lagrangian budget
 - `--capacity-tolerance <x>`: Relative RMS capacity error at which optimization stops (default: 1e-7)
@@ -150,9 +149,13 @@ The `tessellate` executable supports command-line flags for terminal/AI-assisted
 - `--help`: Show usage information
 
 Examples:
-- Fast terminal test with constant density: `./tessellate --render false -f constant -p 10`
-- Larger run with the quadratic field: `./tessellate --render false -p 200`
-- Visual debugging with fewer points: `./tessellate -p 10`
+- Fast terminal test with constant density: `./tessellate -f constant -p 10`
+- Larger run with the quadratic field: `./tessellate -p 200`
+
+Visual inspection goes through the web studio -- `./studio`, documented in
+`viewer/README.md` -- which runs the executables and renders their snapshots
+live. A program the studio offers declares its parameters in one place there;
+a new flag reaches the form by being declared, not by being wired up twice.
 
 ## CGAL Considerations
 

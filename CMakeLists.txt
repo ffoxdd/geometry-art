@@ -11,8 +11,7 @@ set(CMAKE_DISABLE_FIND_PACKAGE_WrapVulkanHeaders ON)
 # Libraries
 
 find_package(PkgConfig REQUIRED)
-find_package(Qt6 REQUIRED COMPONENTS Core Gui OpenGLWidgets Svg)
-find_package(CGAL REQUIRED COMPONENTS Qt6)
+find_package(CGAL REQUIRED)
 find_package(Boost REQUIRED CONFIG)
 find_package(anl REQUIRED)
 find_package(CLI11 REQUIRED CONFIG)
@@ -32,12 +31,10 @@ target_link_libraries(geometry_art_noise PUBLIC geometry_art anl)
 # Executables
 
 add_executable(tessellate src/tessellate.cpp)
-target_link_libraries(tessellate PRIVATE geometry_art geometry_art_noise CGAL::CGAL_Qt6 CLI11::CLI11)
-target_compile_definitions(tessellate PRIVATE CGAL_USE_BASIC_VIEWER CGAL_USE_BASIC_VIEWER_QT QT_NO_KEYWORDS)
+target_link_libraries(tessellate PRIVATE geometry_art geometry_art_noise CLI11::CLI11)
 
-add_executable(visualize_field src/visualize_field.cpp)
-target_link_libraries(visualize_field PRIVATE geometry_art CGAL::CGAL_Qt6)
-target_compile_definitions(visualize_field PRIVATE CGAL_USE_BASIC_VIEWER CGAL_USE_BASIC_VIEWER_QT QT_NO_KEYWORDS)
+add_executable(aggregate src/aggregate.cpp)
+target_link_libraries(aggregate PRIVATE geometry_art CLI11::CLI11)
 
 add_executable(sphere_to_mesh src/sphere_to_mesh.cpp)
 target_link_libraries(sphere_to_mesh PRIVATE geometry_art CLI11::CLI11)

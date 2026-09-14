@@ -1,9 +1,6 @@
 #include "geometry_art/voronoi/flat/factories/factory.hpp"
 #include "geometry_art/voronoi/spherical/factories/factory.hpp"
 #include "geometry_art/voronoi/spherical/core/callback.hpp"
-#include "geometry_art/io/qt/application.hpp"
-#include "geometry_art/io/qt/flat_drawer.hpp"
-#include "geometry_art/io/qt/voronoi_sphere_drawer.hpp"
 #include "geometry_art/io/snapshot/flat_svg_writer.hpp"
 #include "geometry_art/io/snapshot/json_writer.hpp"
 #include "geometry_art/io/snapshot/svg_writer.hpp"
@@ -22,12 +19,9 @@
 #include <string>
 
 using namespace geometry_art;
-using io::qt::Application;
-using io::qt::SphereDrawer;
 using io::text::SphereRepository;
 using voronoi::CapacityConstrainedParameters;
 using voronoi::spherical::Factory;
-using voronoi::spherical::Sphere;
 using voronoi::spherical::Callback;
 using voronoi::spherical::noop_callback;
 
@@ -37,8 +31,6 @@ struct Config {
     double height = 1.0;
     int points_count;
     std::string density_field;
-    bool perform_render;
-    std::string render_mode;
     int lloyd_passes;
     std::string warm_start;
     int newton_iterations;
@@ -71,8 +63,6 @@ int main(int argc, char *argv[]) {
         "Configuration:" << std::endl <<
         "  Points: " << config.points_count << std::endl <<
         "  Density: " << config.density_field << std::endl <<
-        "  Render: " << (config.perform_render ? "yes" : "no") << std::endl <<
-        "  Render mode: " << config.render_mode << std::endl <<
         "  Warm start: " << config.warm_start << std::endl <<
         "  Lloyd passes: " << config.lloyd_passes << std::endl <<
         "  Newton iterations: " << config.newton_iterations << std::endl <<
@@ -83,38 +73,7 @@ int main(int argc, char *argv[]) {
         "  Seed: " << (config.seed.has_value() ? std::to_string(*config.seed) : "random") << std::endl <<
         std::endl;
 
-    std::unique_ptr<Application> application;
-    std::unique_ptr<SphereDrawer> drawer;
     Callback callback = noop_callback();
-
-    if (config.perform_render) {
-        application = std::make_unique<Application>(argc, argv);
-
-        io::qt::RenderMode render_mode = io::qt::RenderMode::Wireframe;
-        if (config.render_mode == "solid") {
-            render_mode = io::qt::RenderMode::Solid;
-        } else if (config.render_mode == "minimal") {
-            render_mode = io::qt::RenderMode::Minimal;
-        }
-
-        drawer = std::make_unique<SphereDrawer>("Tessellate", render_mode);
-        drawer->show();
-        application->process_events();
-
-        using namespace std::chrono_literals;
-        auto last_render = std::chrono::steady_clock::now();
-
-        callback = [&](const Sphere& sphere) {
-            application->process_events();
-
-            auto now = std::chrono::steady_clock::now();
-
-            if (now - last_render >= 100ms) {
-                drawer->update(sphere);
-                last_render = now;
-            }
-        };
-    }
 
     CapacityConstrainedParameters optimizer_parameters;
     optimizer_parameters.max_outer_iterations = static_cast<size_t>(config.max_outer_iterations);
@@ -158,11 +117,6 @@ int main(int argc, char *argv[]) {
     SphereRepository::save(*sphere, filename.str());
     std::cout << "Saved: " << filename.str() << std::endl;
 
-    if (config.perform_render) {
-        drawer->show(*sphere);
-        return application->run();
-    }
-
     return 0;
 }
 
@@ -198,49 +152,13 @@ int run_flat(const Config& config, int argc, char *argv[]) {
         "  Geometry: " << config.geometry << " (" << config.width << " x " << config.height << ")" << std::endl <<
         "  Points: " << config.points_count << std::endl <<
         "  Density: " << config.density_field << std::endl <<
-        "  Render: " << (config.perform_render ? "yes" : "no") << std::endl <<
         "  Warm start: " << config.warm_start << std::endl <<
         "  Lloyd passes: " << config.lloyd_passes << std::endl <<
         "  Capacity tolerance: " << config.capacity_tolerance << std::endl <<
         "  Seed: " << (config.seed.has_value() ? std::to_string(*config.seed) : "random") << std::endl <<
         std::endl;
 
-    std::unique_ptr<Application> application;
-    std::unique_ptr<geometry_art::io::qt::FlatDrawer> drawer;
     geometry_art::voronoi::flat::Callback callback = geometry_art::voronoi::flat::noop_callback();
-
-    if (config.perform_render) {
-        application = std::make_unique<Application>(argc, argv);
-
-        io::qt::RenderMode render_mode = io::qt::RenderMode::Wireframe;
-        if (config.render_mode == "solid") {
-            render_mode = io::qt::RenderMode::Solid;
-        } else if (config.render_mode == "minimal") {
-            render_mode = io::qt::RenderMode::Minimal;
-        }
-
-        drawer = std::make_unique<geometry_art::io::qt::FlatDrawer>(
-            config.geometry == "cylinder" ? "Cylinder" : "Torus",
-            render_mode,
-            config.geometry == "cylinder" ? io::qt::FlatEmbedding::Cylinder : io::qt::FlatEmbedding::Torus
-        );
-        drawer->show();
-        application->process_events();
-
-        using namespace std::chrono_literals;
-        auto last_render = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
-
-        callback = [&application, &drawer, last_render](const geometry_art::voronoi::flat::Torus& torus) {
-            application->process_events();
-
-            auto now = std::chrono::steady_clock::now();
-
-            if (now - *last_render >= 100ms) {
-                drawer->update(torus);
-                *last_render = now;
-            }
-        };
-    }
 
     geometry_art::voronoi::CapacityConstrainedParameters optimizer_parameters;
     optimizer_parameters.max_outer_iterations = static_cast<size_t>(config.max_outer_iterations);
@@ -287,11 +205,6 @@ int run_flat(const Config& config, int argc, char *argv[]) {
     geometry_art::io::text::TorusRepository::save(*torus, filename.str());
     std::cout << "Saved: " << filename.str() << std::endl;
 
-    if (config.perform_render) {
-        drawer->show(*torus);
-        return application->run();
-    }
-
     return 0;
 }
 
@@ -328,15 +241,6 @@ Config parse_arguments(int argc, char *argv[]) {
         ->description("Density field type")
         ->check(CLI::IsMember({"constant", "linear", "quadratic", "quadratic-piecewise", "noise", "noise-smooth", "noise-fit", "image"}))
         ->default_val("quadratic");
-
-    app.add_option("--render", config.perform_render)
-        ->description("Enable Qt rendering")
-        ->default_val(true);
-
-    app.add_option("--render-mode", config.render_mode)
-        ->description("Render mode: wireframe, solid, or minimal")
-        ->check(CLI::IsMember({"wireframe", "solid", "minimal"}))
-        ->default_val("wireframe");
 
     app.add_option("--warm-start", config.warm_start)
         ->description("Warm start method before the capacity phase")

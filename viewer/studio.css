@@ -1,0 +1,408 @@
+:root {
+  color-scheme: dark;
+  --background: #0e0f11;
+  --surface: rgba(22, 23, 26, 0.82);
+  --sunken: rgba(0, 0, 0, 0.32);
+  --raised: rgba(255, 255, 255, 0.07);
+  --line: rgba(255, 255, 255, 0.09);
+  --text: #e8e6e3;
+  --muted: rgba(232, 230, 227, 0.58);
+  --accent: #7aa2f7;
+  --danger: #f7768e;
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; }
+
+/* A control the settings rule out is hidden by its `hidden` property, which
+   every display rule below would otherwise override. */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  font: 13px/1.5 ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+  background: var(--background);
+  color: var(--text);
+  overflow: hidden;
+}
+
+canvas { display: block; }
+
+.rail {
+  position: fixed;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 32px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+}
+
+.rail.left { left: 16px; width: 288px; }
+.rail.right { right: 16px; width: 228px; }
+
+.rail > header {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.rail > header h1,
+.rail > header h2 { cursor: pointer; }
+
+.rail > header h1::after,
+.rail > header h2::after {
+  content: "–";
+  float: right;
+  color: var(--muted);
+}
+
+.rail.folded > header h1::after,
+.rail.folded > header h2::after { content: "+"; }
+
+.rail.folded > header { border-bottom: 0; }
+
+.rail.folded .scroll,
+.rail.folded .segmented,
+.rail.folded .summary { display: none; }
+
+.scroll {
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.section {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.section:last-child { border-bottom: 0; }
+
+h1 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+h2 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.rail > header h2 { margin: 0; }
+
+.summary {
+  margin: 7px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.segmented {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 3px;
+  margin-top: 11px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--sunken);
+}
+
+.segmented button {
+  padding: 5px 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.segmented button:hover { color: var(--text); }
+
+.segmented button[aria-pressed="true"] {
+  background: rgba(122, 162, 247, 0.26);
+  color: var(--text);
+}
+
+.group { border-bottom: 1px solid var(--line); }
+.group > summary { list-style: none; }
+.group > summary::-webkit-details-marker { display: none; }
+
+.group > summary {
+  padding: 11px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.group > summary::after {
+  content: "+";
+  float: right;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.group[open] > summary::after { content: "–"; }
+.group > summary:hover { color: var(--text); }
+.group > .fields { padding: 0 16px 13px; }
+
+.fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px 10px;
+}
+
+.field {
+  display: block;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.field.wide { grid-column: 1 / -1; }
+
+.field > select,
+.field > textarea,
+.field > input {
+  display: block;
+  width: 100%;
+  margin-top: 3px;
+  padding: 4px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.field > textarea {
+  resize: vertical;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.field > input[type="color"] {
+  height: 26px;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.field > input[type="range"] {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--accent);
+}
+
+button.primary {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid rgba(122, 162, 247, 0.5);
+  border-radius: 6px;
+  background: rgba(122, 162, 247, 0.22);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+button.primary:hover { background: rgba(122, 162, 247, 0.35); }
+
+.error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.error:empty { display: none; }
+.error:not(:empty) { margin-top: 8px; }
+
+.runs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.runs li {
+  display: grid;
+  grid-template-columns: 8px 1fr auto;
+  gap: 8px;
+  align-items: start;
+  margin: 0 -6px;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.runs li:hover { background: rgba(255, 255, 255, 0.05); }
+.runs li.selected { background: rgba(122, 162, 247, 0.14); }
+
+.runs .dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: #6b7280;
+}
+
+.runs .dot.running { background: var(--accent); box-shadow: 0 0 0 3px rgba(122, 162, 247, 0.25); }
+.runs .dot.queued { background: #e0af68; }
+.runs .dot.finished { background: #9ece6a; }
+.runs .dot.failed,
+.runs .dot.interrupted { background: var(--danger); }
+
+.runs .title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.runs .detail {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.runs button {
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  opacity: 0.5;
+  cursor: pointer;
+}
+
+.runs button:hover { opacity: 1; }
+
+.empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+#logPanel { margin-top: 10px; }
+
+#logPanel > summary {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+#log {
+  margin: 8px 0 0;
+  padding: 8px;
+  max-height: 168px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--sunken);
+  font: 11px/1.45 ui-monospace, Menlo, monospace;
+  white-space: pre;
+  color: var(--muted);
+}
+
+.strip {
+  position: relative;
+  margin-top: 10px;
+  height: 18px;
+  touch-action: none;
+}
+
+.strip canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+}
+
+/* The stops ride the bar rather than sitting under it, so a colour is
+   placed where it will appear. */
+.stop {
+  position: absolute;
+  top: -3px;
+  width: 12px;
+  height: 24px;
+  margin-left: -6px;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+  cursor: grab;
+}
+
+.stop.selected {
+  border-color: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 0 6px rgba(122, 162, 247, 0.9);
+}
+
+/* Rendered but invisible: the native picker opens beside the stop it
+   belongs to, and a display:none input has nothing to open beside. */
+.picker {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hint {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.readout {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  margin: 0;
+}
+
+.readout dt { color: var(--muted); }
+
+.readout dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.note:empty { display: none; }
+
+.drop {
+  padding: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  color: var(--muted);
+  text-align: center;
+  cursor: pointer;
+}
+
+.drop:hover,
+.drop.over {
+  border-color: var(--accent);
+  color: var(--text);
+}

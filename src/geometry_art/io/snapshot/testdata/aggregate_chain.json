@@ -1,0 +1,9 @@
+{
+  "particleRadius": 1,
+  "reach": 5.98,
+  "particles": [
+    {"center": [0, 0, 0], "parent": null},
+    {"center": [0, 0, 1.99], "parent": 0},
+    {"center": [0.5, 0, 3.98], "parent": 1}
+  ]
+}
