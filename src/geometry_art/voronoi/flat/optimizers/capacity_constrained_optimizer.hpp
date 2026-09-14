@@ -5,7 +5,7 @@
 #include "capacity_hessian.hpp"
 #include "cvt_hessian.hpp"
 #include "lloyd_optimizer.hpp"
-#include "../core/torus.hpp"
+#include "../core/diagram.hpp"
 #include "../../augmented_lagrangian_loop.hpp"
 #include "../../block_preconditioner.hpp"
 #include "../../capacity_jacobian.hpp"
@@ -24,7 +24,7 @@
 
 namespace geometry_art::voronoi::flat {
 
-// Capacity-constrained CVT on the flat torus: the shared augmented
+// Capacity-constrained CVT on a flat domain: the shared augmented
 // Lagrangian loop around the shared trust-region Newton descent, with this
 // class supplying only the geometry -- state assembly, curvature and the
 // wrapping rebuild. The curvature model matches the sphere's: exact for the
@@ -33,13 +33,13 @@ template<fields::flat::Field FieldType>
 class CapacityConstrainedOptimizer {
  public:
     CapacityConstrainedOptimizer(
-        std::unique_ptr<Torus> torus,
+        std::unique_ptr<Diagram> diagram,
         FieldType field,
         CapacityConstrainedParameters parameters,
         Callback callback
     );
 
-    std::unique_ptr<Torus> optimize();
+    std::unique_ptr<Diagram> optimize();
     [[nodiscard]] const CapacityConstrainedReport& report() const { return _report; }
 
     // The ConstrainedProblem interface the shared outer loop drives.
@@ -68,7 +68,7 @@ class CapacityConstrainedOptimizer {
     class Model {
      public:
         struct Trial {
-            std::unique_ptr<Torus> torus;
+            std::unique_ptr<Diagram> diagram;
             DiagramState state;
             LagrangianEvaluation evaluation;
         };
@@ -96,7 +96,7 @@ class CapacityConstrainedOptimizer {
         std::optional<CurvatureOperator> _curvature;
     };
 
-    std::unique_ptr<Torus> _torus;
+    std::unique_ptr<Diagram> _torus;
     CapacityConstrainedLagrangian<FieldType> _lagrangian;
     CvtHessian<FieldType> _curvature;
     CapacityHessian<FieldType> _constraint_curvature;
@@ -108,12 +108,12 @@ class CapacityConstrainedOptimizer {
 
 template<fields::flat::Field FieldType>
 CapacityConstrainedOptimizer<FieldType>::CapacityConstrainedOptimizer(
-    std::unique_ptr<Torus> torus,
+    std::unique_ptr<Diagram> diagram,
     FieldType field,
     CapacityConstrainedParameters parameters,
     Callback callback
 ) :
-    _torus(std::move(torus)),
+    _torus(std::move(diagram)),
     _lagrangian(field, field.total_mass() / static_cast<double>(_torus->size())),
     _curvature(field),
     _constraint_curvature(field),
@@ -123,7 +123,7 @@ CapacityConstrainedOptimizer<FieldType>::CapacityConstrainedOptimizer(
 }
 
 template<fields::flat::Field FieldType>
-std::unique_ptr<Torus> CapacityConstrainedOptimizer<FieldType>::optimize() {
+std::unique_ptr<Diagram> CapacityConstrainedOptimizer<FieldType>::optimize() {
     _report = augmented_lagrangian_loop(*this, _parameters, "newton");
     return std::move(_torus);
 }
@@ -186,15 +186,15 @@ CapacityConstrainedOptimizer<FieldType>::Model::trial(const std::vector<Vector3>
     }
 
     Trial trial;
-    trial.torus = _optimizer._torus->rebuilt(points);
-    trial.state = _optimizer._lagrangian.diagram_state(*trial.torus);
-    trial.evaluation = _optimizer._lagrangian.evaluate(*trial.torus, trial.state, _multipliers, _penalty);
+    trial.diagram = _optimizer._torus->rebuilt(points);
+    trial.state = _optimizer._lagrangian.diagram_state(*trial.diagram);
+    trial.evaluation = _optimizer._lagrangian.evaluate(*trial.diagram, trial.state, _multipliers, _penalty);
     return trial;
 }
 
 template<fields::flat::Field FieldType>
 void CapacityConstrainedOptimizer<FieldType>::Model::accept(Trial&& trial) {
-    _optimizer._torus = std::move(trial.torus);
+    _optimizer._torus = std::move(trial.diagram);
     _state = std::move(trial.state);
     _evaluation = std::move(trial.evaluation);
     _curvature.reset();

@@ -4,6 +4,7 @@
 #include "scalar_field.hpp"
 #include "../region_integrals.hpp"
 #include "../../types.hpp"
+#include "../../geometry/planar/domain.hpp"
 #include "../../geometry/planar/polygon.hpp"
 #include "../../geometry/planar/segment.hpp"
 #include "../../math/polynomial/moments.hpp"
@@ -21,27 +22,28 @@
 
 namespace geometry_art::fields::flat {
 
+using geometry::planar::Domain;
 using geometry::planar::Polygon;
 using geometry::planar::Segment;
 using geometry_art::math::polynomial::Moments;
 using geometry_art::math::polynomial::Polynomial;
 
-// A density held as one quadratic per triangle of a regular periodic grid
-// over the rectangle of periods: each grid square splits into two
-// triangles, and each triangle carries the quadratic through its corner and
-// edge-midpoint samples. Shared nodes are sampled at one canonical
-// position, so the field is continuous, and continuous across the seams.
+// A density held as one quadratic per triangle of a regular grid over the
+// domain's rectangle: each grid square splits into two triangles, and each
+// triangle carries the quadratic through its corner and edge-midpoint
+// samples. Shared nodes are sampled at one canonical position, so the field
+// is continuous, and continuous across any wrapped seam; along a walled
+// axis the far edge is sampled where it lies.
 //
 // A query region lives in some cell's chart and may protrude past the
-// rectangle, so integration walks the period translates its bounding box
-// touches, clips in mesh coordinates, and translates the resulting moments
-// back into the chart.
+// rectangle along a wrapped axis, so integration walks the period
+// translates its bounding box touches, clips in mesh coordinates, and
+// translates the resulting moments back into the chart.
 class PiecewisePolynomialField {
  public:
     template<ScalarField ScalarFieldType>
     [[nodiscard]] static PiecewisePolynomialField sample(
-        double width,
-        double height,
+        const Domain& domain,
         int columns,
         int rows,
         ScalarFieldType& scalar_field
@@ -50,8 +52,9 @@ class PiecewisePolynomialField {
     [[nodiscard]] double value(const Vector2& point) const;
     [[nodiscard]] int degree() const { return DEGREE; }
     [[nodiscard]] double total_mass() const { return _total_mass; }
-    [[nodiscard]] double width() const { return _width; }
-    [[nodiscard]] double height() const { return _height; }
+    [[nodiscard]] const Domain& domain() const { return _domain; }
+    [[nodiscard]] double width() const { return _domain.width; }
+    [[nodiscard]] double height() const { return _domain.height; }
     [[nodiscard]] size_t piece_count() const { return _pieces.size(); }
     [[nodiscard]] double lowest_sampled_value() const { return _lowest_sampled_value; }
 
@@ -67,8 +70,7 @@ class PiecewisePolynomialField {
     static constexpr int DEGREE = 2;
     static constexpr int NODE_COUNT = 6;
 
-    double _width;
-    double _height;
+    Domain _domain;
     int _columns;
     int _rows;
     double _total_mass;
@@ -81,7 +83,7 @@ class PiecewisePolynomialField {
     std::vector<std::array<std::array<Polynomial, 2>, 2>> _piece_derivatives_times_coordinate;
     std::vector<std::array<std::array<Polynomial, 3>, 2>> _piece_derivatives_times_coordinate_pair;
 
-    PiecewisePolynomialField(double width, double height, int columns, int rows);
+    PiecewisePolynomialField(Domain domain, int columns, int rows);
 
     [[nodiscard]] std::array<Vector2, 3> triangle_corners(size_t piece) const;
     [[nodiscard]] std::optional<Polygon> clipped_to_triangle(const Polygon& polygon, size_t piece) const;
@@ -98,29 +100,23 @@ class PiecewisePolynomialField {
         const std::vector<Vector2>& points,
         int axis
     );
+    [[nodiscard]] std::array<int, 2> tile_range(const std::array<double, 2>& interval, int axis) const;
 };
 
 template<ScalarField ScalarFieldType>
 PiecewisePolynomialField PiecewisePolynomialField::sample(
-    double width,
-    double height,
+    const Domain& domain,
     int columns,
     int rows,
     ScalarFieldType& scalar_field
 ) {
-    CGAL_precondition(width > 0.0 && height > 0.0 && columns > 0 && rows > 0);
+    CGAL_precondition(columns > 0 && rows > 0);
 
-    PiecewisePolynomialField field(width, height, columns, rows);
+    PiecewisePolynomialField field(domain, columns, rows);
     field._pieces.reserve(static_cast<size_t>(columns) * rows * 2);
 
     auto canonical_value = [&](const Vector2& point) {
-        double x = std::fmod(point.x(), width);
-        double y = std::fmod(point.y(), height);
-
-        if (x < 0.0) { x += width; }
-        if (y < 0.0) { y += height; }
-
-        return scalar_field.value(Vector2(x, y));
+        return scalar_field.value(domain.canonical(point));
     };
 
     for (size_t piece = 0; piece < static_cast<size_t>(columns) * rows * 2; ++piece) {
@@ -198,9 +194,8 @@ PiecewisePolynomialField PiecewisePolynomialField::sample(
     return field;
 }
 
-inline PiecewisePolynomialField::PiecewisePolynomialField(double width, double height, int columns, int rows) :
-    _width(width),
-    _height(height),
+inline PiecewisePolynomialField::PiecewisePolynomialField(Domain domain, int columns, int rows) :
+    _domain(domain),
     _columns(columns),
     _rows(rows),
     _total_mass(0.0),
@@ -214,8 +209,8 @@ inline std::array<Vector2, 3> PiecewisePolynomialField::triangle_corners(size_t 
     size_t square = piece / 2;
     int column = static_cast<int>(square % static_cast<size_t>(_columns));
     int row = static_cast<int>(square / static_cast<size_t>(_columns));
-    double cell_width = _width / _columns;
-    double cell_height = _height / _rows;
+    double cell_width = _domain.width / _columns;
+    double cell_height = _domain.height / _rows;
 
     Vector2 low(column * cell_width, row * cell_height);
     Vector2 right = low + Vector2(cell_width, 0.0);
@@ -229,15 +224,15 @@ inline std::array<Vector2, 3> PiecewisePolynomialField::triangle_corners(size_t 
     return {right, high, up};
 }
 
+// A point outside the rectangle wraps along a wrapped axis and reads the
+// nearest edge along a walled one, where nothing lies beyond the wall.
 inline double PiecewisePolynomialField::value(const Vector2& point) const {
-    double x = std::fmod(point.x(), _width);
-    double y = std::fmod(point.y(), _height);
+    Vector2 reduced = _domain.canonical(point);
+    double x = std::clamp(reduced.x(), 0.0, _domain.width);
+    double y = std::clamp(reduced.y(), 0.0, _domain.height);
 
-    if (x < 0.0) { x += _width; }
-    if (y < 0.0) { y += _height; }
-
-    double cell_width = _width / _columns;
-    double cell_height = _height / _rows;
+    double cell_width = _domain.width / _columns;
+    double cell_height = _domain.height / _rows;
     int column = std::min(static_cast<int>(x / cell_width), _columns - 1);
     int row = std::min(static_cast<int>(y / cell_height), _rows - 1);
     double fraction_x = x / cell_width - column;
@@ -250,7 +245,8 @@ inline double PiecewisePolynomialField::value(const Vector2& point) const {
 
 // Walks every (piece, period translate) pair whose triangle can meet the
 // region, clips in mesh coordinates, and hands the clipped region, the
-// piece and the translate to the accumulator.
+// piece and the translate to the accumulator. Only a wrapped axis has
+// translates to walk.
 template<typename RegionType, typename Accumulate>
 void PiecewisePolynomialField::for_each_overlap(const RegionType& region, const Accumulate& accumulate) const {
     std::vector<Vector2> points;
@@ -264,14 +260,15 @@ void PiecewisePolynomialField::for_each_overlap(const RegionType& region, const 
     std::array<double, 2> x_range = bounding_interval(points, 0);
     std::array<double, 2> y_range = bounding_interval(points, 1);
 
-    double cell_width = _width / _columns;
-    double cell_height = _height / _rows;
+    double cell_width = _domain.width / _columns;
+    double cell_height = _domain.height / _rows;
 
-    for (int tile_x = static_cast<int>(std::floor(x_range[0] / _width));
-         tile_x <= static_cast<int>(std::floor(x_range[1] / _width)); ++tile_x) {
-        for (int tile_y = static_cast<int>(std::floor(y_range[0] / _height));
-             tile_y <= static_cast<int>(std::floor(y_range[1] / _height)); ++tile_y) {
-            Vector2 offset(tile_x * _width, tile_y * _height);
+    std::array<int, 2> tiles_x = tile_range(x_range, 0);
+    std::array<int, 2> tiles_y = tile_range(y_range, 1);
+
+    for (int tile_x = tiles_x[0]; tile_x <= tiles_x[1]; ++tile_x) {
+        for (int tile_y = tiles_y[0]; tile_y <= tiles_y[1]; ++tile_y) {
+            Vector2 offset(tile_x * _domain.width, tile_y * _domain.height);
 
             int column_low = std::max(0, static_cast<int>(std::floor((x_range[0] - offset.x()) / cell_width)));
             int column_high = std::min(_columns - 1, static_cast<int>(std::floor((x_range[1] - offset.x()) / cell_width)));
@@ -598,6 +595,18 @@ inline Polynomial PiecewisePolynomialField::fit_piece(
     piece.add_coefficient({0, 2, 0}, coefficients[5]);
 
     return piece;
+}
+
+inline std::array<int, 2> PiecewisePolynomialField::tile_range(
+    const std::array<double, 2>& interval,
+    int axis
+) const {
+    if (!_domain.wrapped(axis)) {
+        return {0, 0};
+    }
+
+    double extent = _domain.extent(axis);
+    return {static_cast<int>(std::floor(interval[0] / extent)), static_cast<int>(std::floor(interval[1] / extent))};
 }
 
 inline std::array<double, 2> PiecewisePolynomialField::bounding_interval(

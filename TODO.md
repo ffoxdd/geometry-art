@@ -25,15 +25,7 @@ least-squares C1 path has a direct flat analogue waiting.
 *Verified by:* a certified positive floor and a telescoped residual
 on a flat density, as on the sphere.
 
-### 2. Walls
-Deferred by design: every edge look except the true conformed one
-comes from cropping the torus, so the bounded domain and its terms in
-the exact Hessian wait until a piece demands what a cut cannot give.
-The design is in `docs/geometry_portability.md`.
-
-*Verified by:* a walled rectangle driving the shared optimizer stack.
-
-### 3. Torus-aware density
+### 2. Torus-aware density
 A field on the closed minor dimension v, built from two independent
 factors that multiply: the embedding correction — the area element
 R + r cos phi of the ring torus, configured by the tube aspect r/R,
@@ -49,7 +41,7 @@ never raw coefficients in chart coordinates.
 *Verified by:* a snapshot on the embedded torus whose cell areas are
 uniform under the identity profile, and match the profile otherwise.
 
-### 4. Field parameters in the studio
+### 3. Field parameters in the studio
 Each field declares its parameters in user-meaningful units --
 contrast as a densest-to-sparsest ratio, level, phase in turns --
 and the applet renders controls from that declaration, so adding a

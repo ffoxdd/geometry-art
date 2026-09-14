@@ -1,7 +1,7 @@
 #ifndef GEOMETRY_ART_VORONOI_FLAT_CORE_PERIODIC_SLOTS_HPP_
 #define GEOMETRY_ART_VORONOI_FLAT_CORE_PERIODIC_SLOTS_HPP_
 
-#include "torus.hpp"
+#include "diagram.hpp"
 #include <cmath>
 #include <cstddef>
 #include <map>
@@ -11,7 +11,7 @@
 
 namespace geometry_art::voronoi::flat {
 
-// One slot per physical bisector. On a torus the unordered site pair is not
+// One slot per physical bisector. On a wrapped domain the unordered site pair is not
 // enough to name one: the same two sites can share two bisectors, one
 // across each seam, and a cell can border itself. The key adds the period
 // offset between the two charts, oriented from the smaller index so both
@@ -25,18 +25,18 @@ struct PeriodicSlots {
     [[nodiscard]] size_t count() const { return representatives.size(); }
 
     [[nodiscard]] static PeriodicSlots build(
-        const Torus& torus,
+        const Diagram& diagram,
         const std::vector<std::vector<CellEdgeInfo>>& edges_by_cell
     );
 
  private:
     using Key = std::tuple<size_t, size_t, int, int>;
 
-    [[nodiscard]] static Key key_of(const Torus& torus, size_t cell, const CellEdgeInfo& edge);
+    [[nodiscard]] static Key key_of(const Diagram& diagram, size_t cell, const CellEdgeInfo& edge);
 };
 
 inline PeriodicSlots PeriodicSlots::build(
-    const Torus& torus,
+    const Diagram& diagram,
     const std::vector<std::vector<CellEdgeInfo>>& edges_by_cell
 ) {
     std::map<Key, size_t> slot_by_key;
@@ -48,7 +48,7 @@ inline PeriodicSlots PeriodicSlots::build(
 
         for (size_t position = 0; position < edges_by_cell[cell].size(); ++position) {
             auto [iterator, inserted] = slot_by_key.try_emplace(
-                key_of(torus, cell, edges_by_cell[cell][position]),
+                key_of(diagram, cell, edges_by_cell[cell][position]),
                 slots.representatives.size()
             );
 
@@ -63,10 +63,10 @@ inline PeriodicSlots PeriodicSlots::build(
     return slots;
 }
 
-inline PeriodicSlots::Key PeriodicSlots::key_of(const Torus& torus, size_t cell, const CellEdgeInfo& edge) {
-    Vector2 offset = edge.neighbor_position - torus.site(edge.neighbor_index);
-    int dx = static_cast<int>(std::lround(offset.x() / torus.width()));
-    int dy = static_cast<int>(std::lround(offset.y() / torus.height()));
+inline PeriodicSlots::Key PeriodicSlots::key_of(const Diagram& diagram, size_t cell, const CellEdgeInfo& edge) {
+    Vector2 offset = edge.neighbor_position - diagram.site(edge.neighbor_index);
+    int dx = static_cast<int>(std::lround(offset.x() / diagram.width()));
+    int dy = static_cast<int>(std::lround(offset.y() / diagram.height()));
 
     if (cell <= edge.neighbor_index) {
         return Key{cell, edge.neighbor_index, dx, dy};

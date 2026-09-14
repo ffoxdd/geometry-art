@@ -2,7 +2,7 @@
 #define GEOMETRY_ART_VORONOI_FLAT_OPTIMIZERS_CVT_HESSIAN_HPP_
 
 #include "../core/periodic_slots.hpp"
-#include "../core/torus.hpp"
+#include "../core/diagram.hpp"
 #include "../../hessian_blocks.hpp"
 #include "../../../fields/flat/field.hpp"
 #include "../../../std_ext/parallel_for.hpp"
@@ -13,7 +13,7 @@
 
 namespace geometry_art::voronoi::flat {
 
-// Second derivatives of the CVT energy on the flat torus. The gradient is
+// Second derivatives of the CVT energy on a flat domain. The gradient is
 // 2(m s - M1) per cell; differentiating it gives 2mP on the diagonal plus
 // the sweep of every bisector, which contributes the relative second
 // moments R_ab = integral of rho (x - a)(x - b)^T along the edge -- all
@@ -24,7 +24,7 @@ class CvtHessian {
  public:
     explicit CvtHessian(FieldType field);
 
-    [[nodiscard]] HessianBlocks assemble(const Torus& torus) const;
+    [[nodiscard]] HessianBlocks assemble(const Diagram& diagram) const;
 
  private:
     struct SlotCurvature {
@@ -53,15 +53,15 @@ CvtHessian<FieldType>::CvtHessian(FieldType field) :
 }
 
 template<fields::flat::Field FieldType>
-HessianBlocks CvtHessian<FieldType>::assemble(const Torus& torus) const {
-    size_t count = torus.size();
+HessianBlocks CvtHessian<FieldType>::assemble(const Diagram& diagram) const {
+    size_t count = diagram.size();
     std::vector<std::vector<CellEdgeInfo>> cell_edges(count);
 
     for (size_t k = 0; k < count; ++k) {
-        cell_edges[k] = torus.cell_edges(k);
+        cell_edges[k] = diagram.cell_edges(k);
     }
 
-    PeriodicSlots slots = PeriodicSlots::build(torus, cell_edges);
+    PeriodicSlots slots = PeriodicSlots::build(diagram, cell_edges);
     std::vector<SlotCurvature> curvatures(slots.count());
 
     std_ext::parallel_for(slots.count(), [&](size_t slot) {
@@ -69,7 +69,7 @@ HessianBlocks CvtHessian<FieldType>::assemble(const Torus& torus) const {
         const CellEdgeInfo& edge = cell_edges[cell][position];
         auto integrals = _field.integrals(edge.boundary);
         Matrix3 second_moment = _field.second_moment(edge.boundary);
-        Vector2 own_site = torus.site(cell);
+        Vector2 own_site = diagram.site(cell);
         Vector3 own(own_site.x(), own_site.y(), 0.0);
         Vector3 neighbor(edge.neighbor_position.x(), edge.neighbor_position.y(), 0.0);
 
@@ -87,7 +87,7 @@ HessianBlocks CvtHessian<FieldType>::assemble(const Torus& torus) const {
     blocks.neighbors.resize(count);
 
     std_ext::parallel_for(count, [&](size_t k) {
-        blocks.diagonal[k] = 2.0 * _field.integrals(torus.cell(k)).mass * planar_identity();
+        blocks.diagonal[k] = 2.0 * _field.integrals(diagram.cell(k)).mass * planar_identity();
         blocks.neighbors[k].reserve(cell_edges[k].size());
 
         for (size_t position = 0; position < cell_edges[k].size(); ++position) {

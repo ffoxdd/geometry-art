@@ -15,9 +15,15 @@ export function kindOf(snapshot) {
 }
 
 // What a drawing lets you set, and which of its colourings read a value off
-// every cell or particle and so have a colour map to edit.
+// every cell or particle and so have a colour map to edit. A drawing may
+// offer different controls to different snapshots of its kind, and names
+// the panel each set belongs to.
 export function controls(snapshot) {
-  return DRAWINGS[kindOf(snapshot)].CONTROLS;
+  return DRAWINGS[kindOf(snapshot)].controls(snapshot);
+}
+
+export function panelOf(snapshot) {
+  return `${kindOf(snapshot)}:${DRAWINGS[kindOf(snapshot)].panelOf(snapshot)}`;
 }
 
 export function ramped(snapshot) {

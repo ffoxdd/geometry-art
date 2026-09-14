@@ -1,8 +1,9 @@
 #ifndef GEOMETRY_ART_VORONOI_FLAT_OPTIMIZERS_CAPACITY_HESSIAN_HPP_
 #define GEOMETRY_ART_VORONOI_FLAT_OPTIMIZERS_CAPACITY_HESSIAN_HPP_
 
+#include "../core/cut.hpp"
 #include "../core/periodic_slots.hpp"
-#include "../core/torus.hpp"
+#include "../core/diagram.hpp"
 #include "../../hessian_blocks.hpp"
 #include "../../../fields/flat/field.hpp"
 #include "../../../std_ext/parallel_for.hpp"
@@ -13,6 +14,7 @@
 #include <cmath>
 #include <cstddef>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace geometry_art::voronoi::flat {
@@ -22,14 +24,16 @@ namespace geometry_art::voronoi::flat {
 // channels -- the line translates and rotates, which the density and its
 // gradient feel along the edge; the separation in the denominator changes;
 // and the two endpoints slide, each pinned by planar equidistance to one
-// more site. A self-edge's weight jump is zero, so self-edges contribute
-// nothing and are skipped.
+// more site or by the wall it lies on. A self-edge's weight jump is zero,
+// so self-edges contribute nothing and are skipped; a wall edge never
+// sweeps and is not a bisector at all. An endpoint pinned by a wall has no
+// fourth site, and its slot names the cell itself with an empty row.
 template<fields::flat::Field FieldType>
 class CapacityHessian {
  public:
     explicit CapacityHessian(FieldType field);
 
-    [[nodiscard]] HessianBlocks assemble(const Torus& torus, const std::vector<double>& weights) const;
+    [[nodiscard]] HessianBlocks assemble(const Diagram& diagram, const std::vector<double>& weights) const;
 
  private:
     struct EdgeContribution {
@@ -48,19 +52,20 @@ class CapacityHessian {
 
     FieldType _field;
 
-    [[nodiscard]] EdgeContribution edge_contribution(const Torus& torus, size_t cell, const CellEdgeInfo& edge) const;
+    [[nodiscard]] EdgeContribution edge_contribution(const Diagram& diagram, size_t cell, const CellEdgeInfo& edge) const;
 
     void add_endpoint(
         Response& response,
         const Vector2& endpoint,
         const Vector2& own,
         const Vector2& neighbor,
-        const Vector2& opposite,
+        const Cut& cut,
         int opposite_slot,
         const Vector3& tangent,
         double sign
     ) const;
 
+    [[nodiscard]] static size_t pinned_site(const Cut& cut, size_t cell);
     [[nodiscard]] static Matrix3 planar_identity();
     [[nodiscard]] static Vector3 planar(const Vector2& point);
 };
@@ -72,24 +77,24 @@ CapacityHessian<FieldType>::CapacityHessian(FieldType field) :
 
 template<fields::flat::Field FieldType>
 HessianBlocks CapacityHessian<FieldType>::assemble(
-    const Torus& torus,
+    const Diagram& diagram,
     const std::vector<double>& weights
 ) const {
-    size_t count = torus.size();
+    size_t count = diagram.size();
     CGAL_precondition(weights.size() == count);
 
     std::vector<std::vector<CellEdgeInfo>> cell_edges(count);
 
     for (size_t k = 0; k < count; ++k) {
-        cell_edges[k] = torus.cell_edges(k);
+        cell_edges[k] = diagram.cell_edges(k);
     }
 
-    PeriodicSlots slots = PeriodicSlots::build(torus, cell_edges);
+    PeriodicSlots slots = PeriodicSlots::build(diagram, cell_edges);
     std::vector<EdgeContribution> contributions(slots.count());
 
     std_ext::parallel_for(slots.count(), [&](size_t slot) {
         auto [cell, position] = slots.representatives[slot];
-        contributions[slot] = edge_contribution(torus, cell, cell_edges[cell][position]);
+        contributions[slot] = edge_contribution(diagram, cell, cell_edges[cell][position]);
     });
 
     HessianBlocks blocks;
@@ -147,12 +152,17 @@ HessianBlocks CapacityHessian<FieldType>::assemble(
 // difference below is chart-consistent.
 template<fields::flat::Field FieldType>
 typename CapacityHessian<FieldType>::EdgeContribution CapacityHessian<FieldType>::edge_contribution(
-    const Torus& torus,
+    const Diagram& diagram,
     size_t cell,
     const CellEdgeInfo& edge
 ) const {
     EdgeContribution contribution;
-    contribution.sites = {cell, edge.neighbor_index, edge.source_opposite_index, edge.target_opposite_index};
+    contribution.sites = {
+        cell,
+        edge.neighbor_index,
+        pinned_site(edge.source_cut, cell),
+        pinned_site(edge.target_cut, cell)
+    };
     contribution.own_row = {Matrix3::Zero(), Matrix3::Zero(), Matrix3::Zero(), Matrix3::Zero()};
     contribution.neighbor_row = {Matrix3::Zero(), Matrix3::Zero(), Matrix3::Zero(), Matrix3::Zero()};
     contribution.active = false;
@@ -161,7 +171,7 @@ typename CapacityHessian<FieldType>::EdgeContribution CapacityHessian<FieldType>
         return contribution;
     }
 
-    Vector2 own_site = torus.site(cell);
+    Vector2 own_site = diagram.site(cell);
     Vector2 neighbor_site = edge.neighbor_position;
     double separation = (neighbor_site - own_site).norm();
 
@@ -204,8 +214,8 @@ typename CapacityHessian<FieldType>::EdgeContribution CapacityHessian<FieldType>
 
     Vector3 tangent = planar(edge.boundary.direction()) / edge.boundary.length();
 
-    add_endpoint(response, edge.boundary.source(), own_site, neighbor_site, edge.source_opposite_position, 2, tangent, -1.0);
-    add_endpoint(response, edge.boundary.target(), own_site, neighbor_site, edge.target_opposite_position, 3, tangent, 1.0);
+    add_endpoint(response, edge.boundary.source(), own_site, neighbor_site, edge.source_cut, 2, tangent, -1.0);
+    add_endpoint(response, edge.boundary.target(), own_site, neighbor_site, edge.target_cut, 3, tangent, 1.0);
 
     // The sweep rates about each site, F = (moment - site mass) / sep;
     // their derivatives collect the integral responses, the direct site
@@ -227,41 +237,56 @@ typename CapacityHessian<FieldType>::EdgeContribution CapacityHessian<FieldType>
     return contribution;
 }
 
-// The endpoint is equidistant from the two edge sites and one more, so its
-// velocity solves the differentiated equidistance pair; what the integrals
-// feel is its tangential component, an endpoint flux of the integrand.
+// The endpoint is equidistant from the two edge sites and pinned by one
+// more equation -- equidistance from a third site, or the wall it lies on,
+// which does not move -- so its velocity solves the differentiated pair;
+// what the integrals feel is its tangential component, an endpoint flux of
+// the integrand.
 template<fields::flat::Field FieldType>
 void CapacityHessian<FieldType>::add_endpoint(
     Response& response,
     const Vector2& endpoint,
     const Vector2& own,
     const Vector2& neighbor,
-    const Vector2& opposite,
+    const Cut& cut,
     int opposite_slot,
     const Vector3& tangent,
     double sign
 ) const {
-    Eigen::Matrix2d equidistance;
-    equidistance.row(0) = (neighbor - own).transpose();
-    equidistance.row(1) = (opposite - own).transpose();
+    const Bisector* bisector = std::get_if<Bisector>(&cut);
 
-    if (std::abs(equidistance.determinant()) < GEOMETRIC_EPSILON) {
+    Eigen::Matrix2d system;
+    system.row(0) = (neighbor - own).transpose();
+
+    if (bisector != nullptr) {
+        system.row(1) = (bisector->neighbor_position - own).transpose();
+    } else {
+        system.row(1) = std::get<Wall>(cut).inward_normal.transpose();
+    }
+
+    if (std::abs(system.determinant()) < GEOMETRIC_EPSILON) {
         return;
     }
 
-    Eigen::RowVector2d tangential = Eigen::RowVector2d(tangent.x(), tangent.y()) * equidistance.inverse();
+    Eigen::RowVector2d tangential = Eigen::RowVector2d(tangent.x(), tangent.y()) * system.inverse();
 
-    Eigen::RowVector2d own_row = (tangential[0] + tangential[1]) * (endpoint - own).transpose();
+    Eigen::RowVector2d own_row = tangential[0] * (endpoint - own).transpose();
     Eigen::RowVector2d neighbor_row = -tangential[0] * (endpoint - neighbor).transpose();
-    Eigen::RowVector2d opposite_row = -tangential[1] * (endpoint - opposite).transpose();
 
     std::array<Eigen::RowVector3d, 4> velocity{
-        Eigen::RowVector3d(own_row[0], own_row[1], 0.0),
+        Eigen::RowVector3d::Zero(),
         Eigen::RowVector3d(neighbor_row[0], neighbor_row[1], 0.0),
         Eigen::RowVector3d::Zero(),
         Eigen::RowVector3d::Zero()
     };
-    velocity[opposite_slot] = Eigen::RowVector3d(opposite_row[0], opposite_row[1], 0.0);
+
+    if (bisector != nullptr) {
+        own_row += tangential[1] * (endpoint - own).transpose();
+        Eigen::RowVector2d opposite_row = -tangential[1] * (endpoint - bisector->neighbor_position).transpose();
+        velocity[opposite_slot] = Eigen::RowVector3d(opposite_row[0], opposite_row[1], 0.0);
+    }
+
+    velocity[0] = Eigen::RowVector3d(own_row[0], own_row[1], 0.0);
 
     double density = _field.value(endpoint);
     Vector3 position = planar(endpoint);
@@ -270,6 +295,12 @@ void CapacityHessian<FieldType>::add_endpoint(
         response.mass[target] += sign * density * velocity[target];
         response.moment[target] += sign * density * position * velocity[target];
     }
+}
+
+template<fields::flat::Field FieldType>
+size_t CapacityHessian<FieldType>::pinned_site(const Cut& cut, size_t cell) {
+    const Bisector* bisector = std::get_if<Bisector>(&cut);
+    return bisector != nullptr ? bisector->neighbor_index : cell;
 }
 
 template<fields::flat::Field FieldType>

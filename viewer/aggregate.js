@@ -270,6 +270,14 @@ export const CONTROLS = {
   },
 };
 
+export function controls() {
+  return CONTROLS;
+}
+
+export function panelOf() {
+  return 'aggregate';
+}
+
 export const RAMPED = ['age'];
 
 // Depth comes from two cues: fog fades the far side toward the background

@@ -10,10 +10,11 @@
 
 namespace geometry_art::io::snapshot {
 
-// The rectangle of periods as SVG, cells drawn with straight edges. The
-// frame cuts straight across the cells -- partial cells are part of the
-// look -- so every cell is drawn at each period translate whose bounding
-// box touches the frame and the frame clips the lot.
+// The flat rectangle as SVG, cells drawn with straight edges. Along a
+// wrapped axis the frame cuts straight across the cells -- partial cells
+// are part of the look -- so every cell is drawn at each period translate
+// whose bounding box touches the frame and the frame clips the lot; along
+// a walled axis the cells already end at the frame.
 class FlatSvgWriter {
  public:
     explicit FlatSvgWriter(double size = 512.0);
@@ -63,9 +64,11 @@ inline void FlatSvgWriter::write_cell(
     std::ostream& stream
 ) const {
     double scale = _size / snapshot.width;
+    int reach_x = snapshot.geometry == "plane" ? 0 : 1;
+    int reach_y = snapshot.geometry == "torus" ? 1 : 0;
 
-    for (int tile_x = -1; tile_x <= 1; ++tile_x) {
-        for (int tile_y = -1; tile_y <= 1; ++tile_y) {
+    for (int tile_x = -reach_x; tile_x <= reach_x; ++tile_x) {
+        for (int tile_y = -reach_y; tile_y <= reach_y; ++tile_y) {
             double offset_x = tile_x * snapshot.width;
             double offset_y = tile_y * snapshot.height;
             bool visible = false;

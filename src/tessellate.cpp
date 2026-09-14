@@ -5,7 +5,7 @@
 #include "geometry_art/io/snapshot/json_writer.hpp"
 #include "geometry_art/io/snapshot/svg_writer.hpp"
 #include "geometry_art/io/text/sphere_repository.hpp"
-#include "geometry_art/io/text/torus_repository.hpp"
+#include "geometry_art/io/text/flat_repository.hpp"
 #include <CLI/CLI.hpp>
 #include <chrono>
 #include <ctime>
@@ -44,8 +44,12 @@ struct Config {
     std::string snapshot_path;
     double snapshot_interval = 0.0;
     std::string image_path;
+    double contrast = 4.0;
     double density_tolerance = 0.0;
 };
+
+bool flat_geometry(const std::string& geometry);
+std::string flat_field_objection(const Config& config);
 
 Config parse_arguments(int argc, char *argv[]);
 void write_snapshot(const geometry_art::io::snapshot::Snapshot& snapshot, const std::string& path);
@@ -70,6 +74,7 @@ int main(int argc, char *argv[]) {
         "  Max inner iterations: " << config.max_inner_iterations << std::endl <<
         "  Capacity tolerance: " << config.capacity_tolerance << std::endl <<
         "  Inner solver: " << config.inner_solver << std::endl <<
+        "  Contrast: " << config.contrast << std::endl <<
         "  Seed: " << (config.seed.has_value() ? std::to_string(*config.seed) : "random") << std::endl <<
         std::endl;
 
@@ -94,6 +99,7 @@ int main(int argc, char *argv[]) {
         [&](const geometry_art::io::snapshot::Snapshot& snapshot) { write_snapshot(snapshot, config.snapshot_path); },
         std::chrono::milliseconds(static_cast<long long>(config.snapshot_interval * 1000.0)),
         config.image_path,
+        config.contrast,
         config.density_tolerance
     );
 
@@ -144,14 +150,16 @@ void write_snapshot(const geometry_art::io::snapshot::Snapshot& snapshot, const 
     std::filesystem::rename(path + ".svg.tmp", path + ".svg");
 }
 
-// The flat pipeline: same options, a rectangle of periods instead of a
-// sphere, and the frame cut from the torus at render time.
+// The flat pipeline: same options, a rectangle instead of a sphere. The
+// torus wraps it both ways, the cylinder walls its rims, the plane walls
+// all four sides, and walled cells end at the frame.
 int run_flat(const Config& config, int argc, char *argv[]) {
     std::cout <<
         "Configuration:" << std::endl <<
         "  Geometry: " << config.geometry << " (" << config.width << " x " << config.height << ")" << std::endl <<
         "  Points: " << config.points_count << std::endl <<
         "  Density: " << config.density_field << std::endl <<
+        "  Contrast: " << config.contrast << std::endl <<
         "  Warm start: " << config.warm_start << std::endl <<
         "  Lloyd passes: " << config.lloyd_passes << std::endl <<
         "  Capacity tolerance: " << config.capacity_tolerance << std::endl <<
@@ -178,6 +186,7 @@ int run_flat(const Config& config, int argc, char *argv[]) {
         config.width,
         config.height,
         config.image_path,
+        config.contrast,
         config.geometry,
         callback,
         [&](const geometry_art::io::snapshot::Snapshot& snapshot) { write_snapshot(snapshot, config.snapshot_path); },
@@ -185,7 +194,7 @@ int run_flat(const Config& config, int argc, char *argv[]) {
         config.density_tolerance
     );
 
-    auto torus = factory.build();
+    auto diagram = factory.build();
 
     if (!config.snapshot_path.empty()) {
         write_snapshot(factory.snapshot(), config.snapshot_path);
@@ -202,19 +211,25 @@ int run_flat(const Config& config, int argc, char *argv[]) {
         std::put_time(std::localtime(&time), "%Y%m%d_%H%M%S") <<
         ".txt";
 
-    geometry_art::io::text::TorusRepository::save(*torus, filename.str());
+    geometry_art::io::text::FlatRepository::save(*diagram, filename.str());
     std::cout << "Saved: " << filename.str() << std::endl;
 
     return 0;
 }
 
 Config parse_arguments(int argc, char *argv[]) {
-    CLI::App app{"Capacity-constrained tessellation on a sphere, torus, or cylinder"};
+    CLI::App app{"Capacity-constrained tessellation on a sphere, torus, cylinder, or plane"};
 
     Config config;
     app.callback([&config]() {
         if (config.density_field == "image" && config.image_path.empty()) {
             throw CLI::ValidationError("--image", "-f image needs an image file");
+        }
+
+        std::string objection = flat_field_objection(config);
+
+        if (!objection.empty()) {
+            throw CLI::ValidationError("--density-field", objection);
         }
     });
 
@@ -223,12 +238,12 @@ Config parse_arguments(int argc, char *argv[]) {
         ->default_val(10);
 
     app.add_option("--geometry,-g", config.geometry)
-        ->description("Domain to tessellate: the sphere, or a flat torus a cylinder frame is cut from")
-        ->check(CLI::IsMember({"sphere", "torus", "cylinder"}))
+        ->description("Domain to tessellate: the sphere, a flat torus, a cylinder with walled rims, or a walled plane")
+        ->check(CLI::IsMember({"sphere", "torus", "cylinder", "plane"}))
         ->default_val("sphere");
 
     app.add_option("--width", config.width)
-        ->description("Circumference of the flat domain")
+        ->description("Width of the flat domain, the cylinder's circumference")
         ->default_val(2.0)
         ->check(CLI::PositiveNumber);
 
@@ -286,6 +301,11 @@ Config parse_arguments(int argc, char *argv[]) {
         ->description("Equirectangular image whose darkness is the density, for -f image")
         ->check(CLI::ExistingFile);
 
+    app.add_option("--contrast", config.contrast)
+        ->description("Densest-to-sparsest density ratio of the linear field")
+        ->default_val(4.0)
+        ->check(CLI::Range(1.0, 1000.0));
+
     app.add_option("--density-tolerance", config.density_tolerance)
         ->description("Refine the density's spline until its relative representation error is below this (0 keeps the cell-scale mesh)")
         ->default_val(0.0)
@@ -313,4 +333,27 @@ Config parse_arguments(int argc, char *argv[]) {
     }
 
     return config;
+}
+
+bool flat_geometry(const std::string& geometry) {
+    return geometry != "sphere";
+}
+
+// The flat family carries the densities it can integrate exactly, and a
+// gradient only where a walled axis lets it rise.
+std::string flat_field_objection(const Config& config) {
+    if (!flat_geometry(config.geometry)) {
+        return "";
+    }
+
+    if (config.density_field == "linear" && config.geometry == "torus") {
+        return "a linear density rises from bottom to top, which the torus wraps";
+    }
+
+    if (config.density_field == "constant" || config.density_field == "linear" ||
+        config.density_field == "noise" || config.density_field == "image") {
+        return "";
+    }
+
+    return "the " + config.density_field + " density is not available on the " + config.geometry;
 }

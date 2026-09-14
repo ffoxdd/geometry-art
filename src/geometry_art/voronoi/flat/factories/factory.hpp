@@ -1,17 +1,18 @@
 #ifndef GEOMETRY_ART_VORONOI_FLAT_FACTORIES_FACTORY_HPP_
 #define GEOMETRY_ART_VORONOI_FLAT_FACTORIES_FACTORY_HPP_
 
-#include "../core/torus.hpp"
+#include "../core/diagram.hpp"
 #include "../optimizers/capacity_constrained_optimizer.hpp"
 #include "../optimizers/lloyd_optimizer.hpp"
 #include "../optimizers/newton_optimizer.hpp"
 #include "../../optimizer_parameters.hpp"
-#include "../../../fields/flat/constant_field.hpp"
 #include "../../../fields/flat/field.hpp"
 #include "../../../fields/flat/scalar_field.hpp"
 #include "../../../fields/flat/image_field.hpp"
 #include "../../../fields/flat/noise_field.hpp"
 #include "../../../fields/flat/piecewise_polynomial_field.hpp"
+#include "../../../fields/flat/polynomial_field.hpp"
+#include "../../../geometry/planar/domain.hpp"
 #include "../../../io/snapshot/flat_capture.hpp"
 #include "../../../io/snapshot/snapshot.hpp"
 #include "../../../math/interval.hpp"
@@ -26,19 +27,26 @@
 #include <memory>
 #include <optional>
 #include <random>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
 namespace geometry_art::voronoi::flat {
 
-using fields::flat::ConstantField;
 using fields::flat::ImageField;
 using fields::flat::NoiseField;
 using fields::flat::PiecewisePolynomialField;
+using fields::flat::PolynomialField;
+using geometry::planar::Domain;
 using geometry_art::math::Interval;
 
 using SnapshotCallback = std::function<void(const io::snapshot::Snapshot&)>;
 
+// Builds and solves one flat tessellation from the names the command line
+// speaks: a geometry name picks the domain, a density name picks the field.
+// The torus wraps both axes, the cylinder walls its height, the plane walls
+// both. The linear density's contrast is its densest-to-sparsest ratio,
+// rising from the bottom of the domain to the top.
 class Factory {
  public:
     Factory(
@@ -52,6 +60,7 @@ class Factory {
         double width,
         double height,
         std::string image_path,
+        double contrast,
         std::string geometry_name,
         Callback callback,
         SnapshotCallback snapshot_callback,
@@ -59,9 +68,12 @@ class Factory {
         double density_tolerance = 0.0
     );
 
-    std::unique_ptr<Torus> build();
+    std::unique_ptr<Diagram> build();
 
     [[nodiscard]] const io::snapshot::Snapshot& snapshot() const { return _snapshot; }
+    [[nodiscard]] const Domain& domain() const { return _domain; }
+
+    [[nodiscard]] static Domain domain_of(const std::string& geometry_name, double width, double height);
 
     // The flat bandwidth rule: the density grid's spacing is the cell
     // scale, the square root of one cell's share of the rectangle.
@@ -80,9 +92,9 @@ class Factory {
     size_t _newton_iterations;
     CapacityConstrainedParameters _optimizer_parameters;
     std::optional<unsigned int> _seed;
-    double _width;
-    double _height;
+    Domain _domain;
     std::string _image_path;
+    double _contrast;
     std::string _geometry_name;
     Callback _callback;
     SnapshotCallback _snapshot_callback;
@@ -91,11 +103,11 @@ class Factory {
     io::snapshot::Snapshot _snapshot;
 
     template<fields::flat::Field FieldType>
-    [[nodiscard]] std::unique_ptr<Torus> build_with(const FieldType& field);
+    [[nodiscard]] std::unique_ptr<Diagram> build_with(const FieldType& field);
 
     template<fields::flat::Field FieldType>
-    [[nodiscard]] std::unique_ptr<Torus> warm_started(
-        std::unique_ptr<Torus> torus,
+    [[nodiscard]] std::unique_ptr<Diagram> warm_started(
+        std::unique_ptr<Diagram> diagram,
         const FieldType& field,
         const Callback& callback
     ) const;
@@ -112,7 +124,8 @@ class Factory {
         ScalarFieldType& scalar_field
     ) const;
 
-    [[nodiscard]] std::unique_ptr<Torus> initial_torus() const;
+    [[nodiscard]] std::unique_ptr<Diagram> initial_diagram() const;
+    [[nodiscard]] PolynomialField linear_field() const;
     [[nodiscard]] PiecewisePolynomialField sample_noise_field() const;
     [[nodiscard]] PiecewisePolynomialField sample_image_field() const;
 
@@ -131,6 +144,7 @@ inline Factory::Factory(
     double width,
     double height,
     std::string image_path,
+    double contrast,
     std::string geometry_name,
     Callback callback,
     SnapshotCallback snapshot_callback,
@@ -144,9 +158,9 @@ inline Factory::Factory(
     _newton_iterations(newton_iterations),
     _optimizer_parameters(optimizer_parameters),
     _seed(seed),
-    _width(width),
-    _height(height),
+    _domain(domain_of(geometry_name, width, height)),
     _image_path(std::move(image_path)),
+    _contrast(contrast),
     _geometry_name(std::move(geometry_name)),
     _callback(std::move(callback)),
     _snapshot_callback(std::move(snapshot_callback)),
@@ -154,7 +168,15 @@ inline Factory::Factory(
     _density_tolerance(density_tolerance) {
 }
 
-inline std::unique_ptr<Torus> Factory::build() {
+inline std::unique_ptr<Diagram> Factory::build() {
+    if (_density_field == "constant") {
+        return build_with(PolynomialField::constant(1.0, _domain));
+    }
+
+    if (_density_field == "linear") {
+        return build_with(linear_field());
+    }
+
     if (_density_field == "noise") {
         return build_with(sample_noise_field());
     }
@@ -163,22 +185,38 @@ inline std::unique_ptr<Torus> Factory::build() {
         return build_with(sample_image_field());
     }
 
-    return build_with(ConstantField(1.0, _width, _height));
+    throw std::invalid_argument("the " + _density_field + " density is not available on the " + _geometry_name);
+}
+
+inline Domain Factory::domain_of(const std::string& geometry_name, double width, double height) {
+    if (geometry_name == "torus") {
+        return Domain::torus(width, height);
+    }
+
+    if (geometry_name == "cylinder") {
+        return Domain::cylinder(width, height);
+    }
+
+    if (geometry_name == "plane") {
+        return Domain::plane(width, height);
+    }
+
+    throw std::invalid_argument("no flat domain is called " + geometry_name);
 }
 
 template<fields::flat::Field FieldType>
-std::unique_ptr<Torus> Factory::build_with(const FieldType& field) {
+std::unique_ptr<Diagram> Factory::build_with(const FieldType& field) {
     std::cout << "Scattering " << _points_count << " random points on the " <<
         _geometry_name << "..." << std::flush;
-    auto torus = initial_torus();
+    auto diagram = initial_diagram();
     std::cout << " done" << std::endl;
 
     Callback callback = snapshotting_callback(field);
-    callback(*torus);
-    torus = warm_started(std::move(torus), field, callback);
+    callback(*diagram);
+    diagram = warm_started(std::move(diagram), field, callback);
 
-    CapacityConstrainedOptimizer<FieldType> optimizer(std::move(torus), field, _optimizer_parameters, callback);
-    torus = optimizer.optimize();
+    CapacityConstrainedOptimizer<FieldType> optimizer(std::move(diagram), field, _optimizer_parameters, callback);
+    diagram = optimizer.optimize();
 
     const auto& report = optimizer.report();
     std::cout << "  " << std::setw(8) << std::left << "Final" << std::right <<
@@ -187,8 +225,8 @@ std::unique_ptr<Torus> Factory::build_with(const FieldType& field) {
         ", capacity RMS " << std::scientific << std::setprecision(3) << report.relative_rms_capacity_error <<
         std::defaultfloat << std::endl;
 
-    _snapshot = io::snapshot::capture_flat(*torus, field, _geometry_name);
-    return torus;
+    _snapshot = io::snapshot::capture_flat(*diagram, field, _geometry_name);
+    return diagram;
 }
 
 template<fields::flat::Field FieldType>
@@ -202,23 +240,23 @@ Callback Factory::snapshotting_callback(const FieldType& field) const {
     // interval to run in instead of repeating back to back.
     auto last = std::make_shared<std::chrono::steady_clock::time_point>(std::chrono::steady_clock::now());
 
-    return [this, &field, last](const Torus& torus) {
-        _callback(torus);
+    return [this, &field, last](const Diagram& diagram) {
+        _callback(diagram);
         auto now = std::chrono::steady_clock::now();
 
         if (now - *last < _snapshot_interval) {
             return;
         }
 
-        _snapshot_callback(io::snapshot::capture_flat(torus, field, _geometry_name));
+        _snapshot_callback(io::snapshot::capture_flat(diagram, field, _geometry_name));
         *last = std::chrono::steady_clock::now();
     };
 }
 
-inline std::unique_ptr<Torus> Factory::initial_torus() const {
+inline std::unique_ptr<Diagram> Factory::initial_diagram() const {
     std::mt19937 engine(_seed.has_value() ? *_seed : std::random_device{}());
-    std::uniform_real_distribution<double> across(0.0, _width);
-    std::uniform_real_distribution<double> along(0.0, _height);
+    std::uniform_real_distribution<double> across(0.0, _domain.width);
+    std::uniform_real_distribution<double> along(0.0, _domain.height);
 
     std::vector<Vector2> sites;
     sites.reserve(static_cast<size_t>(_points_count));
@@ -227,20 +265,20 @@ inline std::unique_ptr<Torus> Factory::initial_torus() const {
         sites.emplace_back(across(engine), along(engine));
     }
 
-    return std::make_unique<Torus>(_width, _height, std::move(sites));
+    return std::make_unique<Diagram>(_domain, std::move(sites));
 }
 
 template<fields::flat::Field FieldType>
-std::unique_ptr<Torus> Factory::warm_started(
-    std::unique_ptr<Torus> torus,
+std::unique_ptr<Diagram> Factory::warm_started(
+    std::unique_ptr<Diagram> diagram,
     const FieldType& field,
     const Callback& callback
 ) const {
     if (_warm_start == "newton" && _newton_iterations > 0) {
         NewtonParameters parameters = _optimizer_parameters.newton;
         parameters.max_iterations = _newton_iterations;
-        NewtonOptimizer<FieldType> newton(std::move(torus), field, parameters, callback);
-        torus = newton.optimize();
+        NewtonOptimizer<FieldType> newton(std::move(diagram), field, parameters, callback);
+        diagram = newton.optimize();
 
         const NewtonReport& report = newton.report();
         std::cout << "  " << std::setw(8) << std::left << "Newton" << std::right <<
@@ -248,31 +286,42 @@ std::unique_ptr<Torus> Factory::warm_started(
             std::scientific << std::setprecision(3) << report.gradient_norm <<
             ", energy " << report.cvt_energy << std::defaultfloat << std::endl;
 
-        return torus;
+        return diagram;
     }
 
     if (_lloyd_passes == 0) {
-        return torus;
+        return diagram;
     }
 
-    LloydOptimizer<FieldType> lloyd(std::move(torus), field, _lloyd_passes, callback);
-    torus = lloyd.optimize();
+    LloydOptimizer<FieldType> lloyd(std::move(diagram), field, _lloyd_passes, callback);
+    diagram = lloyd.optimize();
 
     std::cout << "  " << std::setw(8) << std::left << "Lloyd" << std::right <<
         std::setw(3) << _lloyd_passes << " passes: centroid deviation " <<
         std::scientific << std::setprecision(3) << lloyd.final_deviation() <<
         std::defaultfloat << std::endl;
 
-    return torus;
+    return diagram;
+}
+
+// Density 1 at the bottom rising to the contrast at the top, which only a
+// walled height can carry: along a wrapped axis the two edges are the same
+// line.
+inline PolynomialField Factory::linear_field() const {
+    if (_domain.wrapped(1)) {
+        throw std::invalid_argument("a linear density rises up the height, which the " + _geometry_name + " wraps");
+    }
+
+    return PolynomialField::linear(1.0, Vector2(0.0, (_contrast - 1.0) / _domain.height), _domain);
 }
 
 inline PiecewisePolynomialField Factory::sample_noise_field() const {
-    NoiseField noise(_width, _height, Interval(DENSITY_FLOOR, 1.0), _seed.has_value() ? static_cast<int>(*_seed) : 1546);
-    return sample_to_tolerance(noise, "periodic noise");
+    NoiseField noise(_domain.width, _domain.height, Interval(DENSITY_FLOOR, 1.0), _seed.has_value() ? static_cast<int>(*_seed) : 1546);
+    return sample_to_tolerance(noise, "noise");
 }
 
 inline PiecewisePolynomialField Factory::sample_image_field() const {
-    ImageField image = ImageField::load(_image_path, Interval(DENSITY_FLOOR, 1.0), _width, _height);
+    ImageField image = ImageField::load(_image_path, Interval(DENSITY_FLOOR, 1.0), _domain.width, _domain.height);
     return sample_to_tolerance(image, "image");
 }
 
@@ -286,11 +335,11 @@ PiecewisePolynomialField Factory::sample_to_tolerance(
     ScalarFieldType& scalar_field,
     const std::string& description
 ) const {
-    int columns = density_columns(_points_count, _width, _height);
-    int rows = density_rows(_points_count, _width, _height);
+    int columns = density_columns(_points_count, _domain.width, _domain.height);
+    int rows = density_rows(_points_count, _domain.width, _domain.height);
 
     for (;;) {
-        auto field = PiecewisePolynomialField::sample(_width, _height, columns, rows, scalar_field);
+        auto field = PiecewisePolynomialField::sample(_domain, columns, rows, scalar_field);
         double residual = relative_residual(field, scalar_field);
 
         std::cout << "Sampled " << description << " onto " << field.piece_count() <<
@@ -323,8 +372,8 @@ double Factory::relative_residual(
     double squared_target = 0.0;
 
     for (size_t k = 0; k < probes; ++k) {
-        double x = std::fmod(0.5 + 0.7548776662466927 * static_cast<double>(k), 1.0) * _width;
-        double y = std::fmod(0.25 + 0.5698402909980532 * static_cast<double>(k), 1.0) * _height;
+        double x = std::fmod(0.5 + 0.7548776662466927 * static_cast<double>(k), 1.0) * _domain.width;
+        double y = std::fmod(0.25 + 0.5698402909980532 * static_cast<double>(k), 1.0) * _domain.height;
         double target = scalar_field.value(Vector2(x, y));
         double error = field.value(Vector2(x, y)) - target;
 

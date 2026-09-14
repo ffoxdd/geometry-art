@@ -65,7 +65,7 @@ function render() {
 }
 
 function panelFor(next) {
-  const kind = drawing.kindOf(next);
+  const kind = drawing.panelOf(next);
 
   if (!panels.has(kind)) {
     const declaration = drawing.controls(next);

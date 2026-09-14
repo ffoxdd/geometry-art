@@ -1,8 +1,9 @@
 # Portability across geometries
 
 The target is capacity-constrained tessellation on any domain: the
-sphere, the plane, a flat torus, an arbitrary mesh. The sphere and the
-flat torus are the instances that exist, sharing one optimizer stack.
+sphere, the plane, a flat torus, an arbitrary mesh. The sphere, the
+flat torus and the walled plane are the instances that exist, sharing
+one optimizer stack.
 This note records what carries over, what does not, and how to use
 that as a tiebreak when two pieces of work look equally valuable.
 
@@ -94,13 +95,23 @@ derivative terms: a cell edge on the wall does not sweep when sites
 move, and a Voronoi vertex on the wall is constrained by the wall
 plus one equidistance instead of three-site equidistance -- the slot
 the sphere constraint occupies in the endpoint system holds the wall
-equation instead.
+equation instead. The flat diagram builds every cell the same way
+whichever closure its axes have: the site's fundamental region --
+the strip nearer the site than its own period images along a wrapped
+axis, the domain itself along a walled one -- clipped by the
+bisectors of its Delaunay neighbours, each edge remembering the cut
+it lies on. A wall and a self-image seam are then the same kind of
+edge, one that shapes the cell without sweeping, and the exact
+constraint curvature reads the cut on the far side of each bisector
+endpoint to know whether a third site or a wall pins it.
 
 **The torus is the default domain.** It is the only member with no
 boundary mathematics at all, so the optimizer stack ports unchanged;
 it is statistically homogeneous, with no wall anywhere to nucleate
 order; and every cell is usable pattern. The walled members extend
-it rather than precede it.
+it rather than precede it. The plane exists for the densities a
+wrapped axis cannot carry: a gradient rising across the width is not
+periodic, so it needs a wall at each end.
 
 The edge of a finished piece is a separate, artistic choice, and the
 treatments decouple from the domain:
@@ -140,9 +151,10 @@ mix per edge -- a cylinder cut at the top and scalloped at the
 bottom. Every look except the true conformed edge comes from the
 torus, in the density or the renderer: the optimizer never sees a
 boundary, the density sees the frame only as a mask, and the frame
-itself is a crop. Walls are therefore deferred, not sequenced --
-built if and when a piece demands conformed edges that closed cuts
-cannot imitate.
+itself is a crop. The plane is the conformed edge on all four sides
+and the cylinder is conformed at both rims, so a density can rise
+up its height; the cut look survives as a way of viewing a torus,
+rolled into a tube with the rims slicing through its cells.
 
 One caution for margins: a straight wall nucleates rows of cells
 aligned parallel to it, the way crystallization starts at the flat

@@ -2,7 +2,7 @@
 #define GEOMETRY_ART_VORONOI_FLAT_OPTIMIZERS_CAPACITY_CONSTRAINED_LAGRANGIAN_HPP_
 
 #include "../core/periodic_slots.hpp"
-#include "../core/torus.hpp"
+#include "../core/diagram.hpp"
 #include "../../capacity_jacobian.hpp"
 #include "../../lagrangian_evaluation.hpp"
 #include "../../state.hpp"
@@ -17,7 +17,7 @@
 
 namespace geometry_art::voronoi::flat {
 
-// The augmented Lagrangian of capacity-constrained CVT on the flat torus.
+// The augmented Lagrangian of capacity-constrained CVT on a flat domain.
 //
 // Bisectors are shared through slots keyed by the site pair AND the period
 // offset between the two charts: a torus can hold two distinct bisectors
@@ -31,15 +31,15 @@ class CapacityConstrainedLagrangian {
 
     [[nodiscard]] double target_mass() const { return _target_mass; }
 
-    [[nodiscard]] DiagramState diagram_state(const Torus& torus) const;
+    [[nodiscard]] DiagramState diagram_state(const Diagram& diagram) const;
     [[nodiscard]] LagrangianEvaluation evaluate(
-        const Torus& torus,
+        const Diagram& diagram,
         const DiagramState& state,
         const std::vector<double>& multipliers,
         double penalty
     ) const;
     [[nodiscard]] LagrangianEvaluation evaluate(
-        const Torus& torus,
+        const Diagram& diagram,
         const std::vector<double>& multipliers,
         double penalty
     ) const;
@@ -66,22 +66,22 @@ CapacityConstrainedLagrangian<FieldType>::CapacityConstrainedLagrangian(FieldTyp
 }
 
 template<fields::flat::Field FieldType>
-DiagramState CapacityConstrainedLagrangian<FieldType>::diagram_state(const Torus& torus) const {
-    size_t count = torus.size();
+DiagramState CapacityConstrainedLagrangian<FieldType>::diagram_state(const Diagram& diagram) const {
+    size_t count = diagram.size();
     std::vector<std::vector<CellEdgeInfo>> cell_edges(count);
 
     for (size_t k = 0; k < count; ++k) {
-        cell_edges[k] = torus.cell_edges(k);
+        cell_edges[k] = diagram.cell_edges(k);
     }
 
-    PeriodicSlots shared = PeriodicSlots::build(torus, cell_edges);
+    PeriodicSlots shared = PeriodicSlots::build(diagram, cell_edges);
     std::vector<SlotState> slots(shared.count());
 
     std_ext::parallel_for(shared.count(), [&](size_t slot) {
         auto [cell, position] = shared.representatives[slot];
         const CellEdgeInfo& edge = cell_edges[cell][position];
         auto integrals = _field.integrals(edge.boundary);
-        Vector3 own = planar(torus.site(cell));
+        Vector3 own = planar(diagram.site(cell));
         Vector3 neighbor = planar(edge.neighbor_position);
 
         slots[slot] = SlotState{
@@ -98,7 +98,7 @@ DiagramState CapacityConstrainedLagrangian<FieldType>::diagram_state(const Torus
     state.edges.resize(count);
 
     std_ext::parallel_for(count, [&](size_t k) {
-        Polygon cell = torus.cell(k);
+        Polygon cell = diagram.cell(k);
         auto integrals = _field.integrals(cell);
         state.cells[k] = CellState{
             integrals.mass,
@@ -127,21 +127,21 @@ DiagramState CapacityConstrainedLagrangian<FieldType>::diagram_state(const Torus
 
 template<fields::flat::Field FieldType>
 LagrangianEvaluation CapacityConstrainedLagrangian<FieldType>::evaluate(
-    const Torus& torus,
+    const Diagram& diagram,
     const std::vector<double>& multipliers,
     double penalty
 ) const {
-    return evaluate(torus, diagram_state(torus), multipliers, penalty);
+    return evaluate(diagram, diagram_state(diagram), multipliers, penalty);
 }
 
 template<fields::flat::Field FieldType>
 LagrangianEvaluation CapacityConstrainedLagrangian<FieldType>::evaluate(
-    const Torus& torus,
+    const Diagram& diagram,
     const DiagramState& state,
     const std::vector<double>& multipliers,
     double penalty
 ) const {
-    size_t count = torus.size();
+    size_t count = diagram.size();
     CGAL_precondition(multipliers.size() == count);
 
     std::vector<double> capacity_errors(count);
@@ -150,7 +150,7 @@ LagrangianEvaluation CapacityConstrainedLagrangian<FieldType>::evaluate(
     double value = 0.0;
 
     for (size_t i = 0; i < count; ++i) {
-        Vector3 site = torus.site_vector(i);
+        Vector3 site = diagram.site_vector(i);
         capacity_errors[i] = state.cells[i].mass - _target_mass;
         weights[i] = multipliers[i] + penalty * capacity_errors[i];
         cvt_energy += state.cells[i].squared_norm_moment -
@@ -165,7 +165,7 @@ LagrangianEvaluation CapacityConstrainedLagrangian<FieldType>::evaluate(
     // The CVT gradient on a flat domain keeps its position term; there is
     // no radial direction for a tangent projection to discard it into.
     for (size_t k = 0; k < count; ++k) {
-        gradients[k] += 2.0 * (state.cells[k].mass * torus.site_vector(k) - state.cells[k].first_moment);
+        gradients[k] += 2.0 * (state.cells[k].mass * diagram.site_vector(k) - state.cells[k].first_moment);
     }
 
     return LagrangianEvaluation{value, cvt_energy, std::move(capacity_errors), std::move(gradients)};

@@ -36,7 +36,8 @@ REPOSITORY = Path(__file__).resolve().parent.parent
 VIEWER = Path(__file__).resolve().parent
 
 SPHERE_ONLY = {"geometry": ["sphere"]}
-FLAT = {"geometry": ["cylinder", "torus"]}
+FLAT = {"geometry": ["cylinder", "torus", "plane"]}
+GRADIENT_CAPABLE = {"geometry": ["sphere", "cylinder", "plane"]}
 
 PROGRAMS = {
     "tessellate": {
@@ -51,7 +52,7 @@ PROGRAMS = {
             },
             {
                 "label": "density",
-                "parameters": ["density_field", "seed"],
+                "parameters": ["density_field", "contrast", "seed"],
             },
             {
                 "label": "solver",
@@ -74,7 +75,7 @@ PROGRAMS = {
                 "flag": "--geometry",
                 "label": "geometry",
                 "type": "text",
-                "choices": {"sphere": "sphere", "cylinder": "cylinder", "torus": "torus"},
+                "choices": {"sphere": "sphere", "cylinder": "cylinder", "torus": "torus", "plane": "plane"},
                 "default": "sphere",
             },
             "points": {
@@ -115,7 +116,7 @@ PROGRAMS = {
                     "noise-fit": "noise (global fit)",
                     "quadratic": "quadratic",
                     "quadratic-piecewise": "quadratic (tiles)",
-                    "linear": "linear",
+                    "linear": "gradient",
                     "constant": "constant",
                 },
                 "choice_when": {
@@ -123,10 +124,20 @@ PROGRAMS = {
                     "noise-fit": SPHERE_ONLY,
                     "quadratic": SPHERE_ONLY,
                     "quadratic-piecewise": SPHERE_ONLY,
-                    "linear": SPHERE_ONLY,
+                    "linear": GRADIENT_CAPABLE,
                 },
                 "default": "noise-smooth",
                 "wide": True,
+            },
+            "contrast": {
+                "flag": "--contrast",
+                "label": "contrast",
+                "type": "number",
+                "low": 1.0,
+                "high": 1000.0,
+                "step": 0.5,
+                "default": 4.0,
+                "when": {"density_field": ["linear"]},
             },
             "seed": {
                 "flag": "--seed",

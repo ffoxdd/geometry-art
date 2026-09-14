@@ -62,6 +62,7 @@ class Factory {
         SnapshotCallback snapshot_callback,
         std::chrono::milliseconds snapshot_interval,
         std::string image_path = "",
+        double contrast = 4.0,
         double density_tolerance = 0.0
     );
 
@@ -97,6 +98,7 @@ class Factory {
     SnapshotCallback _snapshot_callback;
     std::chrono::milliseconds _snapshot_interval;
     std::string _image_path;
+    double _contrast;
     double _density_tolerance;
     io::snapshot::Snapshot _snapshot;
 
@@ -147,6 +149,7 @@ inline Factory::Factory(
     SnapshotCallback snapshot_callback,
     std::chrono::milliseconds snapshot_interval,
     std::string image_path,
+    double contrast,
     double density_tolerance
 ) :
     _points_count(points_count),
@@ -160,6 +163,7 @@ inline Factory::Factory(
     _snapshot_callback(std::move(snapshot_callback)),
     _snapshot_interval(snapshot_interval),
     _image_path(std::move(image_path)),
+    _contrast(contrast),
     _density_tolerance(density_tolerance) {
 }
 
@@ -230,8 +234,9 @@ inline PolynomialField Factory::create_polynomial_field() const {
         return PolynomialField::constant(1.0);
     }
 
+    // Density 1 at the south pole rising to the contrast at the north.
     if (_density_field == "linear") {
-        return PolynomialField::linear(2.0, Vector3(0.0, 0.0, 2.0));
+        return PolynomialField::linear(0.5 * (_contrast + 1.0), Vector3(0.0, 0.0, 0.5 * (_contrast - 1.0)));
     }
 
     if (_density_field == "noise-fit") {

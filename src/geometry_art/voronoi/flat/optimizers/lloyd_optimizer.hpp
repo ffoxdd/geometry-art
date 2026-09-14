@@ -1,7 +1,7 @@
 #ifndef GEOMETRY_ART_VORONOI_FLAT_OPTIMIZERS_LLOYD_OPTIMIZER_HPP_
 #define GEOMETRY_ART_VORONOI_FLAT_OPTIMIZERS_LLOYD_OPTIMIZER_HPP_
 
-#include "../core/torus.hpp"
+#include "../core/diagram.hpp"
 #include "../../../fields/flat/field.hpp"
 #include "../../../types.hpp"
 #include <cmath>
@@ -13,22 +13,22 @@
 
 namespace geometry_art::voronoi::flat {
 
-using Callback = std::function<void(const Torus&)>;
+using Callback = std::function<void(const Diagram&)>;
 
 inline Callback noop_callback() {
-    return [](const Torus&) {};
+    return [](const Diagram&) {};
 }
 
 template<fields::flat::Field FieldType>
 class LloydOptimizer {
  public:
-    LloydOptimizer(std::unique_ptr<Torus> torus, FieldType field, size_t passes, Callback callback);
+    LloydOptimizer(std::unique_ptr<Diagram> diagram, FieldType field, size_t passes, Callback callback);
 
-    std::unique_ptr<Torus> optimize();
+    std::unique_ptr<Diagram> optimize();
     [[nodiscard]] double final_deviation() const { return _final_deviation; }
 
  private:
-    std::unique_ptr<Torus> _torus;
+    std::unique_ptr<Diagram> _torus;
     FieldType _field;
     size_t _passes;
     Callback _callback;
@@ -39,19 +39,19 @@ class LloydOptimizer {
 
 template<fields::flat::Field FieldType>
 LloydOptimizer<FieldType>::LloydOptimizer(
-    std::unique_ptr<Torus> torus,
+    std::unique_ptr<Diagram> diagram,
     FieldType field,
     size_t passes,
     Callback callback
 ) :
-    _torus(std::move(torus)),
+    _torus(std::move(diagram)),
     _field(std::move(field)),
     _passes(passes),
     _callback(std::move(callback)) {
 }
 
 template<fields::flat::Field FieldType>
-std::unique_ptr<Torus> LloydOptimizer<FieldType>::optimize() {
+std::unique_ptr<Diagram> LloydOptimizer<FieldType>::optimize() {
     for (size_t pass = 0; pass < _passes; ++pass) {
         _torus = _torus->rebuilt(weighted_centroids());
         _callback(*_torus);

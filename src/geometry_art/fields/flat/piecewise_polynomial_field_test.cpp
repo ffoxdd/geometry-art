@@ -1,6 +1,7 @@
 #include "piecewise_polynomial_field.hpp"
-#include "constant_field.hpp"
 #include "noise_field.hpp"
+#include "polynomial_field.hpp"
+#include "../../geometry/planar/domain.hpp"
 #include "../../geometry/planar/polygon.hpp"
 #include "../../geometry/planar/segment.hpp"
 #include "../../math/interval.hpp"
@@ -10,19 +11,20 @@
 #include <vector>
 
 using namespace geometry_art;
-using fields::flat::ConstantField;
 using fields::flat::NoiseField;
 using fields::flat::PiecewisePolynomialField;
+using fields::flat::PolynomialField;
+using geometry::planar::Domain;
 using geometry::planar::Polygon;
 using geometry::planar::Segment;
 using geometry_art::math::Interval;
 
 namespace {
 
-// A globally quadratic scalar is not periodic, so sampling wraps the nodes
-// on the far edges and corrupts exactly the boundary tiles. Away from those
-// tiles every answer has a closed form, and the representation holds
-// quadratics exactly.
+// A globally quadratic scalar is not periodic, so sampling on a torus wraps
+// the nodes on the far edges and corrupts exactly the boundary tiles. Away
+// from those tiles every answer has a closed form, and the representation
+// holds quadratics exactly.
 struct QuadraticScalar {
     double value(const Vector2& point) const {
         return 1.0 + 0.5 * point.x() + 0.25 * point.y() * point.y();
@@ -33,7 +35,7 @@ struct QuadraticScalar {
 
 TEST(FlatPiecewiseFieldTest, ReproducesAQuadraticExactlyInsideTheTile) {
     QuadraticScalar quadratic;
-    auto field = PiecewisePolynomialField::sample(1.0, 1.0, 4, 4, quadratic);
+    auto field = PiecewisePolynomialField::sample(Domain::torus(1.0, 1.0), 4, 4, quadratic);
 
     for (double x : {0.1, 0.33, 0.71}) {
         for (double y : {0.05, 0.4, 0.71}) {
@@ -44,7 +46,7 @@ TEST(FlatPiecewiseFieldTest, ReproducesAQuadraticExactlyInsideTheTile) {
 
 TEST(FlatPiecewiseFieldTest, IntegratesAQuadraticOverAnInteriorPolygonExactly) {
     QuadraticScalar quadratic;
-    auto field = PiecewisePolynomialField::sample(1.0, 1.0, 4, 4, quadratic);
+    auto field = PiecewisePolynomialField::sample(Domain::torus(1.0, 1.0), 4, 4, quadratic);
     Polygon region = Polygon::rectangle(Vector2(0.2, 0.3), Vector2(0.7, 0.6));
 
     // mass = integral of 1 + x/2 + y^2/4 over [0.2,0.7]x[0.3,0.6].
@@ -55,15 +57,15 @@ TEST(FlatPiecewiseFieldTest, IntegratesAQuadraticOverAnInteriorPolygonExactly) {
 }
 
 TEST(FlatPiecewiseFieldTest, TotalMassOfASampledConstantIsExact) {
-    ConstantField constant(0.7, 2.0, 1.5);
-    auto field = PiecewisePolynomialField::sample(2.0, 1.5, 6, 5, constant);
+    PolynomialField constant = PolynomialField::constant(0.7, Domain::torus(2.0, 1.5));
+    auto field = PiecewisePolynomialField::sample(Domain::torus(2.0, 1.5), 6, 5, constant);
 
     EXPECT_NEAR(field.total_mass(), 0.7 * 3.0, 1e-12);
 }
 
 TEST(FlatPiecewiseFieldTest, WrapsPeriodicallyForProtrudingRegions) {
     QuadraticScalar quadratic;
-    auto field = PiecewisePolynomialField::sample(1.0, 1.0, 8, 8, quadratic);
+    auto field = PiecewisePolynomialField::sample(Domain::torus(1.0, 1.0), 8, 8, quadratic);
 
     // The same physical square, once inside the tile and once shifted a
     // full period: identical mass by periodicity of the representation.
@@ -82,7 +84,7 @@ TEST(FlatPiecewiseFieldTest, WrapsPeriodicallyForProtrudingRegions) {
 
 TEST(FlatPiecewiseFieldTest, SegmentIntegralsMatchQuadrature) {
     QuadraticScalar quadratic;
-    auto field = PiecewisePolynomialField::sample(1.0, 1.0, 4, 4, quadratic);
+    auto field = PiecewisePolynomialField::sample(Domain::torus(1.0, 1.0), 4, 4, quadratic);
     Segment segment(Vector2(0.15, 0.2), Vector2(0.7, 0.7));
 
     double sum = 0.0;
@@ -100,7 +102,7 @@ TEST(FlatPiecewiseFieldTest, SegmentIntegralsMatchQuadrature) {
 
 TEST(FlatPiecewiseFieldTest, SquaredNormMomentShiftsConsistently) {
     QuadraticScalar quadratic;
-    auto field = PiecewisePolynomialField::sample(1.0, 1.0, 8, 8, quadratic);
+    auto field = PiecewisePolynomialField::sample(Domain::torus(1.0, 1.0), 8, 8, quadratic);
 
     Polygon inside = Polygon::rectangle(Vector2(0.2, 0.2), Vector2(0.4, 0.5));
     Polygon shifted = Polygon::rectangle(Vector2(1.2, 0.2), Vector2(1.4, 0.5));
@@ -114,7 +116,7 @@ TEST(FlatPiecewiseFieldTest, SquaredNormMomentShiftsConsistently) {
 
 TEST(FlatPiecewiseFieldTest, NoiseSamplingIsContinuousAcrossTheSeams) {
     NoiseField noise(2.0, 1.0, Interval(0.2, 1.0));
-    auto field = PiecewisePolynomialField::sample(2.0, 1.0, 16, 8, noise);
+    auto field = PiecewisePolynomialField::sample(Domain::torus(2.0, 1.0), 16, 8, noise);
 
     for (double y : {0.13, 0.5, 0.87}) {
         EXPECT_NEAR(field.value(Vector2(0.0, y)), field.value(Vector2(2.0, y)), 1e-10);
@@ -125,4 +127,31 @@ TEST(FlatPiecewiseFieldTest, NoiseSamplingIsContinuousAcrossTheSeams) {
     }
 
     EXPECT_GT(field.lowest_sampled_value(), 0.19);
+}
+
+// On the plane nothing wraps: the far edges are sampled where they lie, so
+// the quadratic is reproduced in the boundary tiles too, up to the walls.
+TEST(PlanePiecewiseFieldTest, ReproducesAQuadraticUpToTheWalls) {
+    QuadraticScalar quadratic;
+    auto field = PiecewisePolynomialField::sample(Domain::plane(1.0, 1.0), 4, 4, quadratic);
+
+    for (double x : {0.0, 0.93, 1.0}) {
+        for (double y : {0.0, 0.5, 1.0}) {
+            EXPECT_NEAR(field.value(Vector2(x, y)), quadratic.value(Vector2(x, y)), 1e-10);
+        }
+    }
+
+    Polygon corner = Polygon::rectangle(Vector2(0.8, 0.7), Vector2(1.0, 1.0));
+
+    // mass = integral of 1 + x/2 + y^2/4 over [0.8,1]x[0.7,1].
+    double mass = 0.06 + 0.5 * 0.18 * 0.3 + 0.25 * 0.2 * (1.0 - 0.343) / 3.0;
+
+    EXPECT_NEAR(field.integrals(corner).mass, mass, 1e-12);
+}
+
+TEST(PlanePiecewiseFieldTest, ReadsTheNearestEdgeBeyondAWall) {
+    QuadraticScalar quadratic;
+    auto field = PiecewisePolynomialField::sample(Domain::plane(1.0, 1.0), 4, 4, quadratic);
+
+    EXPECT_NEAR(field.value(Vector2(1.0 + 1e-9, 0.5)), quadratic.value(Vector2(1.0, 0.5)), 1e-8);
 }

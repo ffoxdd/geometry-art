@@ -35,6 +35,26 @@ export const CONTROLS = {
   },
 };
 
+// A torus has no rims of its own, so it may also be shown rolled into a
+// tube whose rims slice its cells, the way a walled cylinder never does.
+const TORUS_CONTROLS = {
+  surface: {
+    label: 'surface',
+    type: 'text',
+    choices: { doughnut: 'doughnut', tube: 'tube, rims cut' },
+    default: 'doughnut',
+  },
+  ...CONTROLS,
+};
+
+export function controls(snapshot) {
+  return snapshot.geometry === 'torus' ? TORUS_CONTROLS : CONTROLS;
+}
+
+export function panelOf(snapshot) {
+  return snapshot.geometry === 'torus' ? 'torus' : 'surface';
+}
+
 export const RAMPED = ['capacity', 'area'];
 
 // A running solver rewrites its snapshot faster than tubes can be built for
@@ -42,9 +62,11 @@ export const RAMPED = ['capacity', 'area'];
 const OUTLINE_CELLS = 400;
 
 let snapshot = null;
+let rolled = 'sphere';
 
 export function draw(next, appearance) {
   snapshot = next;
+  rolled = rolledSurface(appearance);
   enterScene();
 
   const cells = snapshot.cells;
@@ -219,7 +241,7 @@ function edgePaths(from, to, steps) {
     return [greatCircle(from, to, steps)];
   }
 
-  return flatPieces(from, to).map(([a, b]) => {
+  return rimPieces(from, to).map(([a, b]) => {
     const points = [];
 
     for (let i = 0; i <= steps; i++) {
@@ -231,78 +253,11 @@ function edgePaths(from, to, steps) {
   });
 }
 
-function greatCircle(from, to, steps) {
-  const a = new THREE.Vector3(...from).normalize();
-  const b = new THREE.Vector3(...to).normalize();
-  const points = [];
-
-  for (let i = 0; i <= steps; i++) {
-    points.push(new THREE.Vector3().lerpVectors(a, b, i / steps).normalize());
-  }
-
-  return points;
-}
-
-function jointPosition(point) {
-  if (!flatGeometry()) {
-    return point;
-  }
-
-  const wrapped = ((point[1] % snapshot.height) + snapshot.height) % snapshot.height;
-  const position = embed(point[0], wrapped);
-
-  return [position.x, position.y, position.z];
-}
-
-// The flat snapshots carry cells in their own charts over a rectangle of
-// periods; the viewer rolls the rectangle into space. The cylinder's rims
-// cut straight across the cells -- partial cells are part of the look --
-// while the seam stays periodic, so a protruding piece reappears from the
-// other rim; the torus needs no cutting at all.
-function flatGeometry() {
-  return snapshot && snapshot.geometry && snapshot.geometry !== 'sphere';
-}
-
-function flatScale() {
-  const radius = snapshot.width / (2 * Math.PI);
-
-  if (snapshot.geometry === 'cylinder') {
-    return 0.98 / Math.hypot(radius, snapshot.height / 2);
-  }
-
-  const tube = Math.min(snapshot.height / (2 * Math.PI), 0.75 * radius);
-  return 0.98 / (radius + tube);
-}
-
-function embed(x, y) {
-  const scale = flatScale();
-  const radius = snapshot.width / (2 * Math.PI);
-  const around = 2 * Math.PI * x / snapshot.width;
-
-  if (snapshot.geometry === 'cylinder') {
-    return new THREE.Vector3(
-      radius * Math.cos(around) * scale,
-      (y - snapshot.height / 2) * scale,
-      radius * Math.sin(around) * scale
-    );
-  }
-
-  const tube = Math.min(snapshot.height / (2 * Math.PI), 0.75 * radius);
-  const along = 2 * Math.PI * y / snapshot.height;
-  const ring = radius + tube * Math.cos(along);
-
-  return new THREE.Vector3(
-    ring * Math.cos(around) * scale,
-    tube * Math.sin(along) * scale,
-    ring * Math.sin(around) * scale
-  );
-}
-
-// The chart-space pieces of one edge that survive the frame: the whole
-// edge on the torus; on the cylinder, each period image clipped to the
-// band between the rims.
-function flatPieces(from, to) {
-  if (snapshot.geometry !== 'cylinder') {
+// The chart-space pieces of one edge that survive the rims: the whole edge
+// unless a torus is shown as a tube, where each period image is clipped to
+// the band between the rims.
+function rimPieces(from, to) {
+  if (snapshot.geometry !== 'torus' || rolled !== 'cylinder') {
     return [[from, to]];
   }
 
@@ -335,6 +290,98 @@ function flatPieces(from, to) {
   return pieces;
 }
 
+function greatCircle(from, to, steps) {
+  const a = new THREE.Vector3(...from).normalize();
+  const b = new THREE.Vector3(...to).normalize();
+  const points = [];
+
+  for (let i = 0; i <= steps; i++) {
+    points.push(new THREE.Vector3().lerpVectors(a, b, i / steps).normalize());
+  }
+
+  return points;
+}
+
+function jointPosition(point) {
+  if (!flatGeometry()) {
+    return point;
+  }
+
+  const y = snapshot.geometry === 'torus'
+    ? ((point[1] % snapshot.height) + snapshot.height) % snapshot.height
+    : point[1];
+  const position = embed(point[0], y);
+
+  return [position.x, position.y, position.z];
+}
+
+// The flat snapshots carry cells in their own charts over a rectangle; the
+// viewer rolls a wrapped axis into space and lays a walled one flat. A cell
+// protruding past a wrapped seam lands where its period image would, so
+// the torus wraps both ways and the cylinder's rims and the plane's sides
+// are walls the cells already end at. A torus shown as a tube is the one
+// case that cuts: its rims slice straight across the cells, and a piece
+// protruding past one rim reappears from the other.
+function flatGeometry() {
+  return snapshot && snapshot.geometry && snapshot.geometry !== 'sphere';
+}
+
+// The surface the snapshot is drawn on: its own geometry, except a torus
+// asked to be shown as a tube, which is drawn as a cylinder.
+function rolledSurface(appearance) {
+  if (!snapshot || !snapshot.geometry) return 'sphere';
+  if (snapshot.geometry === 'torus' && appearance.surface === 'tube') return 'cylinder';
+
+  return snapshot.geometry;
+}
+
+function flatScale() {
+  const radius = snapshot.width / (2 * Math.PI);
+
+  if (rolled === 'plane') {
+    return 0.98 / Math.hypot(snapshot.width / 2, snapshot.height / 2);
+  }
+
+  if (rolled === 'cylinder') {
+    return 0.98 / Math.hypot(radius, snapshot.height / 2);
+  }
+
+  const tube = Math.min(snapshot.height / (2 * Math.PI), 0.75 * radius);
+  return 0.98 / (radius + tube);
+}
+
+function embed(x, y) {
+  const scale = flatScale();
+  const radius = snapshot.width / (2 * Math.PI);
+  const around = 2 * Math.PI * x / snapshot.width;
+
+  if (rolled === 'plane') {
+    return new THREE.Vector3(
+      (x - snapshot.width / 2) * scale,
+      (y - snapshot.height / 2) * scale,
+      0
+    );
+  }
+
+  if (rolled === 'cylinder') {
+    return new THREE.Vector3(
+      radius * Math.cos(around) * scale,
+      (y - snapshot.height / 2) * scale,
+      radius * Math.sin(around) * scale
+    );
+  }
+
+  const tube = Math.min(snapshot.height / (2 * Math.PI), 0.75 * radius);
+  const along = 2 * Math.PI * y / snapshot.height;
+  const ring = radius + tube * Math.cos(along);
+
+  return new THREE.Vector3(
+    ring * Math.cos(around) * scale,
+    tube * Math.sin(along) * scale,
+    ring * Math.sin(around) * scale
+  );
+}
+
 // The shell sits just inside the cell network so the far side reads as
 // occluded rather than as a second layer of lines; it takes the shape of
 // whatever surface the snapshot lives on.
@@ -351,7 +398,7 @@ function reshapeShell() {
 
   shell.removeFromParent();
   shell.geometry.dispose();
-  shell = new THREE.Mesh(shellGeometry(snapshot.geometry || 'sphere'), shellMaterial);
+  shell = new THREE.Mesh(shellGeometry(rolled), shellMaterial);
   shell.visible = true;
   shellSurface = wanted;
 }
@@ -363,7 +410,7 @@ function surface() {
     return 'sphere';
   }
 
-  return `${snapshot.geometry}:${snapshot.width}:${snapshot.height}`;
+  return `${rolled}:${snapshot.width}:${snapshot.height}`;
 }
 
 function shellGeometry(shape) {
@@ -373,6 +420,12 @@ function shellGeometry(shape) {
 
   const scale = flatScale();
   const radius = snapshot.width / (2 * Math.PI);
+
+  if (shape === 'plane') {
+    const plate = new THREE.PlaneGeometry(snapshot.width * scale, snapshot.height * scale);
+    plate.translate(0, 0, -0.015);
+    return plate;
+  }
 
   if (shape === 'cylinder') {
     return new THREE.CylinderGeometry(

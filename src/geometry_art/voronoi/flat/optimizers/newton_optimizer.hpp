@@ -4,7 +4,7 @@
 #include "capacity_constrained_lagrangian.hpp"
 #include "cvt_hessian.hpp"
 #include "lloyd_optimizer.hpp"
-#include "../core/torus.hpp"
+#include "../core/diagram.hpp"
 #include "../../hessian_blocks.hpp"
 #include "../../lagrangian_evaluation.hpp"
 #include "../../newton_minimizer.hpp"
@@ -20,27 +20,27 @@
 
 namespace geometry_art::voronoi::flat {
 
-// Unconstrained CVT relaxation on the flat torus through the shared
+// Unconstrained CVT relaxation on a flat domain through the shared
 // trust-region descent: the Lagrangian at zero multipliers and penalty is
 // the CVT energy, and its exact curvature is the CvtHessian alone.
 template<fields::flat::Field FieldType>
 class NewtonOptimizer {
  public:
     NewtonOptimizer(
-        std::unique_ptr<Torus> torus,
+        std::unique_ptr<Diagram> diagram,
         FieldType field,
         NewtonParameters parameters,
         Callback callback
     );
 
-    std::unique_ptr<Torus> optimize();
+    std::unique_ptr<Diagram> optimize();
     [[nodiscard]] const NewtonReport& report() const { return _report; }
 
  private:
     class Model {
      public:
         struct Trial {
-            std::unique_ptr<Torus> torus;
+            std::unique_ptr<Diagram> diagram;
             LagrangianEvaluation evaluation;
         };
 
@@ -64,7 +64,7 @@ class NewtonOptimizer {
         size_t _accepted_steps = 0;
     };
 
-    std::unique_ptr<Torus> _torus;
+    std::unique_ptr<Diagram> _torus;
     CapacityConstrainedLagrangian<FieldType> _lagrangian;
     CvtHessian<FieldType> _hessian;
     NewtonParameters _parameters;
@@ -76,12 +76,12 @@ class NewtonOptimizer {
 
 template<fields::flat::Field FieldType>
 NewtonOptimizer<FieldType>::NewtonOptimizer(
-    std::unique_ptr<Torus> torus,
+    std::unique_ptr<Diagram> diagram,
     FieldType field,
     NewtonParameters parameters,
     Callback callback
 ) :
-    _torus(std::move(torus)),
+    _torus(std::move(diagram)),
     _lagrangian(field, field.total_mass() / static_cast<double>(_torus->size())),
     _hessian(field),
     _parameters(parameters),
@@ -89,7 +89,7 @@ NewtonOptimizer<FieldType>::NewtonOptimizer(
 }
 
 template<fields::flat::Field FieldType>
-std::unique_ptr<Torus> NewtonOptimizer<FieldType>::optimize() {
+std::unique_ptr<Diagram> NewtonOptimizer<FieldType>::optimize() {
     Model model(*this);
     _report.iterations = newton_minimize(model, _parameters, _parameters.max_iterations);
     _report.accepted_steps = model.accepted_steps();
@@ -135,18 +135,18 @@ NewtonOptimizer<FieldType>::Model::trial(const std::vector<Vector3>& step) const
     }
 
     Trial trial;
-    trial.torus = _optimizer._torus->rebuilt(points);
+    trial.diagram = _optimizer._torus->rebuilt(points);
 
-    std::swap(_optimizer._torus, trial.torus);
+    std::swap(_optimizer._torus, trial.diagram);
     trial.evaluation = _optimizer.evaluate();
-    std::swap(_optimizer._torus, trial.torus);
+    std::swap(_optimizer._torus, trial.diagram);
 
     return trial;
 }
 
 template<fields::flat::Field FieldType>
 void NewtonOptimizer<FieldType>::Model::accept(Trial&& trial) {
-    _optimizer._torus = std::move(trial.torus);
+    _optimizer._torus = std::move(trial.diagram);
     _evaluation = std::move(trial.evaluation);
     _curvature.reset();
     ++_accepted_steps;

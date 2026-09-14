@@ -138,14 +138,15 @@ What belongs in integration tests:
 ### Terminal Testing Flags
 The `tessellate` executable supports command-line flags for terminal/AI-assisted testing:
 - `--points <N>` / `-p`: Number of sites (default: 10)
-- `--density-field <type>` / `-f`: 'constant', 'linear', 'quadratic', 'noise' (piecewise polynomial mesh), 'noise-smooth' (C1 spline projection), 'noise-fit' (global polynomial fit) or 'image' (with `--image <path>`, darker is denser) (default: quadratic)
+- `--density-field <type>` / `-f`: 'constant', 'linear', 'quadratic', 'noise' (piecewise polynomial mesh), 'noise-smooth' (C1 spline projection), 'noise-fit' (global polynomial fit) or 'image' (with `--image <path>`, darker is denser) (default: quadratic); flat domains carry 'constant', 'noise', 'image' and, where the height is walled, 'linear'
 - `--lloyd-passes <N>`: Density-weighted Lloyd warm-start passes (default: 5)
 - `--max-outer-iterations <N>` / `--max-inner-iterations <N>`: Augmented Lagrangian budget
 - `--capacity-tolerance <x>`: Relative RMS capacity error at which optimization stops (default: 1e-7)
 - `--density-tolerance <x>`: Refine the density's spline (sphere) or sampling grid (flat) until its relative representation error is below this (0 keeps the cell-scale resolution)
 - `--snapshot <path>`: Write the tessellation as `<path>.json` and `<path>.svg`; `--snapshot-interval <s>` also rewrites it every `s` seconds while running
-- `--geometry <g>` / `-g`: 'sphere' (default), or 'torus' / 'cylinder' for the flat family; flat runs use the newton inner solver
-- `--width <w>` / `--height <h>`: The flat domain's rectangle of periods (cylinder circumference and height)
+- `--geometry <g>` / `-g`: 'sphere' (default), or 'torus' / 'cylinder' / 'plane' for the flat family; the torus wraps both axes, the cylinder walls its rims, the plane walls all four sides; flat runs use the newton inner solver
+- `--width <w>` / `--height <h>`: The flat domain's rectangle (cylinder circumference and height)
+- `--contrast <r>`: Densest-to-sparsest density ratio of the 'linear' field, which rises from bottom to top (every geometry but the torus)
 - `--help`: Show usage information
 
 Examples:
