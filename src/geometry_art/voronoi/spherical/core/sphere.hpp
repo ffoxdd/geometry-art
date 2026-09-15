@@ -3,6 +3,8 @@
 
 #include "../../../cgal/types.hpp"
 #include "../../../geometry/spherical/arc.hpp"
+#include "../../../geometry/spherical/cap.hpp"
+#include "../../../geometry/spherical/cap_polygon.hpp"
 #include <CGAL/Exact_spherical_kernel_3.h>
 #include <CGAL/Delaunay_triangulation_on_sphere_traits_2.h>
 #include <CGAL/Delaunay_triangulation_on_sphere_2.h>
@@ -18,6 +20,8 @@
 namespace geometry_art::voronoi::spherical {
 
 using geometry::spherical::Arc;
+using geometry::spherical::Cap;
+using geometry::spherical::CapPolygon;
 using geometry::spherical::Polygon;
 
 // The arc's endpoints are Voronoi vertices, each equidistant from the two
@@ -46,8 +50,10 @@ class Sphere {
 
     void insert(cgal::Point3 point);
     std::size_t size() const;
+    std::size_t cell_count() const;
 
     Polygon cell(size_t index) const;
+    CapPolygon offset_cell(size_t index, double inset) const;
     auto cells() const;
     auto arcs() const;
     std::vector<VoronoiVertex> vertices() const;
@@ -109,6 +115,11 @@ inline std::size_t Sphere::size() const {
     return _triangulation->number_of_vertices();
 }
 
+// Sites have cells once the triangulation spans the sphere.
+inline std::size_t Sphere::cell_count() const {
+    return _triangulation->dimension() >= 2 ? size() : 0;
+}
+
 inline cgal::Point3 Sphere::site(size_t index) const {
     return _triangulation->point(_handles[index]);
 }
@@ -149,9 +160,27 @@ inline Polygon Sphere::cell(size_t index) const {
     return Polygon(cell_arcs(index));
 }
 
+// The cell shrunk by a geodesic distance from every bisector: the
+// intersection of its neighbours' hemispheres, each inset by that distance,
+// whose rims are small circles rather than the bisectors' great circles.
+inline CapPolygon Sphere::offset_cell(size_t index, double inset) const {
+    if (cell_count() == 0) {
+        return CapPolygon(std::vector<CapPolygon::Edge>{});
+    }
+
+    CapPolygon region = CapPolygon::of(cell(index));
+    VectorS2 own = to_vector_s2(site(index));
+
+    for (const CellEdgeInfo& edge : cell_edges(index)) {
+        VectorS2 neighbor = to_vector_s2(site(edge.neighbor_index));
+        region.clip(Cap::hemisphere_inset_by((own - neighbor).normalized(), inset));
+    }
+
+    return region;
+}
+
 inline auto Sphere::cells() const {
-    size_t count = (_triangulation->dimension() >= 2) ? size() : 0;
-    return std::views::iota(size_t(0), count) | std::views::transform(
+    return std::views::iota(size_t(0), cell_count()) | std::views::transform(
         [this](size_t index) {
             return cell(index);
         }

@@ -2,7 +2,8 @@
 """Serves the studio and runs tessellate or aggregate on request.
 
     ./studio [--port 8731] [--binary build-release/tessellate]
-             [--aggregate-binary build-release/aggregate] [--runs runs]
+             [--aggregate-binary build-release/aggregate]
+             [--skeletonize-binary build-release/skeletonize] [--runs runs]
 
 Standard library only. Runs are queued and executed one at a time, each in
 its own directory under --runs with the launch parameters, the program log,
@@ -14,6 +15,10 @@ form from that declaration. A parameter says which flag it becomes, how to
 present it, and when it applies at all: `when` governs the parameter,
 `choice_when` governs one of its choices. A condition reads parameters
 resolved before it, so a parameter is declared after everything it names.
+
+An export is a program run over a run's snapshot whose product is handed
+back as a download; it declares its parameters the same way, and which
+programs' runs it applies to.
 """
 
 import argparse
@@ -30,7 +35,7 @@ import time
 import uuid
 from collections import deque
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlparse
 
 REPOSITORY = Path(__file__).resolve().parent.parent
 VIEWER = Path(__file__).resolve().parent
@@ -296,6 +301,59 @@ PROGRAMS = {
     },
 }
 
+EXPORTS = {
+    "skeletonize": {
+        "label": "model",
+        "summary": "the cell edges as bars, ready to print",
+        "programs": ["tessellate"],
+        "parameters": {
+            "format": {
+                "flag": "--format",
+                "label": "format",
+                "type": "text",
+                "choices": {"stl": "STL", "obj": "OBJ", "ply": "PLY", "off": "OFF"},
+                "default": "stl",
+            },
+            "scale": {
+                "flag": "--scale",
+                "label": "scale",
+                "type": "number",
+                "low": 0.1,
+                "high": 10000.0,
+                "step": 0.5,
+                "default": 50.0,
+            },
+            "bar_width": {
+                "flag": "--bar-width",
+                "label": "bar width",
+                "type": "number",
+                "low": 0.01,
+                "high": 1000.0,
+                "step": 0.1,
+                "default": 1.5,
+            },
+            "bar_thickness": {
+                "flag": "--bar-thickness",
+                "label": "bar thickness",
+                "type": "number",
+                "low": 0.01,
+                "high": 1000.0,
+                "step": 0.1,
+                "default": 1.5,
+            },
+            "resolution": {
+                "flag": "--resolution",
+                "label": "resolution",
+                "type": "number",
+                "low": 0.01,
+                "high": 1000.0,
+                "step": 0.1,
+                "default": 1.0,
+            },
+        },
+    },
+}
+
 CONVERTERS = {"integer": int, "number": float, "text": str}
 
 SNAPSHOT_INTERVAL_SECONDS = 1.0
@@ -435,6 +493,44 @@ class Runs:
         if folder.exists():
             shutil.rmtree(folder)
 
+    # An export runs to completion here and now, over whatever snapshot the
+    # run has at this moment, and its product is named after the run.
+    def export(self, run_id, name, requested):
+        folder = self.directory / run_id
+        record = read_json(folder / "run.json")
+
+        if record is None:
+            raise LookupError("no such run")
+
+        declaration = EXPORTS.get(name)
+        binary = self.binaries.get(name)
+
+        if declaration is None or binary is None or not binary.exists():
+            raise ValueError(f"{name} is not built; expected {binary}")
+
+        if record["program"] not in declaration["programs"]:
+            raise ValueError(f"{name} does not apply to a {record['program']} run")
+
+        snapshot = snapshot_file(folder)
+
+        if not snapshot.exists():
+            raise ValueError("the run has no snapshot yet")
+
+        parameters = resolve_all(declaration, requested)
+        product = folder / f"{name}.{parameters['format']}"
+        command = [str(binary), str(snapshot), "--output", str(product)]
+
+        for parameter, value in parameters.items():
+            if value is not None:
+                command += [declaration["parameters"][parameter]["flag"], str(value)]
+
+        completed = subprocess.run(command, capture_output=True, text=True, cwd=str(REPOSITORY))
+
+        if completed.returncode != 0:
+            raise ValueError((completed.stderr or completed.stdout).strip().splitlines()[-1])
+
+        return product, f"{describe_run(record)}.{parameters['format']}"
+
     def describe(self, run_id, tail=LOG_TAIL_LINES):
         folder = self.directory / run_id
         record = read_json(folder / "run.json")
@@ -487,12 +583,29 @@ def validate(requested):
     if program not in PROGRAMS:
         raise ValueError(f"program must be one of {sorted(PROGRAMS)}")
 
+    return program, resolve_all(PROGRAMS[program], requested)
+
+
+def resolve_all(declaration, requested):
     parameters = {}
 
-    for name, rule in PROGRAMS[program]["parameters"].items():
+    for name, rule in declaration["parameters"].items():
         parameters[name] = resolve(name, rule, requested, parameters)
 
-    return program, parameters
+    return parameters
+
+
+# A file a run hands out is named the way the page names the run.
+def describe_run(record):
+    program = PROGRAMS.get(record["program"])
+
+    if program is None:
+        return record["program"]
+
+    headline = [str(record["parameters"].get(name)) for name in program["headline"]
+                if record["parameters"].get(name) is not None]
+
+    return "-".join([program["label"], *headline])
 
 
 # A parameter that does not apply is dropped rather than defaulted, so the
@@ -589,6 +702,7 @@ def write_json(path, value):
 class Handler(http.server.SimpleHTTPRequestHandler):
     runs = None
     programs = None
+    exports = None
 
     def __init__(self, *arguments, **keywords):
         super().__init__(*arguments, directory=str(VIEWER), **keywords)
@@ -598,6 +712,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         if path == "/api/programs":
             return self.reply(200, self.programs)
+
+        if path == "/api/exports":
+            return self.reply(200, self.exports)
+
+        if path.startswith("/api/runs/") and "/export/" in path:
+            return self.send_export(path)
 
         if path == "/api/runs":
             return self.reply(200, self.runs.list())
@@ -635,6 +755,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self.reply(200, {"deleted": True})
 
         return self.reply(404, {"error": "unknown endpoint"})
+
+    def send_export(self, path):
+        parts = path.split("/")
+        requested = dict(parse_qsl(urlparse(self.path).query))
+
+        try:
+            product, filename = self.runs.export(parts[3], parts[5], requested)
+        except LookupError as error:
+            return self.reply(404, {"error": str(error)})
+        except (ValueError, TypeError, IndexError) as error:
+            return self.reply(400, {"error": str(error)})
+
+        content = product.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        self.send_header("Content-Length", str(len(content)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(content)
 
     def send_run_file(self, path):
         parts = path.split("/")
@@ -684,8 +824,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 # A program with no binary behind it is dropped from the schema, so the page
 # never offers a run the server would refuse.
-def buildable(binaries):
-    return {name: PROGRAMS[name] for name, binary in binaries.items() if binary.exists()}
+def buildable(declared, binaries):
+    return {name: declared[name] for name in declared if binaries[name].exists()}
 
 
 def main():
@@ -693,25 +833,30 @@ def main():
     parser.add_argument("--port", type=int, default=8731)
     parser.add_argument("--binary", type=Path, default=REPOSITORY / "build-release" / "tessellate")
     parser.add_argument("--aggregate-binary", type=Path, default=REPOSITORY / "build-release" / "aggregate")
+    parser.add_argument("--skeletonize-binary", type=Path, default=REPOSITORY / "build-release" / "skeletonize")
     parser.add_argument("--runs", type=Path, default=REPOSITORY / "runs")
     arguments = parser.parse_args()
 
     binaries = {
         "tessellate": arguments.binary.resolve(),
         "aggregate": arguments.aggregate_binary.resolve(),
+        "skeletonize": arguments.skeletonize_binary.resolve(),
     }
 
-    programs = buildable(binaries)
+    programs = buildable(PROGRAMS, binaries)
 
     if not programs:
         parser.error("no binaries found; build one or pass --binary / --aggregate-binary")
 
+    exports = buildable(EXPORTS, binaries)
+
     for name, binary in binaries.items():
-        if name not in programs:
+        if name not in programs and name not in exports:
             print(f"note: {name} is not built ({binary}); the studio will not offer it")
 
     server = listen(parser, arguments.port)
     Handler.programs = programs
+    Handler.exports = exports
     Handler.runs = Runs(binaries, arguments.runs.resolve())
     print(f"Geometry Art studio at http://localhost:{arguments.port}/  (runs in {arguments.runs})")
 

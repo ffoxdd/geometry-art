@@ -153,6 +153,13 @@ Examples:
 - Fast terminal test with constant density: `./tessellate -f constant -p 10`
 - Larger run with the quadratic field: `./tessellate -p 200`
 
+The `skeletonize` executable thickens a snapshot's edge graph into a printable solid:
+- `skeletonize <snapshot.json>`: Reads the sites and domain back from the snapshot and writes the model beside it
+- `--format <f>` / `-f`: 'stl' (default, binary), 'obj', 'ply' or 'off'; `--output <path>` / `-o` names the file instead, its extension picking the format
+- `--scale <k>` / `-s`: Output units per model unit (the sphere's radius, or one unit of a flat domain; default: 50)
+- `--bar-width <w>` / `-w`, `--bar-thickness <t>` / `-t`: The bars along and off the surface, in output units (default: 1.5)
+- `--resolution <r>` / `-r`: Longest facet edge along a curved surface, in output units (default: 1.0)
+
 Visual inspection goes through the web studio -- `./studio`, documented in
 `viewer/README.md` -- which runs the executables and renders their snapshots
 live. A program the studio offers declares its parameters in one place there;

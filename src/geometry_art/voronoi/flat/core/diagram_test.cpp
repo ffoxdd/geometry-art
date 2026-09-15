@@ -304,3 +304,58 @@ TEST(PlaneDiagramTest, ASiteJustOutsideTheWallStillOwnsACell) {
     EXPECT_GT(diagram.cell(0).area(), 0.5);
     EXPECT_NEAR(diagram.cell(0).area() + diagram.cell(1).area(), 2.0, 1e-12);
 }
+
+TEST(PlaneDiagramTest, OffsetCellMovesTheWallsInward) {
+    Diagram diagram(Domain::plane(2.0, 1.0), {Vector2(1.0, 0.5)});
+    CellClipper region = diagram.offset_cell(0, 0.3, 0.1);
+
+    ASSERT_EQ(region.size(), 4u);
+
+    for (const CellClipper::Edge& edge : region.edges()) {
+        EXPECT_TRUE(std::holds_alternative<Wall>(edge.cut));
+        EXPECT_TRUE(edge.source.x() == 0.1 || edge.source.x() == 1.9);
+        EXPECT_TRUE(edge.source.y() == 0.1 || edge.source.y() == 0.9);
+    }
+}
+
+TEST(PlaneDiagramTest, ANegativeWallInsetMovesTheWallsOutward) {
+    Diagram diagram(Domain::plane(2.0, 1.0), {Vector2(1.0, 0.5)});
+    CellClipper region = diagram.offset_cell(0, 0.0, -0.1);
+
+    ASSERT_EQ(region.size(), 4u);
+
+    for (const CellClipper::Edge& edge : region.edges()) {
+        EXPECT_TRUE(edge.source.x() == -0.1 || edge.source.x() == 2.1);
+        EXPECT_TRUE(edge.source.y() == -0.1 || edge.source.y() == 1.1);
+    }
+}
+
+TEST(PlaneDiagramTest, OffsetCellMovesBisectorsByTheirOwnInset) {
+    Diagram diagram(Domain::plane(2.0, 1.0), {Vector2(0.5, 0.5), Vector2(1.5, 0.5)});
+    CellClipper region = diagram.offset_cell(0, 0.2, 0.0);
+
+    ASSERT_EQ(region.size(), 4u);
+
+    for (const CellClipper::Edge& edge : region.edges()) {
+        EXPECT_TRUE(edge.source.x() == 0.0 || std::abs(edge.source.x() - 0.8) < 1e-12);
+    }
+}
+
+TEST(PlaneDiagramTest, OffsetCellIsEmptyOnceTheWallsMeet) {
+    Diagram diagram(Domain::plane(2.0, 1.0), {Vector2(1.0, 0.5)});
+
+    EXPECT_EQ(diagram.offset_cell(0, 0.0, 0.5).size(), 0u);
+}
+
+TEST(FlatDiagramTest, OffsetCellMovesTheSeamsByTheBisectorInset) {
+    Diagram diagram(Domain::torus(2.0, 1.0), {Vector2(1.0, 0.5)});
+    CellClipper region = diagram.offset_cell(0, 0.1, 0.0);
+
+    ASSERT_EQ(region.size(), 4u);
+
+    for (const CellClipper::Edge& edge : region.edges()) {
+        EXPECT_TRUE(std::holds_alternative<Bisector>(edge.cut));
+        EXPECT_TRUE(std::abs(edge.source.x() - 0.1) < 1e-12 || std::abs(edge.source.x() - 1.9) < 1e-12);
+        EXPECT_TRUE(std::abs(edge.source.y() - 0.1) < 1e-12 || std::abs(edge.source.y() - 0.9) < 1e-12);
+    }
+}

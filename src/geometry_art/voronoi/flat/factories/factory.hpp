@@ -73,8 +73,6 @@ class Factory {
     [[nodiscard]] const io::snapshot::Snapshot& snapshot() const { return _snapshot; }
     [[nodiscard]] const Domain& domain() const { return _domain; }
 
-    [[nodiscard]] static Domain domain_of(const std::string& geometry_name, double width, double height);
-
     // The flat bandwidth rule: the density grid's spacing is the cell
     // scale, the square root of one cell's share of the rectangle.
     [[nodiscard]] static int density_columns(int points_count, double width, double height);
@@ -158,7 +156,7 @@ inline Factory::Factory(
     _newton_iterations(newton_iterations),
     _optimizer_parameters(optimizer_parameters),
     _seed(seed),
-    _domain(domain_of(geometry_name, width, height)),
+    _domain(Domain::named(geometry_name, width, height)),
     _image_path(std::move(image_path)),
     _contrast(contrast),
     _geometry_name(std::move(geometry_name)),
@@ -186,22 +184,6 @@ inline std::unique_ptr<Diagram> Factory::build() {
     }
 
     throw std::invalid_argument("the " + _density_field + " density is not available on the " + _geometry_name);
-}
-
-inline Domain Factory::domain_of(const std::string& geometry_name, double width, double height) {
-    if (geometry_name == "torus") {
-        return Domain::torus(width, height);
-    }
-
-    if (geometry_name == "cylinder") {
-        return Domain::cylinder(width, height);
-    }
-
-    if (geometry_name == "plane") {
-        return Domain::plane(width, height);
-    }
-
-    throw std::invalid_argument("no flat domain is called " + geometry_name);
 }
 
 template<fields::flat::Field FieldType>

@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <set>
@@ -153,54 +154,39 @@ TEST(PipelineTest, EXPENSIVE_TessellateWritesAReadableSnapshot) {
     EXPECT_NE(contents_of(prefix.string() + ".svg").find("<svg"), std::string::npos);
 }
 
-TEST(PipelineTest, EXPENSIVE_SphereToMeshWritesAWellFormedStl) {
+TEST(PipelineTest, EXPENSIVE_SkeletonizeWritesAClosedSolidFromASnapshot) {
     REQUIRE_EXPENSIVE();
 
-    std::filesystem::path output = scratch("out");
-    std::filesystem::remove_all(output);
+    std::filesystem::path prefix = scratch("skeleton");
+    std::filesystem::remove(prefix.string() + ".json");
+    std::filesystem::remove(prefix.string() + ".stl");
+    std::filesystem::remove(prefix.string() + ".obj");
 
     ASSERT_EQ(run(
         binary("tessellate") + " -f constant -p 24 --seed 7"
-        " --capacity-tolerance 1e-6 -o " + output.string()
+        " --capacity-tolerance 1e-6 --snapshot " + prefix.string()
     ), 0);
 
-    std::filesystem::path saved;
+    // The model is named after the snapshot unless told otherwise, and the
+    // default format is STL, written in its binary form: an 80 byte header,
+    // a facet count, and fifty bytes per facet.
+    ASSERT_EQ(run(binary("skeletonize") + " " + prefix.string() + ".json --resolution 2.0"), 0);
 
-    for (const auto& entry : std::filesystem::directory_iterator(output)) {
-        if (entry.path().extension() == ".txt") {
-            saved = entry.path();
-        }
-    }
+    std::filesystem::path stl = prefix.string() + ".stl";
+    ASSERT_TRUE(std::filesystem::exists(stl));
 
-    ASSERT_FALSE(saved.empty()) << "no sphere was saved to " << output;
+    std::string body = contents_of(stl);
+    ASSERT_GE(body.size(), 84u);
 
-    // The converter names its output after its input rather than taking a
-    // destination.
-    std::filesystem::path mesh = saved;
-    mesh.replace_extension(".stl");
-    std::filesystem::remove(mesh);
-
-    ASSERT_EQ(run(binary("sphere_to_mesh") + " " + saved.string() + " -f stl -r 2.0"), 0);
-    ASSERT_TRUE(std::filesystem::exists(mesh));
-
-    // The exporter writes ASCII STL, so the structure is checkable as text:
-    // one normal and exactly three vertices per facet, and a closed solid.
-    std::string body = contents_of(mesh);
-
-    EXPECT_EQ(body.compare(0, 5, "solid"), 0);
-    EXPECT_NE(body.find("endsolid"), std::string::npos);
-
-    size_t facets = 0;
-    size_t vertices = 0;
-
-    for (size_t at = body.find("facet normal"); at != std::string::npos; at = body.find("facet normal", at + 1)) {
-        ++facets;
-    }
-
-    for (size_t at = body.find("vertex "); at != std::string::npos; at = body.find("vertex ", at + 1)) {
-        ++vertices;
-    }
+    uint32_t facets = 0;
+    std::memcpy(&facets, body.data() + 80, sizeof(facets));
 
     EXPECT_GT(facets, 0u);
-    EXPECT_EQ(vertices, 3 * facets);
+    EXPECT_EQ(body.size(), 84u + 50u * facets);
+
+    ASSERT_EQ(run(binary("skeletonize") + " " + prefix.string() + ".json -f obj --resolution 2.0"), 0);
+
+    std::string obj = contents_of(prefix.string() + ".obj");
+    EXPECT_NE(obj.find("\nv "), std::string::npos);
+    EXPECT_NE(obj.find("\nf "), std::string::npos);
 }

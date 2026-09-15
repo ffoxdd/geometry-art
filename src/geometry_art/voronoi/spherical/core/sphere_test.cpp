@@ -231,3 +231,44 @@ TEST(SphereTest, CellEdgeArcsLieOnTheBisectorsOfTheirSites) {
         }
     }
 }
+
+TEST(SphereTest, CellArcsRunCounterClockwiseAboutTheirCell) {
+    Sphere sphere = create_simple_voronoi_sphere();
+
+    for (size_t index = 0; index < sphere.size(); ++index) {
+        VectorS2 own = to_vector_s2(sphere.site(index));
+
+        for (const CellEdgeInfo& edge : sphere.cell_edges(index)) {
+            VectorS2 neighbor = to_vector_s2(sphere.site(edge.neighbor_index));
+            EXPECT_GT(edge.arc.normal().dot(own - neighbor), 0.0) << "cell " << index;
+        }
+    }
+}
+
+TEST(SphereTest, OffsetCellStaysTheInsetDistanceInsideEveryBisector) {
+    Sphere sphere = create_simple_voronoi_sphere();
+    double inset = 0.1;
+
+    for (size_t index = 0; index < sphere.size(); ++index) {
+        CapPolygon region = sphere.offset_cell(index, inset);
+        VectorS2 own = to_vector_s2(sphere.site(index));
+
+        ASSERT_GE(region.size(), 2u) << "cell " << index;
+
+        for (const CapPolygon::Edge& edge : region.edges()) {
+            EXPECT_NEAR(edge.cap.offset, std::sin(inset), 1e-12);
+
+            for (const CellEdgeInfo& cell_edge : sphere.cell_edges(index)) {
+                VectorS2 neighbor = to_vector_s2(sphere.site(cell_edge.neighbor_index));
+                EXPECT_GE((own - neighbor).normalized().dot(edge.source), std::sin(inset) - 1e-9) << "cell " << index;
+            }
+        }
+    }
+}
+
+TEST(SphereTest, OffsetCellOfASingleSiteIsEmpty) {
+    Sphere sphere;
+    sphere.insert(cgal::Point3(1, 0, 0));
+
+    EXPECT_TRUE(sphere.offset_cell(0, 0.1).empty());
+}

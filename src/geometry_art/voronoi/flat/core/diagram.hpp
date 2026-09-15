@@ -62,15 +62,26 @@ class Diagram {
     [[nodiscard]] std::vector<CellEdgeInfo> cell_edges(size_t index) const;
     [[nodiscard]] Polygon cell(size_t index) const;
 
+    // The cell with each cut that bounds it moved inward by a distance
+    // chosen per kind: bisectors and seams by one, walls by the other. A
+    // negative distance moves the cut outward, and a cell its cuts consume
+    // comes back empty.
+    [[nodiscard]] CellClipper offset_cell(size_t index, double bisector_inset, double wall_inset) const;
+
     [[nodiscard]] Vector2 canonical(const Vector2& point) const { return domain().canonical(point); }
 
     [[nodiscard]] std::unique_ptr<Diagram> rebuilt(const std::vector<Vector3>& points) const;
 
  private:
+    struct Inset {
+        double bisector;
+        double wall;
+    };
+
     DomainDelaunay _triangulation;
 
-    [[nodiscard]] CellClipper clipped_cell(size_t index) const;
-    [[nodiscard]] CellClipper fundamental_region(size_t index) const;
+    [[nodiscard]] CellClipper clipped_cell(size_t index, Inset inset) const;
+    [[nodiscard]] CellClipper fundamental_region(size_t index, Inset inset) const;
 };
 
 inline Diagram::Diagram(Domain domain, std::vector<Vector2> sites) :
@@ -83,7 +94,7 @@ inline Vector3 Diagram::site_vector(size_t index) const {
 }
 
 inline std::vector<CellEdgeInfo> Diagram::cell_edges(size_t index) const {
-    CellClipper cell = clipped_cell(index);
+    CellClipper cell = clipped_cell(index, Inset{0.0, 0.0});
     const std::vector<CellClipper::Edge>& edges = cell.edges();
     std::vector<CellEdgeInfo> result;
     result.reserve(edges.size());
@@ -110,7 +121,7 @@ inline std::vector<CellEdgeInfo> Diagram::cell_edges(size_t index) const {
 }
 
 inline Polygon Diagram::cell(size_t index) const {
-    CellClipper cell = clipped_cell(index);
+    CellClipper cell = clipped_cell(index, Inset{0.0, 0.0});
     std::vector<Vector2> vertices;
     vertices.reserve(cell.size());
 
@@ -119,6 +130,10 @@ inline Polygon Diagram::cell(size_t index) const {
     }
 
     return Polygon(std::move(vertices));
+}
+
+inline CellClipper Diagram::offset_cell(size_t index, double bisector_inset, double wall_inset) const {
+    return clipped_cell(index, Inset{bisector_inset, wall_inset});
 }
 
 inline std::unique_ptr<Diagram> Diagram::rebuilt(const std::vector<Vector3>& points) const {
@@ -135,8 +150,8 @@ inline std::unique_ptr<Diagram> Diagram::rebuilt(const std::vector<Vector3>& poi
 // Period images of the site itself are skipped: their bisectors are the
 // fundamental region's own sides along wrapped axes, and the diagonal
 // images' bisectors only touch its corners.
-inline CellClipper Diagram::clipped_cell(size_t index) const {
-    CellClipper cell = fundamental_region(index);
+inline CellClipper Diagram::clipped_cell(size_t index, Inset inset) const {
+    CellClipper cell = fundamental_region(index, inset);
     Vector2 own = site(index);
 
     for (const Neighbor& neighbor : _triangulation.neighbors(index)) {
@@ -144,9 +159,11 @@ inline CellClipper Diagram::clipped_cell(size_t index) const {
             continue;
         }
 
+        Vector2 inward = own - neighbor.position;
+
         cell.clip(
-            own - neighbor.position,
-            0.5 * (own + neighbor.position),
+            inward,
+            0.5 * (own + neighbor.position) + inset.bisector * inward.normalized(),
             Bisector{neighbor.index, neighbor.position}
         );
     }
@@ -156,8 +173,8 @@ inline CellClipper Diagram::clipped_cell(size_t index) const {
 
 // The rectangle every point of the cell must lie in: along a wrapped axis
 // the strip closer to the site than to its period images, along a walled
-// axis the domain itself.
-inline CellClipper Diagram::fundamental_region(size_t index) const {
+// axis the domain itself, each side moved by the inset its cut takes.
+inline CellClipper Diagram::fundamental_region(size_t index, Inset inset) const {
     Vector2 own = site(index);
     Vector2 low;
     Vector2 high;
@@ -172,16 +189,20 @@ inline CellClipper Diagram::fundamental_region(size_t index) const {
         inward[axis] = 1.0;
 
         if (domain().wrapped(axis)) {
-            low[axis] = own[axis] - 0.5 * extent;
-            high[axis] = own[axis] + 0.5 * extent;
+            low[axis] = own[axis] - 0.5 * extent + inset.bisector;
+            high[axis] = own[axis] + 0.5 * extent - inset.bisector;
             low_cuts.push_back(Bisector{index, own - period});
             high_cuts.push_back(Bisector{index, own + period});
         } else {
-            low[axis] = 0.0;
-            high[axis] = extent;
+            low[axis] = inset.wall;
+            high[axis] = extent - inset.wall;
             low_cuts.push_back(Wall{inward});
             high_cuts.push_back(Wall{-inward});
         }
+    }
+
+    if (low.x() >= high.x() || low.y() >= high.y()) {
+        return CellClipper(std::vector<CellClipper::Edge>{});
     }
 
     return CellClipper(std::vector<CellClipper::Edge>{

@@ -4,6 +4,8 @@
 #include "../../types.hpp"
 #include <CGAL/assertions.h>
 #include <cmath>
+#include <stdexcept>
+#include <string>
 
 namespace geometry_art::geometry::planar {
 
@@ -27,6 +29,7 @@ struct Domain {
     [[nodiscard]] static Domain torus(double width, double height);
     [[nodiscard]] static Domain cylinder(double width, double height);
     [[nodiscard]] static Domain plane(double width, double height);
+    [[nodiscard]] static Domain named(const std::string& name, double width, double height);
 
     [[nodiscard]] double extent(int axis) const { return axis == 0 ? width : height; }
     [[nodiscard]] Closure closure(int axis) const { return axis == 0 ? across : along; }
@@ -53,6 +56,22 @@ inline Domain Domain::cylinder(double width, double height) {
 inline Domain Domain::plane(double width, double height) {
     CGAL_precondition(width > 0.0 && height > 0.0);
     return Domain{width, height, Closure::walled, Closure::walled};
+}
+
+inline Domain Domain::named(const std::string& name, double width, double height) {
+    if (name == "torus") {
+        return torus(width, height);
+    }
+
+    if (name == "cylinder") {
+        return cylinder(width, height);
+    }
+
+    if (name == "plane") {
+        return plane(width, height);
+    }
+
+    throw std::invalid_argument("no flat domain is called " + name);
 }
 
 inline Vector2 Domain::canonical(const Vector2& point) const {

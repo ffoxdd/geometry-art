@@ -35,6 +35,15 @@ any assembled state must satisfy -- partition of the domain, neighbor
 symmetry, equidistance, the separation identity on relative moments --
 and both geometries instantiate the same typed suites.
 
+**The skeleton.** Thickening the edge graph into a printable solid is
+one construction, in `geometry_art::skeleton`: the region within half a
+bar of the graph is the domain less every cell's inset, so each cell
+hands over the ring between its boundary and its inset and the builder
+triangulates, offsets and walls it the same way everywhere. A geometry
+takes part by outlining its cells -- the sphere with cap polygons whose
+rims are small circles, the flat family through the embedding its
+closure names -- and by nothing else.
+
 ## What is not
 
 Five seams carry all the domain knowledge:

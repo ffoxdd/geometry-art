@@ -1,6 +1,7 @@
 import * as address from './address.js';
 import * as form from './form.js';
 import * as view from './view.js';
+import * as exporter from './export.js';
 
 const list = document.getElementById('runs');
 const empty = document.getElementById('runsEmpty');
@@ -74,6 +75,7 @@ async function poll() {
   const run = await api(`/api/runs/${selected}`);
   log.textContent = run.log.slice(-12).join('\n');
   logPanel.hidden = run.log.length === 0;
+  exporter.offer(run);
 
   const running = run.status === 'running' || run.status === 'queued';
   const settled = live && !running;
@@ -162,7 +164,12 @@ function action(run) {
   button.addEventListener('click', async event => {
     event.stopPropagation();
     await api(`/api/runs/${run.id}` + (active ? '/cancel' : ''), { method: active ? 'POST' : 'DELETE' });
-    if (!active && selected === run.id) selected = null;
+
+    if (!active && selected === run.id) {
+      selected = null;
+      exporter.offer(null);
+    }
+
     refresh();
   });
 

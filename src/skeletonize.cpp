@@ -1,0 +1,170 @@
+#include "geometry_art/geometry/planar/domain.hpp"
+#include "geometry_art/io/mesh/types.hpp"
+#include "geometry_art/io/mesh/writer.hpp"
+#include "geometry_art/io/snapshot/json_reader.hpp"
+#include "geometry_art/io/snapshot/snapshot.hpp"
+#include "geometry_art/skeleton/builder.hpp"
+#include "geometry_art/skeleton/flat_outliner.hpp"
+#include "geometry_art/skeleton/spherical_outliner.hpp"
+#include "geometry_art/voronoi/flat/core/diagram.hpp"
+#include "geometry_art/voronoi/spherical/core/sphere.hpp"
+#include <CGAL/boost/graph/helpers.h>
+#include <CLI/CLI.hpp>
+#include <exception>
+#include <filesystem>
+#include <iostream>
+#include <string>
+#include <vector>
+
+using namespace geometry_art;
+using geometry::planar::Domain;
+using io::mesh::SurfaceMesh;
+using io::mesh::format_named;
+using io::mesh::format_names;
+using io::mesh::extension_of;
+using io::snapshot::JsonReader;
+using io::snapshot::Snapshot;
+using skeleton::Builder;
+using skeleton::FlatOutliner;
+using skeleton::Parameters;
+using skeleton::SphericalOutliner;
+using voronoi::flat::Diagram;
+using voronoi::spherical::Sphere;
+
+struct Config {
+    std::string snapshot_path;
+    std::string output_path;
+    std::string format = "stl";
+    double scale = 50.0;
+    double bar_width = 1.5;
+    double bar_thickness = 1.5;
+    double resolution = 1.0;
+};
+
+Config parse_arguments(int argc, char* argv[]);
+std::filesystem::path output_path_of(const Config& config);
+SurfaceMesh skeleton_of(const Snapshot& snapshot, const Parameters& parameters);
+
+int main(int argc, char* argv[]) {
+    Config config = parse_arguments(argc, argv);
+    std::filesystem::path output = output_path_of(config);
+
+    Parameters parameters{
+        config.bar_width / config.scale,
+        config.bar_thickness / config.scale,
+        config.resolution / config.scale,
+        config.scale
+    };
+
+    std::cout <<
+        "Configuration:" << std::endl <<
+        "  Snapshot: " << config.snapshot_path << std::endl <<
+        "  Output: " << output.string() << std::endl <<
+        "  Scale: " << config.scale << " per model unit" << std::endl <<
+        "  Bars: " << config.bar_width << " wide, " << config.bar_thickness << " thick" << std::endl <<
+        "  Resolution: " << config.resolution << std::endl <<
+        std::endl;
+
+    try {
+        Snapshot snapshot = JsonReader().read_file(config.snapshot_path);
+        std::cout << "Skeletonizing " << snapshot.cells.size() << " cells on the " << snapshot.geometry << "..." << std::flush;
+
+        SurfaceMesh mesh = skeleton_of(snapshot, parameters);
+        std::cout << " done" << std::endl <<
+            "  " << mesh.number_of_vertices() << " vertices, " << mesh.number_of_faces() << " faces, " <<
+            (CGAL::is_closed(mesh) ? "closed" : "open") << std::endl;
+
+        io::mesh::write(mesh, output);
+        std::cout << "Saved: " << output.string() << std::endl;
+    } catch (const std::exception& error) {
+        std::cerr << "skeletonize: " << error.what() << std::endl;
+        return 1;
+    }
+
+    return 0;
+}
+
+Config parse_arguments(int argc, char* argv[]) {
+    CLI::App app{"Thicken a tessellation's edges into a printable solid"};
+    Config config;
+
+    app.add_option("snapshot", config.snapshot_path)
+        ->description("The tessellation's snapshot .json")
+        ->required()
+        ->check(CLI::ExistingFile);
+
+    app.add_option("--output,-o", config.output_path)
+        ->description("Where to write the model; its extension picks the format (default: beside the snapshot)");
+
+    app.add_option("--format,-f", config.format)
+        ->description("Format of the model when --output is not given")
+        ->check(CLI::IsMember(format_names()))
+        ->default_val("stl");
+
+    app.add_option("--scale,-s", config.scale)
+        ->description("Output units per model unit: the sphere's radius, or one unit of a flat domain")
+        ->default_val(50.0)
+        ->check(CLI::PositiveNumber);
+
+    app.add_option("--bar-width,-w", config.bar_width)
+        ->description("Width of a bar along the surface, in output units")
+        ->default_val(1.5)
+        ->check(CLI::PositiveNumber);
+
+    app.add_option("--bar-thickness,-t", config.bar_thickness)
+        ->description("Thickness of a bar off the surface, in output units")
+        ->default_val(1.5)
+        ->check(CLI::PositiveNumber);
+
+    app.add_option("--resolution,-r", config.resolution)
+        ->description("Longest facet edge along a curved surface, in output units")
+        ->default_val(1.0)
+        ->check(CLI::PositiveNumber);
+
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError& error) {
+        std::exit(app.exit(error));
+    }
+
+    return config;
+}
+
+std::filesystem::path output_path_of(const Config& config) {
+    if (!config.output_path.empty()) {
+        return config.output_path;
+    }
+
+    std::filesystem::path output = config.snapshot_path;
+    output.replace_extension(extension_of(format_named(config.format)));
+
+    return output;
+}
+
+// The snapshot carries the sites and the domain, which is all a diagram
+// needs; the cells are recomputed, since the inset needs the cuts behind
+// them.
+SurfaceMesh skeleton_of(const Snapshot& snapshot, const Parameters& parameters) {
+    Builder builder(parameters);
+
+    if (snapshot.geometry == "sphere") {
+        Sphere sphere;
+
+        for (const Snapshot::Cell& cell : snapshot.cells) {
+            sphere.insert(cgal::to_point(Vector3(cell.site.normalized())));
+        }
+
+        return builder.build(SphericalOutliner(sphere));
+    }
+
+    std::vector<Vector2> sites;
+    sites.reserve(snapshot.cells.size());
+
+    for (const Snapshot::Cell& cell : snapshot.cells) {
+        sites.emplace_back(cell.site.x(), cell.site.y());
+    }
+
+    Diagram diagram(Domain::named(snapshot.geometry, snapshot.width, snapshot.height), std::move(sites));
+
+    return builder.build(FlatOutliner(diagram));
+}

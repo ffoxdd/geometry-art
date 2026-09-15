@@ -17,13 +17,14 @@ find_package(anl REQUIRED)
 find_package(CLI11 REQUIRED CONFIG)
 find_package(Eigen3 REQUIRED)
 find_package(Threads REQUIRED)
+find_package(simdjson REQUIRED CONFIG)
 find_path(LBFGSPP_INCLUDE_DIR LBFGS.h REQUIRED)
 
 # Header-only core library
 
 add_library(geometry_art INTERFACE)
 target_include_directories(geometry_art INTERFACE ${CMAKE_SOURCE_DIR}/src ${LBFGSPP_INCLUDE_DIR})
-target_link_libraries(geometry_art INTERFACE CGAL::CGAL Eigen3::Eigen Boost::boost Threads::Threads)
+target_link_libraries(geometry_art INTERFACE CGAL::CGAL Eigen3::Eigen Boost::boost Threads::Threads simdjson::simdjson)
 
 add_library(geometry_art_noise STATIC src/geometry_art/fields/scalar/anl_implementation.cpp)
 target_link_libraries(geometry_art_noise PUBLIC geometry_art anl)
@@ -36,8 +37,8 @@ target_link_libraries(tessellate PRIVATE geometry_art geometry_art_noise CLI11::
 add_executable(aggregate src/aggregate.cpp)
 target_link_libraries(aggregate PRIVATE geometry_art CLI11::CLI11)
 
-add_executable(sphere_to_mesh src/sphere_to_mesh.cpp)
-target_link_libraries(sphere_to_mesh PRIVATE geometry_art CLI11::CLI11)
+add_executable(skeletonize src/skeletonize.cpp)
+target_link_libraries(skeletonize PRIVATE geometry_art CLI11::CLI11)
 
 # Tests
 

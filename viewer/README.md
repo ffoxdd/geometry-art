@@ -4,7 +4,7 @@
 
 ```
 ./studio            # http://localhost:8731/
-./studio --help     # --port, --binary, --aggregate-binary, --runs
+./studio --help     # --port, --binary, --aggregate-binary, --skeletonize-binary, --runs
 ```
 
 Standard library only; needs a built `tessellate` and/or `aggregate`
@@ -24,6 +24,17 @@ applies at all -- `when` for the parameter, `choice_when` for one of its
 choices. The page builds its form from that declaration and the server
 validates against it, so a control that cannot apply is never offered, and
 teaching the studio a new flag means adding it in one place.
+
+## Exporting a model
+
+A finished tessellation can leave the studio as a solid: `skeletonize`
+thickens its edge graph into bars and the Export section, shown for a
+selected `tessellate` run, downloads the result in STL, OBJ, PLY or OFF.
+The bars are set in output units -- width along the surface, thickness off
+it -- with `scale` saying how many of those units one model unit is: the
+sphere's radius, or one unit of a flat rectangle. `resolution` bounds how
+long a facet may run along a curved surface. Like a program, an export
+declares its parameters once in `server.py`, and the page renders them.
 
 ## The page
 
