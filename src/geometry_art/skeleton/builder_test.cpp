@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 #include <cmath>
 #include <memory>
+#include <stdexcept>
 #include <vector>
 
 namespace geometry_art::skeleton {
@@ -28,6 +29,7 @@ using geometry_art::testing::flat_scatter;
 using io::mesh::SurfaceMesh;
 using voronoi::flat::CellClipper;
 using voronoi::flat::Diagram;
+using voronoi::flat::Wall;
 using voronoi::spherical::Sphere;
 
 const Parameters FINE{0.1, 0.05, 0.2, 1.0};
@@ -79,6 +81,34 @@ double region_area(const Diagram& diagram, double half_width) {
     return area;
 }
 
+double windowed_region_area(const Diagram& diagram, double half_width, const Window& window) {
+    const Domain& domain = diagram.domain();
+    Vector2 center = 0.5 * Vector2(domain.width, domain.height);
+    Vector2 low = center - 0.5 * window.size;
+    Vector2 high = center + 0.5 * window.size;
+    Vector2 framed = window.size + Vector2::Constant(2.0 * window.frame_width);
+    double area = framed.x() * framed.y();
+
+    for (size_t index = 0; index < diagram.size(); ++index) {
+        CellClipper inset = diagram.offset_cell(index, half_width, half_width);
+        inset.clip(Vector2(1.0, 0.0), low, Wall{Vector2(1.0, 0.0)});
+        inset.clip(Vector2(0.0, 1.0), low, Wall{Vector2(0.0, 1.0)});
+        inset.clip(Vector2(-1.0, 0.0), high, Wall{Vector2(-1.0, 0.0)});
+        inset.clip(Vector2(0.0, -1.0), high, Wall{Vector2(0.0, -1.0)});
+        std::vector<Vector2> vertices;
+
+        for (const CellClipper::Edge& edge : inset.edges()) {
+            vertices.push_back(edge.source);
+        }
+
+        if (vertices.size() >= 3) {
+            area -= geometry::planar::Polygon(vertices).area();
+        }
+    }
+
+    return area;
+}
+
 void expect_closed(const SurfaceMesh& mesh) {
     EXPECT_GT(mesh.number_of_faces(), 0u);
     EXPECT_TRUE(CGAL::is_closed(mesh));
@@ -91,6 +121,43 @@ TEST(BuilderTest, ThePlaneSkeletonIsAClosedSolidOfTheRegionsVolume) {
 
     expect_closed(mesh);
     EXPECT_NEAR(PolygonMeshProcessing::volume(mesh), FINE.bar_thickness * region_area(diagram, 0.5 * FINE.bar_width), 1e-9);
+}
+
+TEST(BuilderTest, AWindowedSkeletonIsItsOpeningsCutFromTheFramedWindow) {
+    Diagram diagram(Domain::plane(2.0, 1.0), grid_sites());
+    Window window{Vector2(1.2, 0.6), 0.1};
+    SurfaceMesh mesh = Builder(FINE).build(FlatOutliner(diagram, window));
+
+    expect_closed(mesh);
+    EXPECT_NEAR(
+        PolygonMeshProcessing::volume(mesh),
+        FINE.bar_thickness * windowed_region_area(diagram, 0.5 * FINE.bar_width, window),
+        1e-9
+    );
+}
+
+TEST(BuilderTest, AWindowOnTheTorusLiesFlatAndClosesAcrossTheSeams) {
+    std::vector<Vector2> sites;
+
+    for (const Vector2& site : grid_sites()) {
+        sites.push_back(site + Vector2(0.1, 0.1));
+    }
+
+    Diagram diagram(Domain::torus(2.0, 1.0), sites);
+    SurfaceMesh mesh = Builder(FINE).build(FlatOutliner(diagram, Window{Vector2(1.8, 0.8), 0.05}));
+
+    expect_closed(mesh);
+    EXPECT_GT(PolygonMeshProcessing::volume(mesh), 0.0);
+
+    for (auto vertex : mesh.vertices()) {
+        EXPECT_NEAR(std::abs(mesh.point(vertex).z()), 0.5 * FINE.bar_thickness, 1e-12);
+    }
+}
+
+TEST(BuilderTest, AWindowTooLargeForTheDomainIsRefused) {
+    Diagram diagram(Domain::plane(2.0, 1.0), grid_sites());
+
+    EXPECT_THROW(FlatOutliner(diagram, Window{Vector2(1.0, 1.0), 0.1}), std::invalid_argument);
 }
 
 TEST(BuilderTest, TheScaleMultipliesEveryPosition) {

@@ -159,6 +159,8 @@ The `skeletonize` executable thickens a snapshot's edge graph into a printable s
 - `--scale <k>` / `-s`: Output units per model unit (the sphere's radius, or one unit of a flat domain; default: 50)
 - `--bar-width <w>` / `-w`, `--bar-thickness <t>` / `-t`: The bars along and off the surface, in output units (default: 1.5)
 - `--resolution <r>` / `-r`: Longest facet edge along a curved surface, in output units (default: 1.0)
+- `--window <w>`: Cut a flat geometry's model down to a centred square this wide, laid flat, in output units; the torus shows its tessellation with no boundary effects at all
+- `--frame-width <f>`: The frame around the window, outside it, in output units (default: the bar width)
 
 Visual inspection goes through the web studio -- `./studio`, documented in
 `viewer/README.md` -- which runs the executables and renders their snapshots

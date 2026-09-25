@@ -33,7 +33,10 @@ selected `tessellate` run, downloads the result in STL, OBJ, PLY or OFF.
 The bars are set in output units -- width along the surface, thickness off
 it -- with `scale` saying how many of those units one model unit is: the
 sphere's radius, or one unit of a flat rectangle. `resolution` bounds how
-long a facet may run along a curved surface. Like a program, an export
+long a facet may run along a curved surface. A `window` cuts the model
+down to a centred square of that width, laid flat, with a frame of
+`frame width` around it; left blank, the whole domain is exported and the
+frame defaults to the bar width. Like a program, an export
 declares its parameters once in `server.py`, and the page renders them.
 
 ## The page

@@ -42,7 +42,7 @@ async function download() {
   button.disabled = true;
 
   try {
-    const query = new URLSearchParams(panel.values());
+    const query = new URLSearchParams(Object.entries(panel.values()).filter(([, value]) => value !== null));
     const response = await fetch(`/api/runs/${run.id}/export/${chosen}?${query}`);
 
     if (!response.ok) {

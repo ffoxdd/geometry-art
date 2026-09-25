@@ -13,6 +13,8 @@
 #include <exception>
 #include <filesystem>
 #include <iostream>
+#include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -28,6 +30,7 @@ using skeleton::Builder;
 using skeleton::FlatOutliner;
 using skeleton::Parameters;
 using skeleton::SphericalOutliner;
+using skeleton::Window;
 using voronoi::flat::Diagram;
 using voronoi::spherical::Sphere;
 
@@ -39,11 +42,14 @@ struct Config {
     double bar_width = 1.5;
     double bar_thickness = 1.5;
     double resolution = 1.0;
+    std::optional<double> window;
+    std::optional<double> frame_width;
 };
 
 Config parse_arguments(int argc, char* argv[]);
 std::filesystem::path output_path_of(const Config& config);
-SurfaceMesh skeleton_of(const Snapshot& snapshot, const Parameters& parameters);
+std::optional<Window> window_of(const Config& config);
+SurfaceMesh skeleton_of(const Snapshot& snapshot, const Parameters& parameters, const std::optional<Window>& window);
 
 int main(int argc, char* argv[]) {
     Config config = parse_arguments(argc, argv);
@@ -56,20 +62,28 @@ int main(int argc, char* argv[]) {
         config.scale
     };
 
+    std::optional<Window> window = window_of(config);
+
     std::cout <<
         "Configuration:" << std::endl <<
         "  Snapshot: " << config.snapshot_path << std::endl <<
         "  Output: " << output.string() << std::endl <<
         "  Scale: " << config.scale << " per model unit" << std::endl <<
         "  Bars: " << config.bar_width << " wide, " << config.bar_thickness << " thick" << std::endl <<
-        "  Resolution: " << config.resolution << std::endl <<
-        std::endl;
+        "  Resolution: " << config.resolution << std::endl;
+
+    if (window) {
+        std::cout << "  Window: " << *config.window << " square, framed " <<
+            config.frame_width.value_or(config.bar_width) << " wide" << std::endl;
+    }
+
+    std::cout << std::endl;
 
     try {
         Snapshot snapshot = JsonReader().read_file(config.snapshot_path);
         std::cout << "Skeletonizing " << snapshot.cells.size() << " cells on the " << snapshot.geometry << "..." << std::flush;
 
-        SurfaceMesh mesh = skeleton_of(snapshot, parameters);
+        SurfaceMesh mesh = skeleton_of(snapshot, parameters, window);
         std::cout << " done" << std::endl <<
             "  " << mesh.number_of_vertices() << " vertices, " << mesh.number_of_faces() << " faces, " <<
             (CGAL::is_closed(mesh) ? "closed" : "open") << std::endl;
@@ -121,6 +135,14 @@ Config parse_arguments(int argc, char* argv[]) {
         ->default_val(1.0)
         ->check(CLI::PositiveNumber);
 
+    app.add_option("--window", config.window)
+        ->description("Cut the model down to a centred square this wide, laid flat, in output units")
+        ->check(CLI::PositiveNumber);
+
+    app.add_option("--frame-width", config.frame_width)
+        ->description("Width of the frame around the window, in output units (default: the bar width)")
+        ->check(CLI::PositiveNumber);
+
     try {
         app.parse(argc, argv);
     } catch (const CLI::ParseError& error) {
@@ -141,11 +163,26 @@ std::filesystem::path output_path_of(const Config& config) {
     return output;
 }
 
+std::optional<Window> window_of(const Config& config) {
+    if (!config.window) {
+        return std::nullopt;
+    }
+
+    return Window{
+        Vector2::Constant(*config.window / config.scale),
+        config.frame_width.value_or(config.bar_width) / config.scale
+    };
+}
+
 // The snapshot carries the sites and the domain, which is all a diagram
 // needs; the cells are recomputed, since the inset needs the cuts behind
 // them.
-SurfaceMesh skeleton_of(const Snapshot& snapshot, const Parameters& parameters) {
+SurfaceMesh skeleton_of(const Snapshot& snapshot, const Parameters& parameters, const std::optional<Window>& window) {
     Builder builder(parameters);
+
+    if (snapshot.geometry == "sphere" && window) {
+        throw std::invalid_argument("a window needs a flat geometry");
+    }
 
     if (snapshot.geometry == "sphere") {
         Sphere sphere;
@@ -166,5 +203,5 @@ SurfaceMesh skeleton_of(const Snapshot& snapshot, const Parameters& parameters) 
 
     Diagram diagram(Domain::named(snapshot.geometry, snapshot.width, snapshot.height), std::move(sites));
 
-    return builder.build(FlatOutliner(diagram));
+    return builder.build(FlatOutliner(diagram, window));
 }

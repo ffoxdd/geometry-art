@@ -1,7 +1,7 @@
 # Printing swatches
 
-A swatch is a square plane tessellation, thickened by `skeletonize` into a
-lattice of bars with a full-width frame along its walls. Swatches exist to be
+A swatch is a square cut from a larger tessellation, thickened by
+`skeletonize` into a lattice of bars with a frame around it. Swatches exist to be
 experimented on -- covered, coated, cast over -- so the print is a substrate:
 the cheapest material that holds its shape is the right one, and cost is
 what the layout optimises. They are ordered through Craftcloud, whose rules
@@ -11,6 +11,26 @@ The working target is a swatch about 15 cm on a side with cells whose clear
 opening is at least about 1 cm. On a constant density that is roughly 180
 cells; a gradient or radial field needs more points to keep its sparsest
 cells at that opening.
+
+## Windows
+
+A tessellation's cells deform against a wall, so a swatch is not the whole
+domain but a window onto its middle: `skeletonize --window <w>` keeps a
+centred square `w` wide, lays it flat, and runs a frame of
+`--frame-width` (the bar width unless set) around it, outside. The cells'
+openings run up to the window's edge, so the window is exactly the region
+that shows, and the part is the window plus two frame widths across.
+
+A torus has no walls at all, which makes it the best source: its window
+shows the tessellation as if it went on forever. The domain only has to
+hold the window and frame; a margin of a cell or two is plenty. A 6 cm
+window at the default scale of 50 is 1.2 model units wide, cut from a
+torus about 1.4 on a side:
+
+```
+tessellate -g torus --width 1.4 --height 1.4 -f constant -p 55 --snapshot swatch
+skeletonize swatch.json -w 1.2 -t 1.2 --window 60
+```
 
 ## Bar size
 
