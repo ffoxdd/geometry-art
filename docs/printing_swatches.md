@@ -41,21 +41,35 @@ sheets, 1.2 mm bars:
 | 3 × 1 | 17.08 cm³ | 459.6 × 151.2 × 1.2 mm | 83.4 cm³ |
 | 2 × 2 | 22.80 cm³ | 305.4 × 305.4 × 1.2 mm | 111.9 cm³ |
 
-## Quote experiment
+## What swatches cost
 
-Each row is one upload, quoted in the cheapest material that meets its
-process minimum, in one currency and destination:
+Cheapest order total per count, to a US address, 1.2 mm bars in the cheapest
+material on offer, quoted 2026-09-25.
+The 10 cm swatch has 80 cells, keeping the openings near 1 cm:
 
-| Model | What it isolates | Cheapest quote |
+| Swatches | 10 cm swatches | 15 cm swatches |
 |---|---|---|
-| swatch, 1.2 mm bars | the baseline | |
-| swatch, 1.2 mm bars, quantity 2 and 4 | per-part against per-order charges | |
-| swatch, 1.0 and 1.6 mm bars | volume and surface area at a near-equal box | |
-| solid plate, same box | volume at an equal box | |
-| sheet 2 × 1 | two swatches as one part | |
-| sheet 3 × 1 | a part longer than common FDM beds | |
-| sheet 2 × 2 | a part wider than common FDM beds | |
+| 1 | $18.43 | $36.43 |
+| 2 | $22.16 | $37.83 |
+| 4 | $29.61 | $42.25 |
+| 8 | $42.94 | $43.91 |
+| 16 | $43.91 | $47.32 |
+| 32 | $44.45 | $51.41 |
 
-Comparing a sheet of n swatches with n copies of one swatch prices grouping
-directly; comparing the bar sizes and the solid plate separates the volume
-term from the box term.
+Size barely matters once an order holds more than a few swatches; the vendor
+minimum and shipping are nearly the whole bill. The cheapest plan is one
+order of 16 to 32 separate 15 cm swatches, about $1.50 to $3 each. Joined
+sheets are unnecessary: one sheet of four quoted above four separate
+swatches, and a sheet adds warping risk and bed limits.
+
+Part prices alone, cheapest vendor:
+
+| Part | Price |
+|---|---|
+| 15 cm swatch, 1.0 mm bars | $2.56 |
+| 15 cm swatch, 1.2 mm bars | $2.91 |
+| 15 cm swatch, 1.6 mm bars | $3.82 |
+| solid plate, same box | $4.51 |
+| sheet 2 × 1 | $4.14 |
+| sheet 3 × 1 | $5.35 |
+| sheet 2 × 2 | $5.11 |

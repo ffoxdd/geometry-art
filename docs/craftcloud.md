@@ -49,6 +49,28 @@ A quote depends on the part's **volume**, its **bounding box** and its
 Each vendor also has a **minimum production price**, returned alongside every
 quote in the API.
 
+What an order actually costs, from quotes to a US address:
+
+- **An order's total is one vendor's charge plus its shipping.** The charge
+  is the sum of the part prices, raised to the vendor's minimum production
+  price when it falls short. Minimums run from nothing to nearly $200;
+  the cheapest vendors sit around $25 to $40. Standard shipping runs about
+  $9 to $19.
+- **For small plastic parts the fixed charges are the price.** A flat
+  15 cm FDM lattice of about 6 cm³ quotes near $3 as a part, and 32 of them
+  near $16, so a small order pays mostly minimum and shipping.
+- **So fill the order up to the minimum.** Past a handful of parts, more
+  parts cost almost nothing until their sum passes the minimum.
+- **Separate parts in one order cost no more than a joined sheet.** Four
+  separate swatches quote below one sheet of four, because the vendor minimum
+  applies to the order, not to each part.
+- **The cheapest materials** are the plain FDM thermoplastics: PLA, PLA+,
+  PETG and PCTG. SLS nylon is the cheapest powder process, at several times
+  the price for the same part.
+- **The website's material list totals every uploaded model**, in that
+  material, across the whole upload. Per-model prices show only after
+  selecting a material, or in the API.
+
 How the terms bear on a design:
 
 - **Volume** is material. Thin members cost in proportion to cross-section,
@@ -57,8 +79,8 @@ How the terms bear on a design:
   many customers' parts into one build, so a part with a large box and
   little material still occupies the space it encloses.
 - **Surface area** tracks finishing and, for resin, peel and exposure work.
-- **Per-part and per-order fixed charges** favour fewer, larger parts, up to
-  the size a vendor's machine and its warping risk allow.
+- **Per-order fixed charges** favour putting everything wanted into one
+  order.
 
 ## Layout principles
 
@@ -66,8 +88,9 @@ How the terms bear on a design:
   between parts. Stacking pays an air gap above every layer, and the gap must
   be wide enough for the shop to clear powder or resin, so for parts about
   1 mm thick a stack roughly doubles the box.
-- **Join parts that belong to one order** into one body with small cut-away
-  tabs, when the fixed charges per part outweigh the risk that comes with size.
+- **Keep parts separate** unless a design needs them joined. The minimum is
+  charged per order, so joining saves nothing and adds warping risk and bed
+  constraints.
 - **Watch the bed size.** Common FDM beds are about 250 mm, large ones about
   350 mm. An HP MJF 5200 builds in 380 × 284 × 380 mm. A part bigger than a
   bed can only be quoted by the shops with bigger machines.
@@ -87,5 +110,10 @@ The quoting API is described at
   vendor and material with shipping options and each vendor's minimum
   production price.
 
-The upload endpoint sits behind a Cloudflare bot challenge, so scripted
-quoting does not work from a plain HTTP client; quotes come from the website.
+The price endpoints answer a plain HTTP client, but the model upload sits
+behind a Cloudflare bot challenge. A model uploaded through the website keeps
+its id in the browser's local storage, under the session's backend models,
+and that id can be priced from anywhere. The `all3dp` Ruby gem
+(<https://github.com/cults/all3dp>) wraps a different endpoint: it hands
+Craftcloud public URLs of mesh files and gets back a configuration link for
+a person to open. It returns no prices.
