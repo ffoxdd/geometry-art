@@ -60,11 +60,29 @@ near 1 cm: 28 cells at 6 cm, 80 at 10 cm, 180 at 15 cm.
 Repeated requests for the same order differ by up to about a fifth, as
 vendors join or drop out of a quote, so these are indicative.
 
-Size barely matters once an order holds more than a few swatches; the vendor
-minimum and shipping are most of the bill, and a 15 cm swatch costs little
-more than a 6 cm one. At 32 to 64 swatches a 15 cm swatch comes to about $1.20
-to $2 each. Joined sheets are unnecessary: one sheet of four quoted above
-four separate swatches, and a sheet adds warping risk and bed limits.
+Those counts are copies of one design, which carry a quantity discount.
+Distinct designs do not: each separate model is handled and priced on its
+own, so distinct swatches belong on a shared sheet.
+
+Sixteen distinct 6 cm swatches, 1.2 mm bars:
+
+| Ordered as | Best total |
+|---|---|
+| sixteen separate models | $55.67 |
+| one tabbed 4 × 4 sheet, 25 cm square | $20.48 |
+
+Larger sheets of 6 cm swatches, each one model:
+
+| Sheet | Side | Vendors quoting | Best total | Per swatch |
+|---|---|---|---|---|
+| 4 × 4 | 25 cm | 36 | $20.48 | $1.28 |
+| 5 × 5 | 32 cm | 30 | $36.52 | $1.46 |
+| 6 × 6 | 38 cm | 13 | $48.65 | $1.35 |
+| 8 × 8 | 51 cm | 8 | $64.45 | $1.01 |
+
+A 4 × 4 sheet is the working unit: it fits common FDM beds, most vendors
+quote it, and it is among the cheapest per swatch. More swatches go on more
+4 × 4 sheets in the same order; two copies of one sheet quoted at $26.26.
 
 Part prices alone, cheapest vendor:
 

@@ -59,11 +59,10 @@ What an order actually costs, from quotes to a US address:
 - **For small plastic parts the fixed charges are the price.** A flat
   15 cm FDM lattice of about 6 cm³ quotes near $3 as a part, and 32 of them
   near $16, so a small order pays mostly minimum and shipping.
-- **So fill the order up to the minimum.** Past a handful of parts, more
-  parts cost almost nothing until their sum passes the minimum.
-- **Separate parts in one order cost no more than a joined sheet.** Four
-  separate swatches quote below one sheet of four, because the vendor minimum
-  applies to the order, not to each part.
+- **Copies are cheap, distinct parts are not.** Extra copies of one model
+  carry a steep quantity discount, but each distinct model carries its own
+  handling. Sixteen different 6 cm lattices quoted at about $56 as separate
+  models against about $20 joined into one tabbed sheet.
 - **The cheapest materials** are the plain FDM thermoplastics: PLA, PLA+,
   PETG and PCTG. SLS nylon is the cheapest powder process, at several times
   the price for the same part.
@@ -79,8 +78,8 @@ How the terms bear on a design:
   many customers' parts into one build, so a part with a large box and
   little material still occupies the space it encloses.
 - **Surface area** tracks finishing and, for resin, peel and exposure work.
-- **Per-order fixed charges** favour putting everything wanted into one
-  order.
+- **Per-order and per-model fixed charges** favour one order, with distinct
+  designs joined into as few models as the vendors can print.
 
 ## Layout principles
 
@@ -88,12 +87,13 @@ How the terms bear on a design:
   between parts. Stacking pays an air gap above every layer, and the gap must
   be wide enough for the shop to clear powder or resin, so for parts about
   1 mm thick a stack roughly doubles the box.
-- **Keep parts separate** unless a design needs them joined. The minimum is
-  charged per order, so joining saves nothing and adds warping risk and bed
-  constraints.
+- **Join distinct small parts into one body** with small cut-away tabs.
+  Copies of a single design can stay separate, since the quantity discount
+  already covers them.
 - **Watch the bed size.** Common FDM beds are about 250 mm, large ones about
   350 mm. An HP MJF 5200 builds in 380 × 284 × 380 mm. A part bigger than a
-  bed can only be quoted by the shops with bigger machines.
+  bed can only be quoted by the shops with bigger machines: a flat sheet
+  25 cm square drew 36 vendors, 32 cm drew 30, 38 cm drew 13, and 51 cm drew 8.
 - **Large thin flat parts warp.** They are the worst case for FDM and SLS
   shrinkage, which argues for several medium sheets over one maximal one.
 
