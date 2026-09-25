@@ -44,23 +44,27 @@ sheets, 1.2 mm bars:
 ## What swatches cost
 
 Cheapest order total per count, to a US address, 1.2 mm bars in the cheapest
-material on offer, quoted 2026-09-25.
-The 10 cm swatch has 80 cells, keeping the openings near 1 cm:
+material on offer, quoted 2026-09-25. Every size keeps its cell openings
+near 1 cm: 28 cells at 6 cm, 80 at 10 cm, 180 at 15 cm.
 
-| Swatches | 10 cm swatches | 15 cm swatches |
-|---|---|---|
-| 1 | $18.43 | $36.43 |
-| 2 | $22.16 | $37.83 |
-| 4 | $29.61 | $42.25 |
-| 8 | $42.94 | $43.91 |
-| 16 | $43.91 | $47.32 |
-| 32 | $44.45 | $51.41 |
+| Swatches | 6 cm | 10 cm | 15 cm |
+|---|---|---|---|
+| 1 | $18.43 | $18.43 | $36.43 |
+| 2 | $22.16 | $22.16 | $37.83 |
+| 4 | $29.61 | $29.61 | $42.25 |
+| 8 | $38.70 | $42.94 | $44.50 |
+| 16 | $43.99 | $52.29 | $59.03 |
+| 32 | $54.32 | $59.03 | $65.08 |
+| 64 | $59.03 | $71.40 | $78.49 |
+
+Repeated requests for the same order differ by up to about a fifth, as
+vendors join or drop out of a quote, so these are indicative.
 
 Size barely matters once an order holds more than a few swatches; the vendor
-minimum and shipping are nearly the whole bill. The cheapest plan is one
-order of 16 to 32 separate 15 cm swatches, about $1.50 to $3 each. Joined
-sheets are unnecessary: one sheet of four quoted above four separate
-swatches, and a sheet adds warping risk and bed limits.
+minimum and shipping are most of the bill, and a 15 cm swatch costs little
+more than a 6 cm one. At 32 to 64 swatches a 15 cm swatch comes to about $1.20
+to $2 each. Joined sheets are unnecessary: one sheet of four quoted above
+four separate swatches, and a sheet adds warping risk and bed limits.
 
 Part prices alone, cheapest vendor:
 
