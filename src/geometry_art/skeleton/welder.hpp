@@ -8,7 +8,9 @@
 #include <cmath>
 #include <cstddef>
 #include <map>
+#include <optional>
 #include <utility>
+#include <vector>
 
 namespace geometry_art::skeleton {
 
@@ -16,8 +18,10 @@ using io::mesh::SurfaceMesh;
 using io::mesh::VertexIndex;
 
 // Assembles a mesh from triangles given by position, welding vertices that
-// land on the same spot so that neighbouring cells, which each compute
-// their shared corners on their own, close up into one surface. Positions
+// land within a tolerance of one another so that neighbouring cells, which
+// each compute their shared corners on their own, close up into one
+// surface. The tolerance also merges corners too close to survive the
+// output's precision, whose edges would otherwise collapse there. Positions
 // are welded at the model's own scale and stored at the output's.
 class Welder {
  public:
@@ -30,15 +34,21 @@ class Welder {
     [[nodiscard]] SurfaceMesh take();
 
  private:
-    static constexpr double QUANTUM = 1e-9;
+    static constexpr double TOLERANCE = 1e-6;
 
     using Key = std::array<long long, 3>;
 
+    struct Known {
+        Vector3 position;
+        VertexIndex index;
+    };
+
     double _scale;
     SurfaceMesh _mesh;
-    std::map<Key, VertexIndex> _known;
+    std::map<Key, std::vector<Known>> _known;
     size_t _refused = 0;
 
+    [[nodiscard]] std::optional<VertexIndex> nearby(const Vector3& position) const;
     [[nodiscard]] static Key key_of(const Vector3& position);
 };
 
@@ -47,15 +57,12 @@ inline Welder::Welder(double scale) :
 }
 
 inline VertexIndex Welder::vertex(const Vector3& position) {
-    Key key = key_of(position);
-    auto found = _known.find(key);
-
-    if (found != _known.end()) {
-        return found->second;
+    if (std::optional<VertexIndex> found = nearby(position)) {
+        return *found;
     }
 
     VertexIndex index = _mesh.add_vertex(cgal::to_point(Vector3(_scale * position)));
-    _known.emplace(key, index);
+    _known[key_of(position)].push_back(Known{position, index});
 
     return index;
 }
@@ -75,11 +82,37 @@ inline SurfaceMesh Welder::take() {
     return std::exchange(_mesh, SurfaceMesh());
 }
 
+// A position within the tolerance of a known one has a key at most one
+// step from its key along each axis.
+inline std::optional<VertexIndex> Welder::nearby(const Vector3& position) const {
+    Key center = key_of(position);
+
+    for (long long x = -1; x <= 1; ++x) {
+        for (long long y = -1; y <= 1; ++y) {
+            for (long long z = -1; z <= 1; ++z) {
+                auto found = _known.find(Key{center[0] + x, center[1] + y, center[2] + z});
+
+                if (found == _known.end()) {
+                    continue;
+                }
+
+                for (const Known& known : found->second) {
+                    if ((known.position - position).lpNorm<Eigen::Infinity>() <= TOLERANCE) {
+                        return known.index;
+                    }
+                }
+            }
+        }
+    }
+
+    return std::nullopt;
+}
+
 inline Welder::Key Welder::key_of(const Vector3& position) {
     return Key{
-        std::llround(position.x() / QUANTUM),
-        std::llround(position.y() / QUANTUM),
-        std::llround(position.z() / QUANTUM)
+        std::llround(position.x() / TOLERANCE),
+        std::llround(position.y() / TOLERANCE),
+        std::llround(position.z() / TOLERANCE)
     };
 }
 
