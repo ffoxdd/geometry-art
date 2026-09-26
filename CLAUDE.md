@@ -145,7 +145,8 @@ The `tessellate` executable supports command-line flags for terminal/AI-assisted
 - `--density-tolerance <x>`: Refine the density's spline (sphere) or sampling grid (flat) until its relative representation error is below this (0 keeps the cell-scale resolution)
 - `--snapshot <path>`: Write the tessellation as `<path>.json` and `<path>.svg`; `--snapshot-interval <s>` also rewrites it every `s` seconds while running
 - `--geometry <g>` / `-g`: 'sphere' (default), or 'torus' / 'cylinder' / 'plane' for the flat family; the torus wraps both axes, the cylinder walls its rims, the plane walls all four sides; flat runs use the newton inner solver
-- `--width <w>` / `--height <h>`: The flat domain's rectangle (cylinder circumference and height)
+- `--scale <k>`: Output units per model unit (default: 50); the solver works in model units, the snapshot records the scale, and the sphere's radius is one model unit
+- `--width <w>` / `--height <h>`: The flat domain's rectangle in output units (cylinder circumference and height; default: 100 x 50)
 - `--contrast <r>`: Densest-to-sparsest density ratio of the 'linear' field, which rises from bottom to top (every geometry but the torus)
 - `--help`: Show usage information
 
@@ -156,7 +157,7 @@ Examples:
 The `skeletonize` executable thickens a snapshot's edge graph into a printable solid:
 - `skeletonize <snapshot.json>`: Reads the sites and domain back from the snapshot and writes the model beside it
 - `--format <f>` / `-f`: 'stl' (default, binary), 'obj', 'ply' or 'off'; `--output <path>` / `-o` names the file instead, its extension picking the format
-- `--scale <k>` / `-s`: Output units per model unit (the sphere's radius, or one unit of a flat domain; default: 50)
+- `--scale <k>` / `-s`: Output units per model unit (the sphere's radius, or one unit of a flat domain; default: the snapshot's, else 50)
 - `--bar-width <w>` / `-w`, `--bar-thickness <t>` / `-t`: The bars along and off the surface, in output units (default: 1.5)
 - `--resolution <r>` / `-r`: Longest facet edge along a curved surface, in output units (default: 1.0)
 - `--window <w>`: Cut a flat geometry's model down to a centred square this wide, laid flat, in output units; the torus shows its tessellation with no boundary effects at all

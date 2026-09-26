@@ -40,17 +40,19 @@ export function offer(current) {
   onCut(cut());
 }
 
-// The part a windowed export cuts, in the snapshot's own units, so the
-// drawing can show it: the window, and the frame run around it outside.
+// The part a windowed export cuts, in output units, so the drawing can
+// show it: the window, and the frame run around it outside. A blank scale
+// is the run's own, which only the snapshot knows.
 export function cut() {
   if (section.hidden || !panel) return null;
 
   const chosen = panel.values();
-  if (!chosen.window || !chosen.scale) return null;
+  if (!chosen.window) return null;
 
   return {
-    size: chosen.window / chosen.scale,
-    frame: (chosen.frame_width ?? chosen.bar_width) / chosen.scale,
+    window: chosen.window,
+    frame: chosen.frame_width ?? chosen.bar_width,
+    scale: chosen.scale,
   };
 }
 

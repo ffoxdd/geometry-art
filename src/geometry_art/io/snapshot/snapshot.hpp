@@ -6,6 +6,7 @@
 #include "../../std_ext/parallel_for.hpp"
 #include "../../voronoi/spherical/core/diagram.hpp"
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -33,6 +34,9 @@ struct Snapshot {
     // The rectangle of periods, for flat geometries; unused on the sphere.
     double width = 0.0;
     double height = 0.0;
+
+    // Output units per model unit, for a run sized in output units.
+    std::optional<double> scale;
 
     std::vector<Cell> cells;
     double total_mass = 0.0;

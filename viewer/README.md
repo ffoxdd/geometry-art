@@ -30,17 +30,19 @@ teaching the studio a new flag means adding it in one place.
 A finished tessellation can leave the studio as a solid: `skeletonize`
 thickens its edge graph into bars and the Export section, shown for a
 selected `tessellate` run, downloads the result in STL, OBJ, PLY or OFF.
-The bars are set in output units -- width along the surface, thickness off
-it -- with `scale` saying how many of those units one model unit is: the
-sphere's radius, or one unit of a flat rectangle. `resolution` bounds how
+Sizes are in output units, taken as millimetres. A run is sized in them:
+its `mm per unit` is the scale between them and the model units the solver
+works in -- the sphere's radius, or one unit of a flat rectangle -- and the
+snapshot records it, so the readout gives a flat run's size in millimetres.
+The export's bars are set in the same units -- width along the surface,
+thickness off it -- at the run's scale unless one is given. `resolution` bounds how
 long a facet may run along a curved surface. A `window` cuts the model
 down to a centred square of that width, laid flat, with a frame of
 `frame width` around it; left blank, the whole domain is exported and the
 frame defaults to the bar width. While a window is set, the drawing
 outlines it on the tessellation: the inner line is the window's edge, where
 the openings stop, and the outer one is the frame's, where the part ends.
-Like a program, an export
-declares its parameters once in `server.py`, and the page renders them.
+Like a program, an export declares its parameters once in `server.py`, and the page renders them.
 
 ## The page
 

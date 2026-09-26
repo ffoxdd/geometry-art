@@ -27,8 +27,9 @@ using voronoi::spherical::noop_callback;
 
 struct Config {
     std::string geometry = "sphere";
-    double width = 2.0;
-    double height = 1.0;
+    double scale = 50.0;
+    double width = 100.0;
+    double height = 50.0;
     int points_count;
     std::string density_field;
     int lloyd_passes;
@@ -52,7 +53,7 @@ bool flat_geometry(const std::string& geometry);
 std::string flat_field_objection(const Config& config);
 
 Config parse_arguments(int argc, char *argv[]);
-void write_snapshot(const geometry_art::io::snapshot::Snapshot& snapshot, const std::string& path);
+void write_snapshot(const geometry_art::io::snapshot::Snapshot& snapshot, const Config& config);
 
 int run_flat(const Config& config, int argc, char *argv[]);
 
@@ -65,6 +66,7 @@ int main(int argc, char *argv[]) {
 
     std::cout <<
         "Configuration:" << std::endl <<
+        "  Radius: " << config.scale << std::endl <<
         "  Points: " << config.points_count << std::endl <<
         "  Density: " << config.density_field << std::endl <<
         "  Warm start: " << config.warm_start << std::endl <<
@@ -96,7 +98,7 @@ int main(int argc, char *argv[]) {
         optimizer_parameters,
         config.seed,
         callback,
-        [&](const geometry_art::io::snapshot::Snapshot& snapshot) { write_snapshot(snapshot, config.snapshot_path); },
+        [&](const geometry_art::io::snapshot::Snapshot& snapshot) { write_snapshot(snapshot, config); },
         std::chrono::milliseconds(static_cast<long long>(config.snapshot_interval * 1000.0)),
         config.image_path,
         config.contrast,
@@ -106,7 +108,7 @@ int main(int argc, char *argv[]) {
     auto sphere = factory.build();
 
     if (!config.snapshot_path.empty()) {
-        write_snapshot(factory.snapshot(), config.snapshot_path);
+        write_snapshot(factory.snapshot(), config);
         std::cout << "Snapshot: " << config.snapshot_path << ".json and " << config.snapshot_path << ".svg" << std::endl;
     }
 
@@ -127,14 +129,18 @@ int main(int argc, char *argv[]) {
 }
 
 // Written beside the target and renamed into place, so a reader polling the
-// file never sees a partial one.
-void write_snapshot(const geometry_art::io::snapshot::Snapshot& snapshot, const std::string& path) {
+// file never sees a partial one. The snapshot is in model units and carries
+// the scale that turns them back into the ones the run was sized in.
+void write_snapshot(const geometry_art::io::snapshot::Snapshot& snapshot, const Config& config) {
+    const std::string& path = config.snapshot_path;
     std::filesystem::path target = std::filesystem::absolute(path);
+    geometry_art::io::snapshot::Snapshot scaled = snapshot;
+    scaled.scale = config.scale;
     std::filesystem::create_directories(target.parent_path());
 
     {
         std::ofstream json(path + ".json.tmp");
-        geometry_art::io::snapshot::JsonWriter().write(snapshot, json);
+        geometry_art::io::snapshot::JsonWriter().write(scaled, json);
     }
     std::filesystem::rename(path + ".json.tmp", path + ".json");
 
@@ -156,7 +162,8 @@ void write_snapshot(const geometry_art::io::snapshot::Snapshot& snapshot, const 
 int run_flat(const Config& config, int argc, char *argv[]) {
     std::cout <<
         "Configuration:" << std::endl <<
-        "  Geometry: " << config.geometry << " (" << config.width << " x " << config.height << ")" << std::endl <<
+        "  Geometry: " << config.geometry << " (" << config.width << " x " << config.height <<
+        ", " << config.scale << " per model unit)" << std::endl <<
         "  Points: " << config.points_count << std::endl <<
         "  Density: " << config.density_field << std::endl <<
         "  Contrast: " << config.contrast << std::endl <<
@@ -183,13 +190,13 @@ int run_flat(const Config& config, int argc, char *argv[]) {
         static_cast<size_t>(config.newton_iterations),
         optimizer_parameters,
         config.seed,
-        config.width,
-        config.height,
+        config.width / config.scale,
+        config.height / config.scale,
         config.image_path,
         config.contrast,
         config.geometry,
         callback,
-        [&](const geometry_art::io::snapshot::Snapshot& snapshot) { write_snapshot(snapshot, config.snapshot_path); },
+        [&](const geometry_art::io::snapshot::Snapshot& snapshot) { write_snapshot(snapshot, config); },
         std::chrono::milliseconds(static_cast<long long>(config.snapshot_interval * 1000.0)),
         config.density_tolerance
     );
@@ -197,7 +204,7 @@ int run_flat(const Config& config, int argc, char *argv[]) {
     auto diagram = factory.build();
 
     if (!config.snapshot_path.empty()) {
-        write_snapshot(factory.snapshot(), config.snapshot_path);
+        write_snapshot(factory.snapshot(), config);
         std::cout << "Snapshot: " << config.snapshot_path << ".json and " << config.snapshot_path << ".svg" << std::endl;
     }
 
@@ -242,14 +249,19 @@ Config parse_arguments(int argc, char *argv[]) {
         ->check(CLI::IsMember({"sphere", "torus", "cylinder", "plane"}))
         ->default_val("sphere");
 
+    app.add_option("--scale", config.scale)
+        ->description("Output units per model unit: the sphere's radius, and what --width and --height are divided by")
+        ->default_val(50.0)
+        ->check(CLI::PositiveNumber);
+
     app.add_option("--width", config.width)
-        ->description("Width of the flat domain, the cylinder's circumference")
-        ->default_val(2.0)
+        ->description("Width of the flat domain, the cylinder's circumference, in output units")
+        ->default_val(100.0)
         ->check(CLI::PositiveNumber);
 
     app.add_option("--height", config.height)
-        ->description("Height of the flat domain")
-        ->default_val(1.0)
+        ->description("Height of the flat domain, in output units")
+        ->default_val(50.0)
         ->check(CLI::PositiveNumber);
 
     app.add_option("--density-field,-f", config.density_field)

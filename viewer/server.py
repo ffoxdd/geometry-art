@@ -53,7 +53,7 @@ PROGRAMS = {
         "groups": [
             {
                 "label": "domain",
-                "parameters": ["geometry", "points", "width", "height"],
+                "parameters": ["geometry", "points", "scale", "width", "height"],
             },
             {
                 "label": "density",
@@ -91,24 +91,33 @@ PROGRAMS = {
                 "high": 20000,
                 "default": 200,
             },
-            "width": {
-                "flag": "--width",
-                "label": "width",
+            "scale": {
+                "flag": "--scale",
+                "label": "mm per unit",
                 "type": "number",
                 "low": 0.1,
-                "high": 100.0,
-                "step": 0.1,
-                "default": 2.0,
+                "high": 10000.0,
+                "step": 0.5,
+                "default": 50.0,
+            },
+            "width": {
+                "flag": "--width",
+                "label": "width, mm",
+                "type": "number",
+                "low": 0.1,
+                "high": 10000.0,
+                "step": 1.0,
+                "default": 100.0,
                 "when": FLAT,
             },
             "height": {
                 "flag": "--height",
-                "label": "height",
+                "label": "height, mm",
                 "type": "number",
                 "low": 0.1,
-                "high": 100.0,
-                "step": 0.1,
-                "default": 1.0,
+                "high": 10000.0,
+                "step": 1.0,
+                "default": 50.0,
                 "when": FLAT,
             },
             "density_field": {
@@ -316,16 +325,16 @@ EXPORTS = {
             },
             "scale": {
                 "flag": "--scale",
-                "label": "scale",
+                "label": "mm per unit",
                 "type": "number",
                 "low": 0.1,
                 "high": 10000.0,
                 "step": 0.5,
-                "default": 50.0,
+                "placeholder": "the run's",
             },
             "bar_width": {
                 "flag": "--bar-width",
-                "label": "bar width",
+                "label": "bar width, mm",
                 "type": "number",
                 "low": 0.01,
                 "high": 1000.0,
@@ -334,7 +343,7 @@ EXPORTS = {
             },
             "bar_thickness": {
                 "flag": "--bar-thickness",
-                "label": "bar thickness",
+                "label": "bar thickness, mm",
                 "type": "number",
                 "low": 0.01,
                 "high": 1000.0,
@@ -343,7 +352,7 @@ EXPORTS = {
             },
             "resolution": {
                 "flag": "--resolution",
-                "label": "resolution",
+                "label": "resolution, mm",
                 "type": "number",
                 "low": 0.01,
                 "high": 1000.0,
@@ -352,7 +361,7 @@ EXPORTS = {
             },
             "window": {
                 "flag": "--window",
-                "label": "window",
+                "label": "window, mm",
                 "type": "number",
                 "low": 0.01,
                 "high": 10000.0,
@@ -361,7 +370,7 @@ EXPORTS = {
             },
             "frame_width": {
                 "flag": "--frame-width",
-                "label": "frame width",
+                "label": "frame width, mm",
                 "type": "number",
                 "low": 0.01,
                 "high": 1000.0,

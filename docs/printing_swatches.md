@@ -24,11 +24,10 @@ that shows, and the part is the window plus two frame widths across.
 A torus has no walls at all, which makes it the best source: its window
 shows the tessellation as if it went on forever. The domain only has to
 hold the window and frame; a margin of a cell or two is plenty. A 6 cm
-window at the default scale of 50 is 1.2 model units wide, cut from a
-torus about 1.4 on a side:
+window, cut from a torus 7 cm on a side, sized in millimetres:
 
 ```
-tessellate -g torus --width 1.4 --height 1.4 -f constant -p 55 --snapshot swatch
+tessellate -g torus --width 70 --height 70 -f constant -p 55 --snapshot swatch
 skeletonize swatch.json -w 1.2 -t 1.2 --window 60
 ```
 

@@ -102,10 +102,19 @@ function readout(cells) {
   const spread = (Math.max(...masses) - Math.min(...masses)) / target;
 
   return [
+    ...size(),
     ['cells', cells.length],
     ['capacity rms', snapshot.relativeRmsCapacityError.toExponential(2)],
     ['mass spread', spread.toExponential(2)],
   ];
+}
+
+// A run sized in output units reads back at that size.
+function size() {
+  if (!flatGeometry() || !snapshot.scale) return [];
+
+  const measure = value => Number((value * snapshot.scale).toPrecision(4));
+  return [['size', `${measure(snapshot.width)} × ${measure(snapshot.height)} mm`]];
 }
 
 // Capacity error is scaled to the errors actually present rather than to a
@@ -215,14 +224,19 @@ function buildTubes(edges, cells, shade, appearance) {
 
 // A windowed export keeps a square about the domain's middle, with the
 // frame outside it: the window's edge is where the openings stop, and the
-// frame's outer edge is where the part ends.
+// frame's outer edge is where the part ends. Both are given in output
+// units, at the export's scale or else the run's.
 const CUT_COLOUR = 0xff7a1a;
 const CUT_STEPS = 64;
+const DEFAULT_SCALE = 50;
 
 function buildCut(cut, appearance) {
+  const scale = cut.scale ?? snapshot.scale ?? DEFAULT_SCALE;
+  const size = cut.window / scale;
+  const frame = cut.frame / scale;
   const radius = 0.6 * appearance.weight / 1200;
   const material = new THREE.MeshBasicMaterial({ color: CUT_COLOUR });
-  const outlines = [0.5 * cut.size, 0.5 * cut.size + cut.frame].map(half => {
+  const outlines = [0.5 * size, 0.5 * size + frame].map(half => {
     const curve = new THREE.CatmullRomCurve3(square(half), true);
     return new THREE.TubeGeometry(curve, 4 * CUT_STEPS, radius, 6, true);
   });

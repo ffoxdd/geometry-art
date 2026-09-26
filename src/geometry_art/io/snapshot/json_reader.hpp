@@ -33,6 +33,12 @@ inline Snapshot JsonReader::read(const std::string& json) const {
         snapshot.geometry = std::string(std::string_view(document["geometry"]));
         snapshot.width = double(document["width"]);
         snapshot.height = double(document["height"]);
+        double scale = 0.0;
+
+        if (document["scale"].get_double().get(scale) == simdjson::SUCCESS) {
+            snapshot.scale = scale;
+        }
+
         snapshot.total_mass = double(document["totalMass"]);
 
         for (simdjson::ondemand::object cell : document["cells"]) {

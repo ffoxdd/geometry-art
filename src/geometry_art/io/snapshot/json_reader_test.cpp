@@ -58,6 +58,14 @@ TEST(JsonReaderTest, ReadsWhatTheWriterWrote) {
     }
 
     EXPECT_NEAR((read.cells[1].boundary[2] - Vector3(1.0, 1.0, 0.0)).norm(), 0.0, 1e-9);
+    EXPECT_FALSE(read.scale.has_value());
+}
+
+TEST(JsonReaderTest, ReadsTheScaleARunWasSizedIn) {
+    Snapshot written = two_cells();
+    written.scale = 50.0;
+
+    EXPECT_EQ(JsonReader().read(JsonWriter().to_string(written)).scale, 50.0);
 }
 
 TEST(JsonReaderTest, ReadsAGoldenSphereSnapshot) {

@@ -34,11 +34,13 @@ using skeleton::Window;
 using voronoi::flat::Diagram;
 using voronoi::spherical::Sphere;
 
+const double DEFAULT_SCALE = 50.0;
+
 struct Config {
     std::string snapshot_path;
     std::string output_path;
     std::string format = "stl";
-    double scale = 50.0;
+    std::optional<double> scale;
     double bar_width = 1.5;
     double bar_thickness = 1.5;
     double resolution = 1.0;
@@ -48,40 +50,42 @@ struct Config {
 
 Config parse_arguments(int argc, char* argv[]);
 std::filesystem::path output_path_of(const Config& config);
-std::optional<Window> window_of(const Config& config);
+double scale_of(const Config& config, const Snapshot& snapshot);
+std::optional<Window> window_of(const Config& config, double scale);
 SurfaceMesh skeleton_of(const Snapshot& snapshot, const Parameters& parameters, const std::optional<Window>& window);
 
 int main(int argc, char* argv[]) {
     Config config = parse_arguments(argc, argv);
     std::filesystem::path output = output_path_of(config);
 
-    Parameters parameters{
-        config.bar_width / config.scale,
-        config.bar_thickness / config.scale,
-        config.resolution / config.scale,
-        config.scale
-    };
-
-    std::optional<Window> window = window_of(config);
-
-    std::cout <<
-        "Configuration:" << std::endl <<
-        "  Snapshot: " << config.snapshot_path << std::endl <<
-        "  Output: " << output.string() << std::endl <<
-        "  Scale: " << config.scale << " per model unit" << std::endl <<
-        "  Bars: " << config.bar_width << " wide, " << config.bar_thickness << " thick" << std::endl <<
-        "  Resolution: " << config.resolution << std::endl;
-
-    if (window) {
-        std::cout << "  Window: " << *config.window << " square, framed " <<
-            config.frame_width.value_or(config.bar_width) << " wide" << std::endl;
-    }
-
-    std::cout << std::endl;
-
     try {
         Snapshot snapshot = JsonReader().read_file(config.snapshot_path);
-        std::cout << "Skeletonizing " << snapshot.cells.size() << " cells on the " << snapshot.geometry << "..." << std::flush;
+        double scale = scale_of(config, snapshot);
+
+        Parameters parameters{
+            config.bar_width / scale,
+            config.bar_thickness / scale,
+            config.resolution / scale,
+            scale
+        };
+
+        std::optional<Window> window = window_of(config, scale);
+
+        std::cout <<
+            "Configuration:" << std::endl <<
+            "  Snapshot: " << config.snapshot_path << std::endl <<
+            "  Output: " << output.string() << std::endl <<
+            "  Scale: " << scale << " per model unit" << std::endl <<
+            "  Bars: " << config.bar_width << " wide, " << config.bar_thickness << " thick" << std::endl <<
+            "  Resolution: " << config.resolution << std::endl;
+
+        if (window) {
+            std::cout << "  Window: " << *config.window << " square, framed " <<
+                config.frame_width.value_or(config.bar_width) << " wide" << std::endl;
+        }
+
+        std::cout << std::endl <<
+            "Skeletonizing " << snapshot.cells.size() << " cells on the " << snapshot.geometry << "..." << std::flush;
 
         SurfaceMesh mesh = skeleton_of(snapshot, parameters, window);
         std::cout << " done" << std::endl <<
@@ -116,8 +120,7 @@ Config parse_arguments(int argc, char* argv[]) {
         ->default_val("stl");
 
     app.add_option("--scale,-s", config.scale)
-        ->description("Output units per model unit: the sphere's radius, or one unit of a flat domain")
-        ->default_val(50.0)
+        ->description("Output units per model unit: the sphere's radius, or one unit of a flat domain (default: the run's, else 50)")
         ->check(CLI::PositiveNumber);
 
     app.add_option("--bar-width,-w", config.bar_width)
@@ -163,14 +166,20 @@ std::filesystem::path output_path_of(const Config& config) {
     return output;
 }
 
-std::optional<Window> window_of(const Config& config) {
+// A run sized in output units records its scale, so a model of it comes
+// out at the size it was planned at unless asked otherwise.
+double scale_of(const Config& config, const Snapshot& snapshot) {
+    return config.scale.value_or(snapshot.scale.value_or(DEFAULT_SCALE));
+}
+
+std::optional<Window> window_of(const Config& config, double scale) {
     if (!config.window) {
         return std::nullopt;
     }
 
     return Window{
-        Vector2::Constant(*config.window / config.scale),
-        config.frame_width.value_or(config.bar_width) / config.scale
+        Vector2::Constant(*config.window / scale),
+        config.frame_width.value_or(config.bar_width) / scale
     };
 }
 
