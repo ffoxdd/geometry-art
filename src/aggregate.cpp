@@ -75,7 +75,7 @@ int main(int argc, char *argv[]) {
 // Written beside the target and renamed into place, so a reader polling the
 // file never sees a partial one.
 void write_snapshot(const io::snapshot::AggregateSnapshot& snapshot, const std::string& path) {
-    std::filesystem::path target(path);
+    std::filesystem::path target = std::filesystem::absolute(path);
     std::filesystem::create_directories(target.parent_path());
 
     {
