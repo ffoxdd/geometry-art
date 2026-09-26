@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { scene, group } from './scene.js';
-import { ballDetail } from './detail.js';
+import { ballDetail, ringSegments } from './detail.js';
 import * as finish from './finish.js';
 
 export const CONTROLS = {
@@ -174,7 +174,9 @@ function buildTubes(edges, cells, shade, appearance) {
 
   const material = new THREE.MeshPhysicalMaterial({ vertexColors: true, ...finish.of(appearance.finish) });
 
-  const radial = cells.length > 400 ? 5 : 8;
+  const corners = uniqueCorners(cells);
+  const detail = ballDetail(corners.length);
+  const radial = ringSegments(detail);
   const tubes = [];
 
   for (const [from, to, cell] of edges) {
@@ -203,8 +205,7 @@ function buildTubes(edges, cells, shade, appearance) {
   for (const tube of tubes) tube.dispose();
   group.add(new THREE.Mesh(merged, material));
 
-  const corners = uniqueCorners(cells);
-  const joint = new THREE.IcosahedronGeometry(radius, ballDetail(corners.length));
+  const joint = new THREE.IcosahedronGeometry(radius, detail);
   joint.setAttribute('color', new THREE.Float32BufferAttribute(new Array(joint.attributes.position.count * 3).fill(1), 3));
   const joints = new THREE.InstancedMesh(joint, material, corners.length);
   const matrix = new THREE.Matrix4();
