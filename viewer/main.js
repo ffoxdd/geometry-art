@@ -23,7 +23,7 @@ const programs = await declared('/api/programs');
 if (programs) {
   document.getElementById('studio').hidden = false;
   form.build(programs, { onProgram: (name, program) => runs.describeButton(program) });
-  exporter.build(await declared('/api/exports') || {});
+  exporter.build(await declared('/api/exports') || {}, { onCut: view.frame });
   runs.start(programs, address.get('run'));
 }
 

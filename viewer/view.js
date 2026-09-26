@@ -23,6 +23,7 @@ const panels = new Map();
 let snapshot = null;
 let live = false;
 let ramp = gradient.sampler(stops);
+let cut = null;
 
 // A snapshot arriving from a run in flight is drawn cheaply; one the user
 // is looking at is drawn properly.
@@ -43,6 +44,14 @@ export function redraw(options = {}) {
   render();
 }
 
+// The cut an export would make, drawn over the snapshot while it is set.
+export function frame(next) {
+  if (JSON.stringify(next) === JSON.stringify(cut)) return;
+
+  cut = next;
+  queueRender();
+}
+
 // What the last drawing cost, which paces how often a live run is polled.
 export function cost() {
   return drawing.cost();
@@ -58,7 +67,7 @@ function render() {
   statistics.hidden = false;
   rampSection.hidden = !Object.values(chosen).some(value => drawing.ramped(snapshot).includes(value));
 
-  const drawn = drawing.draw(snapshot, { ...chosen, ramp, live });
+  const drawn = drawing.draw(snapshot, { ...chosen, ramp, live, cut });
 
   renderReadout(drawn.readout);
   note.textContent = drawn.note;

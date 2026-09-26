@@ -10,18 +10,20 @@ let exports = {};
 let chosen = null;
 let panel = null;
 let run = null;
+let onCut = () => {};
 
 // The exports are declared by the server like the programs are, so the
 // form is that declaration rendered. The studio offers the first one.
-export function build(declared) {
+export function build(declared, options = {}) {
   exports = declared;
+  onCut = options.onCut || onCut;
   chosen = Object.keys(exports)[0] || null;
 
   if (!chosen) return;
 
   const definition = exports[chosen];
   summary.textContent = definition.summary;
-  panel = controls.create({ parameters: definition.parameters });
+  panel = controls.create({ parameters: definition.parameters, onChange: () => onCut(cut()) });
   root.replaceChildren(panel.element);
   button.addEventListener('click', download);
 }
@@ -35,6 +37,21 @@ export function offer(current) {
   const applicable = chosen && run && run.snapshot && exports[chosen].programs.includes(run.program);
   section.hidden = !applicable;
   button.textContent = applicable ? `Download ${exports[chosen].label}` : 'Download';
+  onCut(cut());
+}
+
+// The part a windowed export cuts, in the snapshot's own units, so the
+// drawing can show it: the window, and the frame run around it outside.
+export function cut() {
+  if (section.hidden || !panel) return null;
+
+  const chosen = panel.values();
+  if (!chosen.window || !chosen.scale) return null;
+
+  return {
+    size: chosen.window / chosen.scale,
+    frame: (chosen.frame_width ?? chosen.bar_width) / chosen.scale,
+  };
 }
 
 async function download() {

@@ -74,8 +74,10 @@ export function draw(next, appearance) {
   const edges = uniqueEdges(cells);
   const outline = appearance.live && cells.length > OUTLINE_CELLS;
 
+  const drawn = outline ? buildLines(edges, shade) : buildTubes(edges, cells, shade, appearance);
+
   return {
-    resources: outline ? buildLines(edges, shade) : buildTubes(edges, cells, shade, appearance),
+    resources: flatGeometry() && appearance.cut ? [...drawn, ...buildCut(appearance.cut, appearance)] : drawn,
     readout: readout(cells),
     note: outline ? 'outline while running' : '',
   };
@@ -189,17 +191,18 @@ function buildTubes(edges, cells, shade, appearance) {
   for (const tube of tubes) tube.dispose();
   group.add(new THREE.Mesh(merged, material));
 
-  const corners = cells.reduce((total, cell) => total + cell.boundary.length, 0);
-  const joint = new THREE.IcosahedronGeometry(radius, ballDetail(corners));
-  const joints = new THREE.InstancedMesh(joint, material, corners);
-  let index = 0;
+  const corners = uniqueCorners(cells);
+  const joint = new THREE.IcosahedronGeometry(radius, ballDetail(corners.length));
+  joint.setAttribute('color', new THREE.Float32BufferAttribute(new Array(joint.attributes.position.count * 3).fill(1), 3));
+  const joints = new THREE.InstancedMesh(joint, material, corners.length);
   const matrix = new THREE.Matrix4();
+  let index = 0;
 
-  for (const cell of cells) {
-    for (const point of cell.boundary) {
-      matrix.setPosition(...jointPosition(point));
-      joints.setMatrixAt(index++, matrix);
-    }
+  for (const [point, cell] of corners) {
+    matrix.setPosition(...jointPosition(point));
+    joints.setMatrixAt(index, matrix);
+    joints.setColorAt(index, shade(cell));
+    index++;
   }
 
   joints.count = index;
@@ -208,6 +211,63 @@ function buildTubes(edges, cells, shade, appearance) {
   // The instanced mesh owns a GPU buffer of its own, separate from the
   // geometry it draws, and it is not freed by removing it from the scene.
   return [merged, joint, material, joints];
+}
+
+// A windowed export keeps a square about the domain's middle, with the
+// frame outside it: the window's edge is where the openings stop, and the
+// frame's outer edge is where the part ends.
+const CUT_COLOUR = 0xff7a1a;
+const CUT_STEPS = 64;
+
+function buildCut(cut, appearance) {
+  const radius = 0.6 * appearance.weight / 1200;
+  const material = new THREE.MeshBasicMaterial({ color: CUT_COLOUR });
+  const outlines = [0.5 * cut.size, 0.5 * cut.size + cut.frame].map(half => {
+    const curve = new THREE.CatmullRomCurve3(square(half), true);
+    return new THREE.TubeGeometry(curve, 4 * CUT_STEPS, radius, 6, true);
+  });
+
+  for (const outline of outlines) group.add(new THREE.Mesh(outline, material));
+
+  return [...outlines, material];
+}
+
+function square(half) {
+  const centre = [snapshot.width / 2, snapshot.height / 2];
+  const corners = [[-half, -half], [half, -half], [half, half], [-half, half]];
+  const points = [];
+
+  for (let side = 0; side < 4; side++) {
+    const [a, b] = [corners[side], corners[(side + 1) % 4]];
+
+    for (let i = 0; i < CUT_STEPS; i++) {
+      const t = i / CUT_STEPS;
+      points.push(embed(centre[0] + a[0] + t * (b[0] - a[0]), centre[1] + a[1] + t * (b[1] - a[1])));
+    }
+  }
+
+  return points;
+}
+
+// Each corner is shared by the cells meeting there, and takes its colour
+// from the first of them; the ball is white where the tubes carry colour
+// in their vertices, so the instance colour is the one that shows.
+function uniqueCorners(cells) {
+  const seen = new Set();
+  const corners = [];
+
+  for (const cell of cells) {
+    for (const point of cell.boundary) {
+      const id = jointPosition(point).map(value => value.toFixed(6)).join();
+
+      if (!seen.has(id)) {
+        seen.add(id);
+        corners.push([point, cell]);
+      }
+    }
+  }
+
+  return corners;
 }
 
 // Each bisector belongs to two cells, so it would otherwise be built twice
