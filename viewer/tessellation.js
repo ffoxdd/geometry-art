@@ -1,7 +1,6 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { scene, group } from './scene.js';
-import { ballDetail, ringSegments } from './detail.js';
+import * as impostor from './impostor.js';
 import * as finish from './finish.js';
 
 export const CONTROLS = {
@@ -171,59 +170,50 @@ function buildLines(edges, shade) {
 
 function buildTubes(edges, cells, shade, appearance) {
   const radius = appearance.weight / 1200;
+  const parameters = finish.of(appearance.finish);
 
-  const material = new THREE.MeshPhysicalMaterial({ vertexColors: true, ...finish.of(appearance.finish) });
-
-  const corners = uniqueCorners(cells);
-  const detail = ballDetail(corners.length);
-  const radial = ringSegments(detail);
-  const tubes = [];
+  const segments = [];
+  const bends = [];
 
   for (const [from, to, cell] of edges) {
     const colour = shade(cell);
 
     for (const points of edgePaths(from, to, 6)) {
-      const curve = new THREE.CatmullRomCurve3(points);
-      const tube = new THREE.TubeGeometry(curve, 6, radius, radial, false);
-      tube.deleteAttribute('uv');
-
-      const count = tube.attributes.position.count;
-      const colours = new Float32Array(count * 3);
-
-      for (let i = 0; i < count; i++) {
-        colours[i * 3] = colour.r;
-        colours[i * 3 + 1] = colour.g;
-        colours[i * 3 + 2] = colour.b;
+      for (let i = 1; i < points.length; i++) {
+        segments.push([impostor.cylinderMatrix(points[i - 1], points[i], radius), colour]);
       }
 
-      tube.setAttribute('color', new THREE.BufferAttribute(colours, 3));
-      tubes.push(tube);
+      for (let i = 1; i < points.length - 1; i++) {
+        bends.push([impostor.sphereMatrix(points[i], radius), colour]);
+      }
     }
   }
 
-  const merged = mergeGeometries(tubes);
-  for (const tube of tubes) tube.dispose();
-  group.add(new THREE.Mesh(merged, material));
+  const joints = uniqueCorners(cells).map(([point, cell]) => [
+    impostor.sphereMatrix(new THREE.Vector3(...jointPosition(point)), radius),
+    shade(cell),
+  ]);
 
-  const joint = new THREE.IcosahedronGeometry(radius, detail);
-  joint.setAttribute('color', new THREE.Float32BufferAttribute(new Array(joint.attributes.position.count * 3).fill(1), 3));
-  const joints = new THREE.InstancedMesh(joint, material, corners.length);
-  const matrix = new THREE.Matrix4();
-  let index = 0;
+  return [
+    ...instances(impostor.cylinderMaterial(parameters), segments),
+    ...instances(impostor.sphereMaterial(parameters), [...bends, ...joints]),
+  ];
+}
 
-  for (const [point, cell] of corners) {
-    matrix.setPosition(...jointPosition(point));
-    joints.setMatrixAt(index, matrix);
-    joints.setColorAt(index, shade(cell));
-    index++;
-  }
+// The instanced mesh owns a GPU buffer of its own, separate from the
+// geometry it draws, and it is not freed by removing it from the scene.
+function instances(material, placements) {
+  const geometry = impostor.shell();
+  const mesh = new THREE.InstancedMesh(geometry, material, placements.length);
 
-  joints.count = index;
-  group.add(joints);
+  placements.forEach(([matrix, colour], index) => {
+    mesh.setMatrixAt(index, matrix);
+    mesh.setColorAt(index, colour);
+  });
 
-  // The instanced mesh owns a GPU buffer of its own, separate from the
-  // geometry it draws, and it is not freed by removing it from the scene.
-  return [merged, joint, material, joints];
+  group.add(mesh);
+
+  return [geometry, material, mesh];
 }
 
 // A windowed export keeps a square about the domain's middle, with the
@@ -268,8 +258,7 @@ function square(half) {
 }
 
 // Each corner is shared by the cells meeting there, and takes its colour
-// from the first of them; the ball is white where the tubes carry colour
-// in their vertices, so the instance colour is the one that shows.
+// from the first of them.
 function uniqueCorners(cells) {
   const seen = new Set();
   const corners = [];
