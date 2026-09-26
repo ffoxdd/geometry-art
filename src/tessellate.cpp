@@ -29,8 +29,9 @@ using voronoi::spherical::noop_callback;
 struct Config {
     std::string geometry = "sphere";
     double scale = 50.0;
-    double width = 100.0;
-    double height = 50.0;
+    std::string units = "output";
+    std::optional<double> width;
+    std::optional<double> height;
     std::optional<double> diameter;
     int points_count;
     std::string density_field;
@@ -53,6 +54,9 @@ struct Config {
 
 bool flat_geometry(const std::string& geometry);
 std::string flat_field_objection(const Config& config);
+double model_width(const Config& config);
+double model_height(const Config& config);
+double in_model_units(const Config& config, double length);
 
 Config parse_arguments(int argc, char *argv[]);
 void write_snapshot(const geometry_art::io::snapshot::Snapshot& snapshot, const Config& config);
@@ -164,8 +168,8 @@ void write_snapshot(const geometry_art::io::snapshot::Snapshot& snapshot, const 
 int run_flat(const Config& config, int argc, char *argv[]) {
     std::cout <<
         "Configuration:" << std::endl <<
-        "  Geometry: " << config.geometry << " (" << config.width << " x " << config.height <<
-        ", " << config.scale << " per model unit)" << std::endl <<
+        "  Geometry: " << config.geometry << " (" << model_width(config) << " x " << model_height(config) <<
+        " model units, " << config.scale << " per model unit)" << std::endl <<
         "  Points: " << config.points_count << std::endl <<
         "  Density: " << config.density_field << std::endl <<
         "  Contrast: " << config.contrast << std::endl <<
@@ -192,8 +196,8 @@ int run_flat(const Config& config, int argc, char *argv[]) {
         static_cast<size_t>(config.newton_iterations),
         optimizer_parameters,
         config.seed,
-        config.width / config.scale,
-        config.height / config.scale,
+        model_width(config),
+        model_height(config),
         config.image_path,
         config.contrast,
         config.geometry,
@@ -260,23 +264,26 @@ Config parse_arguments(int argc, char *argv[]) {
         ->default_val("sphere");
 
     app.add_option("--scale", config.scale)
-        ->description("Output units per model unit: the sphere's radius, and what --width and --height are divided by")
+        ->description("Output units per model unit: the sphere's radius")
         ->default_val(50.0)
         ->check(CLI::PositiveNumber);
 
+    app.add_option("--units", config.units)
+        ->description("What --width, --height and --diameter are given in: output or model units")
+        ->check(CLI::IsMember({"output", "model"}))
+        ->default_val("output");
+
     CLI::Option* width = app.add_option("--width", config.width)
-        ->description("Width of the flat domain, the cylinder's circumference, in output units")
-        ->default_val(100.0)
+        ->description("Width of the flat domain, the cylinder's circumference (default: 2 model units)")
         ->check(CLI::PositiveNumber);
 
     app.add_option("--diameter", config.diameter)
-        ->description("The cylinder's diameter in output units, in place of its circumference")
+        ->description("The cylinder's diameter, in place of its circumference")
         ->excludes(width)
         ->check(CLI::PositiveNumber);
 
     app.add_option("--height", config.height)
-        ->description("Height of the flat domain, in output units")
-        ->default_val(50.0)
+        ->description("Height of the flat domain (default: 1 model unit)")
         ->check(CLI::PositiveNumber);
 
     app.add_option("--density-field,-f", config.density_field)
@@ -360,6 +367,18 @@ Config parse_arguments(int argc, char *argv[]) {
     }
 
     return config;
+}
+
+double model_width(const Config& config) {
+    return config.width ? in_model_units(config, *config.width) : 2.0;
+}
+
+double model_height(const Config& config) {
+    return config.height ? in_model_units(config, *config.height) : 1.0;
+}
+
+double in_model_units(const Config& config, double length) {
+    return config.units == "model" ? length : length / config.scale;
 }
 
 bool flat_geometry(const std::string& geometry) {

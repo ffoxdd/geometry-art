@@ -46,6 +46,37 @@ FLAT = {"geometry": ["cylinder", "torus", "plane"]}
 RECTANGULAR = {"geometry": ["torus", "plane"]}
 GRADIENT_CAPABLE = {"geometry": ["sphere", "cylinder", "plane"]}
 
+
+# A length is entered in millimetres or in model units, as the run is sized
+# in; each is its own control, so each carries its own label and default.
+def length(name, flag, label, when, millimetres, units):
+    return {
+        name: {
+            "flag": flag,
+            "label": f"{label}, mm",
+            "type": "number",
+            "low": 0.1,
+            "high": 10000.0,
+            "step": 1.0,
+            "default": millimetres,
+            "when": {**when, "units": ["output"]},
+        },
+        f"{name}_in_units": {
+            "flag": flag,
+            "label": f"{label}, units",
+            "type": "number",
+            "low": 0.01,
+            "high": 1000.0,
+            "step": 0.1,
+            "default": units,
+            "when": {**when, "units": ["model"]},
+        },
+    }
+
+
+def lengths(*names):
+    return [variant for name in names for variant in (name, f"{name}_in_units")]
+
 PROGRAMS = {
     "tessellate": {
         "label": "tessellate",
@@ -55,7 +86,14 @@ PROGRAMS = {
         "groups": [
             {
                 "label": "domain",
-                "parameters": ["geometry", "points", "scale", "width", "girth", "diameter", "circumference", "height"],
+                "parameters": [
+                    "geometry",
+                    "points",
+                    "units",
+                    "girth",
+                    "scale",
+                    *lengths("width", "diameter", "circumference", "height"),
+                ],
             },
             {
                 "label": "density",
@@ -93,6 +131,21 @@ PROGRAMS = {
                 "high": 20000,
                 "default": 200,
             },
+            "units": {
+                "flag": "--units",
+                "label": "sized in",
+                "type": "text",
+                "choices": {"output": "mm", "model": "units"},
+                "default": "output",
+                "when": FLAT,
+            },
+            "girth": {
+                "label": "sized by",
+                "type": "text",
+                "choices": {"diameter": "diameter", "circumference": "circumference"},
+                "default": "diameter",
+                "when": {"geometry": ["cylinder"]},
+            },
             "scale": {
                 "flag": "--scale",
                 "label": "mm per unit",
@@ -102,53 +155,10 @@ PROGRAMS = {
                 "step": 0.5,
                 "default": 50.0,
             },
-            "width": {
-                "flag": "--width",
-                "label": "width, mm",
-                "type": "number",
-                "low": 0.1,
-                "high": 10000.0,
-                "step": 1.0,
-                "default": 100.0,
-                "when": RECTANGULAR,
-            },
-            "girth": {
-                "label": "sized by",
-                "type": "text",
-                "choices": {"diameter": "diameter", "circumference": "circumference"},
-                "default": "diameter",
-                "when": {"geometry": ["cylinder"]},
-            },
-            "diameter": {
-                "flag": "--diameter",
-                "label": "diameter, mm",
-                "type": "number",
-                "low": 0.1,
-                "high": 10000.0,
-                "step": 1.0,
-                "default": 50.0,
-                "when": {"girth": ["diameter"]},
-            },
-            "circumference": {
-                "flag": "--width",
-                "label": "circumference, mm",
-                "type": "number",
-                "low": 0.1,
-                "high": 10000.0,
-                "step": 1.0,
-                "default": 150.0,
-                "when": {"girth": ["circumference"]},
-            },
-            "height": {
-                "flag": "--height",
-                "label": "height, mm",
-                "type": "number",
-                "low": 0.1,
-                "high": 10000.0,
-                "step": 1.0,
-                "default": 50.0,
-                "when": FLAT,
-            },
+            **length("width", "--width", "width", RECTANGULAR, 100.0, 2.0),
+            **length("diameter", "--diameter", "diameter", {"girth": ["diameter"]}, 50.0, 1.0),
+            **length("circumference", "--width", "circumference", {"girth": ["circumference"]}, 150.0, 3.0),
+            **length("height", "--height", "height", FLAT, 50.0, 1.0),
             "density_field": {
                 "flag": "--density-field",
                 "label": "field",
