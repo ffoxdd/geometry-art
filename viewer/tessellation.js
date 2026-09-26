@@ -114,6 +114,9 @@ function size() {
   if (!flatGeometry() || !snapshot.scale) return [];
 
   const measure = value => Number((value * snapshot.scale).toPrecision(4));
+  if (snapshot.geometry === 'cylinder') {
+    return [['size', `⌀ ${measure(snapshot.width / Math.PI)} × ${measure(snapshot.height)} mm`]];
+  }
   return [['size', `${measure(snapshot.width)} × ${measure(snapshot.height)} mm`]];
 }
 

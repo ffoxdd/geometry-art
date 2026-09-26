@@ -14,7 +14,8 @@ Each program declares its parameters once, here, and the page builds its
 form from that declaration. A parameter says which flag it becomes, how to
 present it, and when it applies at all: `when` governs the parameter,
 `choice_when` governs one of its choices. A condition reads parameters
-resolved before it, so a parameter is declared after everything it names.
+resolved before it, so a parameter is declared after everything it names,
+and one with no flag only steers which others apply.
 
 An export is a program run over a run's snapshot whose product is handed
 back as a download; it declares its parameters the same way, and which
@@ -42,6 +43,7 @@ VIEWER = Path(__file__).resolve().parent
 
 SPHERE_ONLY = {"geometry": ["sphere"]}
 FLAT = {"geometry": ["cylinder", "torus", "plane"]}
+RECTANGULAR = {"geometry": ["torus", "plane"]}
 GRADIENT_CAPABLE = {"geometry": ["sphere", "cylinder", "plane"]}
 
 PROGRAMS = {
@@ -53,7 +55,7 @@ PROGRAMS = {
         "groups": [
             {
                 "label": "domain",
-                "parameters": ["geometry", "points", "scale", "width", "height"],
+                "parameters": ["geometry", "points", "scale", "width", "girth", "diameter", "circumference", "height"],
             },
             {
                 "label": "density",
@@ -108,7 +110,34 @@ PROGRAMS = {
                 "high": 10000.0,
                 "step": 1.0,
                 "default": 100.0,
-                "when": FLAT,
+                "when": RECTANGULAR,
+            },
+            "girth": {
+                "label": "sized by",
+                "type": "text",
+                "choices": {"diameter": "diameter", "circumference": "circumference"},
+                "default": "diameter",
+                "when": {"geometry": ["cylinder"]},
+            },
+            "diameter": {
+                "flag": "--diameter",
+                "label": "diameter, mm",
+                "type": "number",
+                "low": 0.1,
+                "high": 10000.0,
+                "step": 1.0,
+                "default": 50.0,
+                "when": {"girth": ["diameter"]},
+            },
+            "circumference": {
+                "flag": "--width",
+                "label": "circumference, mm",
+                "type": "number",
+                "low": 0.1,
+                "high": 10000.0,
+                "step": 1.0,
+                "default": 150.0,
+                "when": {"girth": ["circumference"]},
             },
             "height": {
                 "flag": "--height",
@@ -450,8 +479,10 @@ class Runs:
                    "--snapshot-interval", str(SNAPSHOT_INTERVAL_SECONDS)]
 
         for name, value in record["parameters"].items():
-            if value is not None:
-                command += [PROGRAMS[program]["parameters"][name]["flag"], str(value)]
+            flag = PROGRAMS[program]["parameters"][name].get("flag")
+
+            if flag is not None and value is not None:
+                command += [flag, str(value)]
 
         record["status"] = "running"
         record["started"] = time.time()

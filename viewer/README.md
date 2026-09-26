@@ -21,7 +21,8 @@ can be cancelled while running and deleted afterwards.
 Each program declares its parameters once, in `server.py`: the flag the
 parameter becomes, how to present it, and the conditions under which it
 applies at all -- `when` for the parameter, `choice_when` for one of its
-choices. The page builds its form from that declaration and the server
+choices. A parameter with no flag only steers which others apply, the way
+the cylinder is sized by its diameter or its circumference. The page builds its form from that declaration and the server
 validates against it, so a control that cannot apply is never offered, and
 teaching the studio a new flag means adding it in one place.
 

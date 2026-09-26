@@ -8,6 +8,7 @@
 #include "geometry_art/io/text/flat_repository.hpp"
 #include <CLI/CLI.hpp>
 #include <chrono>
+#include <cmath>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -30,6 +31,7 @@ struct Config {
     double scale = 50.0;
     double width = 100.0;
     double height = 50.0;
+    std::optional<double> diameter;
     int points_count;
     std::string density_field;
     int lloyd_passes;
@@ -238,6 +240,14 @@ Config parse_arguments(int argc, char *argv[]) {
         if (!objection.empty()) {
             throw CLI::ValidationError("--density-field", objection);
         }
+
+        if (config.diameter && config.geometry != "cylinder") {
+            throw CLI::ValidationError("--diameter", "a diameter sizes the cylinder");
+        }
+
+        if (config.diameter) {
+            config.width = M_PI * *config.diameter;
+        }
     });
 
     app.add_option("--points,-p", config.points_count)
@@ -254,9 +264,14 @@ Config parse_arguments(int argc, char *argv[]) {
         ->default_val(50.0)
         ->check(CLI::PositiveNumber);
 
-    app.add_option("--width", config.width)
+    CLI::Option* width = app.add_option("--width", config.width)
         ->description("Width of the flat domain, the cylinder's circumference, in output units")
         ->default_val(100.0)
+        ->check(CLI::PositiveNumber);
+
+    app.add_option("--diameter", config.diameter)
+        ->description("The cylinder's diameter in output units, in place of its circumference")
+        ->excludes(width)
         ->check(CLI::PositiveNumber);
 
     app.add_option("--height", config.height)

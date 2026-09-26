@@ -147,6 +147,7 @@ The `tessellate` executable supports command-line flags for terminal/AI-assisted
 - `--geometry <g>` / `-g`: 'sphere' (default), or 'torus' / 'cylinder' / 'plane' for the flat family; the torus wraps both axes, the cylinder walls its rims, the plane walls all four sides; flat runs use the newton inner solver
 - `--scale <k>`: Output units per model unit (default: 50); the solver works in model units, the snapshot records the scale, and the sphere's radius is one model unit
 - `--width <w>` / `--height <h>`: The flat domain's rectangle in output units (cylinder circumference and height; default: 100 x 50)
+- `--diameter <d>`: The cylinder's diameter in output units, in place of `--width`
 - `--contrast <r>`: Densest-to-sparsest density ratio of the 'linear' field, which rises from bottom to top (every geometry but the torus)
 - `--help`: Show usage information
 
