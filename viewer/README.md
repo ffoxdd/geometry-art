@@ -58,7 +58,8 @@ itself, so a new knob is declared rather than wired up.
 
 The figure turns, not the camera: drag to roll it about any axis, and a
 flick hands the idle spin that axis and speed, easing back to a slow
-drift. Scroll to zoom -- the camera goes all the way inside -- and click
+drift. Click it, or hold it still as you let go, and it stops until the
+next flick. Scroll to zoom -- the camera goes all the way inside -- and click
 a rail's title to fold that panel away.
 
 The view alone works without the server. Open the page from any static

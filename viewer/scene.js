@@ -33,14 +33,17 @@ scene.add(group);
 // The figure turns, not the camera: dragging rolls it arcball-style about
 // whatever axis the drag implies, a flick hands the idle spin that axis
 // and speed, and left alone the spin eases back to a slow drift about the
-// last axis it was given. The wheel walks the camera in and out -- all
-// the way inside.
+// last axis it was given. Letting go of a figure that is held still --
+// a click, or a drag that comes to rest before the release -- stops it,
+// and it stays stopped until the next flick. The wheel walks the camera
+// in and out -- all the way inside.
 const IDLE = 0.06;
 const FASTEST = 0.9;
 const EASE = 4;
+const HELD = 0.1;
 const RADIUS = { nearest: 0.05, farthest: 8 };
 
-const spin = { axis: new THREE.Vector3(0, 1, 0), speed: IDLE };
+const spin = { axis: new THREE.Vector3(0, 1, 0), speed: IDLE, resting: IDLE };
 const swing = new THREE.Quaternion();
 const dragAxis = new THREE.Vector3();
 
@@ -54,7 +57,14 @@ renderer.domElement.addEventListener('pointerdown', event => {
 });
 
 addEventListener('pointerup', () => {
+  if (!dragging) return;
+
   dragging = false;
+
+  const held = (performance.now() - previous.time) / 1000 > HELD;
+  spin.resting = held ? 0 : IDLE;
+
+  if (held) spin.speed = 0;
 });
 
 renderer.domElement.addEventListener('pointermove', event => {
@@ -118,7 +128,7 @@ renderer.setAnimationLoop(() => {
   previousTime = time;
 
   if (!dragging) {
-    spin.speed += (IDLE - spin.speed) * Math.min(1, seconds / EASE);
+    spin.speed += (spin.resting - spin.speed) * Math.min(1, seconds / EASE);
     swing.setFromAxisAngle(spin.axis, spin.speed * seconds);
     group.quaternion.premultiply(swing);
   }
